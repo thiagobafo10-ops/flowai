@@ -28,7 +28,7 @@
 ## Review Focus
 
 1. **Escalada de papel** — um `agent` (ou `admin`) tenta se promover a `owner`/alterar a própria membership → deve falhar. Teste na Task 3.
-2. **Referência cruzada entre orgs** — inserir um deal da org B apontando para contato da org A, mesmo como `postgres` → deve falhar pela FK composta. Teste na Task 4.
+2. **Referência cruzada entre orgs** — inserir um deal da org B apontando para contato da org A, mesmo como `postgres` → deve falhar pela FK composta. Teste na Task 5.
 3. **Cookie de org ativa adulterado/obsoleto** — cookie com id de org da qual o usuário não é (mais) membro → deve cair para a primeira membership válida, nunca usar o id do cookie. Teste na Task 10.
 4. **E-mail já cadastrado no signup** → mensagem "Este e-mail já está cadastrado." e nenhuma organização criada. Teste na Task 11.
 5. **Nome de empresa com acentos/espaços/símbolos** (`"  Açaí & Cia!!  "`) → org criada com nome aparado e slug `acai-cia-<6 hex>`; nome vazio após trim é rejeitado. Teste na Task 9 (SQL) e Task 1 (Zod).
