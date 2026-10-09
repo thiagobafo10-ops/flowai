@@ -1,21 +1,34 @@
 import { Suspense } from "react";
+import { parsePeriod } from "@flowai/core";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { getDashboardMetrics } from "@/lib/dashboard/get-dashboard-metrics";
 import { getActiveOrg } from "@/lib/org/active-org";
 
-async function OrgName() {
+type Props = { searchParams: Promise<{ periodo?: string | string[] }> };
+
+async function DashboardContent({ searchParams }: Props) {
+  const period = parsePeriod((await searchParams).periodo);
   const org = await getActiveOrg();
-  return <p className="text-muted-foreground">{org?.name}</p>;
+  if (!org) return null;
+  const data = await getDashboardMetrics(org.id, period);
+  return (
+    <>
+      <p className="text-muted-foreground">{org.name}</p>
+      <div className="pt-4">
+        <DashboardView orgId={org.id} initialPeriod={period} initialData={data} />
+      </div>
+    </>
+  );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage(props: Props) {
   return (
     <main className="space-y-2 p-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <Suspense fallback={null}>
-        <OrgName />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent {...props} />
       </Suspense>
-      <p className="pt-4 text-sm text-muted-foreground">
-        Ainda não há dados. Conecte um canal para começar a receber conversas.
-      </p>
     </main>
   );
 }

@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { clearRateLimits } from "./support/local-db";
+
+test.beforeEach(() => clearRateLimits());
+
 const email = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
 
 test("cadastro leva ao onboarding", async ({ page }) => {

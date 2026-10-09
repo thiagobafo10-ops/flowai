@@ -61,3 +61,56 @@ test("API devolve 500 com mensagem quando a RPC falha", async ({ page }) => {
     restoreDashboardRpc();
   }
 });
+
+const kpi = (page: Page, name: string) => page.getByRole("group", { name, exact: true });
+
+test("organização nova mostra banner e zeros", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Vazia");
+  await expect(
+    page.getByText("Ainda não há dados. Conecte um canal para começar a receber conversas."),
+  ).toBeVisible();
+  await expect(kpi(page, "Conversas hoje")).toContainText("0");
+  await expect(kpi(page, "Taxa de resolução")).toContainText("—");
+  await expect(page.getByText("Sem dados no período").first()).toBeVisible();
+});
+
+test.describe("com dados", () => {
+  test.beforeEach(async ({ page }) => {
+    const email = newEmail();
+    await signUpWithOrg(page, email, "Org Com Dados");
+    seedDashboardData(email);
+    await page.goto("/dashboard");
+  });
+
+  test("mostra os números esperados (7 dias)", async ({ page }) => {
+    await expect(page.getByText("Ainda não há dados.", { exact: false })).toBeHidden();
+    await expect(kpi(page, "Conversas hoje")).toContainText("2");
+    await expect(kpi(page, "Novos contatos")).toContainText("2");
+    await expect(kpi(page, "Leads")).toContainText("3");
+    await expect(kpi(page, "Oportunidades")).toContainText("1");
+    await expect(kpi(page, "Valor potencial")).toContainText("R$ 1.000,00");
+    await expect(kpi(page, "Atendidas por IA")).toContainText("1");
+    await expect(kpi(page, "Transferências para humanos")).toContainText("1");
+    await expect(kpi(page, "Taxa de resolução")).toContainText("50,0%");
+    await expect(kpi(page, "Conversão")).toContainText("50,0%");
+  });
+
+  test("trocar para 30 dias atualiza cards e URL", async ({ page }) => {
+    await page.getByRole("radio", { name: "30 dias" }).click();
+    await expect(page).toHaveURL(/periodo=30d/);
+    await expect(kpi(page, "Novos contatos")).toContainText("3");
+    await expect(kpi(page, "Novos contatos")).toContainText("últimos 30 dias");
+  });
+
+  test("erro mostra Tentar novamente e recupera", async ({ page }) => {
+    breakDashboardRpc();
+    try {
+      await page.getByRole("radio", { name: "Hoje" }).click();
+      await expect(page.getByText("Não foi possível carregar o dashboard.")).toBeVisible();
+    } finally {
+      restoreDashboardRpc();
+    }
+    await page.getByRole("button", { name: "Tentar novamente" }).click();
+    await expect(kpi(page, "Conversas hoje")).toContainText("2");
+  });
+});
