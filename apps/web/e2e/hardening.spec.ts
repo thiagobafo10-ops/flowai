@@ -1,12 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   breakMembershipsRead,
+  clearRateLimits,
   countAuditLogins,
   countMemberships,
   restoreMembershipsRead,
 } from "./support/local-db";
 
 const PASSWORD = "senha-segura-123";
+// Cada teste cadastra um usuário; o limite de cadastro é 5/IP/hora.
+test.beforeEach(() => clearRateLimits());
+
 const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
 
 async function signUpWithOrg(page: Page, email: string, orgName: string) {

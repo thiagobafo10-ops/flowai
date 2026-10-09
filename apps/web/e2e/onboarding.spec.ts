@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { countMemberships } from "./support/local-db";
+import { clearRateLimits, countMemberships } from "./support/local-db";
+
+// Cada teste cadastra um usuário; o limite de cadastro é 5/IP/hora.
+test.beforeEach(() => clearRateLimits());
 
 test("critérios 1–3: cadastro → organização → dashboard", async ({ page }) => {
   const email = `e2e+${Date.now()}@flowai.test`;
