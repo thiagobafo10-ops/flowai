@@ -89,9 +89,9 @@ select tests.authenticate_as(:'uview');
 select is((select count(*)::int from public.automation_run_steps), 1, 'membro lê steps da org');
 select tests.clear_authentication();
 
--- events: insert agent+ como user
+-- events: só código definer do banco insere (API não insere, nem como o próprio usuário)
 select tests.authenticate_as(:'uagent');
-select lives_ok(format($$insert into public.events(organization_id, type, actor_type, actor_id, contact_id, payload) values (%L, 'note_added', 'user', %L, '00000000-0000-0000-0000-0000000000c1', '{"a":1}')$$, :'org_a', :'uagent'), 'agent insere event com actor_id próprio');
+select throws_ok(format($$insert into public.events(organization_id, type, actor_type, actor_id, contact_id, payload) values (%L, 'note_added', 'user', %L, '00000000-0000-0000-0000-0000000000c1', '{"a":1}')$$, :'org_a', :'uagent'), '42501', null, 'agent não insere event (nem com actor_id próprio)');
 select throws_ok(format($$insert into public.events(organization_id, type, actor_type, actor_id) values (%L, 'x', 'ai', %L)$$, :'org_a', :'uagent'), '42501', null, 'agent não insere event actor_type ai');
 select throws_ok(format($$insert into public.events(organization_id, type, actor_type, actor_id) values (%L, 'x', 'user', %L)$$, :'org_a', :'uadmin'), '42501', null, 'agent não forja actor_id');
 select throws_ok($$update public.events set type = 'hack' where id = '00000000-0000-0000-0000-0000000000e1'$$, '42501', null, 'events sem update');

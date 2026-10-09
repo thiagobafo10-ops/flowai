@@ -721,6 +721,9 @@ isOneToOne: false
 "is_member":
 { Args: { "p_org": string }; Returns: boolean
                            },
+"log_auth_event":
+{ Args: { "p_action": string,"p_ip"?: unknown }; Returns: undefined
+                           },
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
                            },

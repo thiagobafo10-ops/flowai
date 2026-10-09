@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(28);
 
 select tests.create_user('a@t.test') as ua \gset
 select tests.create_user('b@t.test') as ub \gset
@@ -10,14 +10,16 @@ select tests.create_org(:'ua', 'Org A') as org_a \gset
 select tests.add_member(:'org_a', :'uagent', 'agent');
 select tests.add_member(:'org_a', :'uadmin', 'admin');
 
--- write_audit_log
+-- write_audit_log: apenas código definer (owner postgres); a API não executa.
 select tests.authenticate_as(:'ua');
-select lives_ok(
+select throws_ok(
   format($$select public.write_audit_log(%L, 'test.action', 'organization', %L)$$, :'org_a', :'org_a'),
-  'membro escreve audit log');
+  '42501', null, 'membro não executa write_audit_log diretamente');
+select public.create_organization_with_owner('Org Audit') as org_x \gset
+select tests.clear_authentication();
 select is(
-  (select actor_id from public.audit_logs where action = 'test.action'), :'ua'::uuid,
-  'actor_id = auth.uid()');
+  (select actor_id from public.audit_logs where action = 'organization.created' and organization_id = :'org_x'), :'ua'::uuid,
+  'actor_id = auth.uid() (via função definer)');
 
 select tests.authenticate_as(:'ub');
 select throws_ok(
@@ -33,15 +35,18 @@ select tests.authenticate_as(:'ub');
 select throws_ok('truncate public.audit_logs', '42501', null, 'authenticated não faz TRUNCATE');
 
 -- leitura: só admin+
+select tests.clear_authentication();
+select count(*)::int as org_a_audit from public.audit_logs where organization_id = :'org_a' \gset
 select tests.authenticate_as(:'uagent');
 select is((select count(*)::int from public.audit_logs), 0, 'agent não lê audit logs');
 select tests.authenticate_as(:'uadmin');
-select is((select count(*)::int from public.audit_logs where organization_id = :'org_a'), 1, 'admin lê audit logs da org');
+select ok(:org_a_audit > 0, 'org A tem audit logs (triggers)');
+select is((select count(*)::int from public.audit_logs where organization_id = :'org_a'), :org_a_audit, 'admin lê audit logs da org');
 select tests.authenticate_as(:'ua');
-select is((select count(*)::int from public.audit_logs where organization_id = :'org_a'), 1, 'owner lê audit logs da org');
+select is((select count(*)::int from public.audit_logs where organization_id = :'org_a'), :org_a_audit, 'owner lê audit logs da org');
 
 -- linha sem org: só o próprio ator
-select lives_ok($$select public.write_audit_log(null, 'auth.login', 'user', null)$$, 'escreve audit log sem org');
+select lives_ok($$select public.log_auth_event('auth.login')$$, 'escreve audit log sem org (log_auth_event)');
 select is((select count(*)::int from public.audit_logs where action = 'auth.login'), 1, 'ator lê a própria linha sem org');
 select tests.authenticate_as(:'ub');
 select is((select count(*)::int from public.audit_logs where action = 'auth.login'), 0, 'outro usuário não lê linha sem org');
@@ -73,11 +78,10 @@ select throws_ok($$select public.check_rate_limit('k2', 3, 0)$$, '22023', null, 
 -- trilha de auditoria sobrevive à exclusão de org e usuário
 select tests.create_user('c@t.test') as uc \gset
 select tests.create_org(:'uc', 'Org C') as org_c \gset
-select tests.authenticate_as(:'uc');
-select public.write_audit_log(:'org_c', 'test.keep', 'organization', :'org_c');
-select tests.clear_authentication();
+insert into public.audit_logs (organization_id, actor_id, action, entity_type, entity_id)
+  values (:'org_c', :'uc', 'test.keep', 'organization', :'org_c');
 select lives_ok(format($$delete from public.organizations where id = %L$$, :'org_c'), 'org com audit log pode ser excluída');
-select is((select count(*)::int from public.audit_logs where organization_id = :'org_c'), 1, 'audit log permanece após excluir org');
+select is((select count(*)::int from public.audit_logs where organization_id = :'org_c' and action = 'test.keep'), 1, 'audit log permanece após excluir org');
 select lives_ok(format($$delete from auth.users where id = %L$$, :'uc'), 'usuário com audit log pode ser excluído');
 select is((select actor_id from public.audit_logs where action = 'test.keep'), :'uc'::uuid, 'audit log permanece com actor_id intacto');
 
