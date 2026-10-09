@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { dashboardMetricsSchema, type DashboardMetrics, type DashboardPeriod } from "@flowai/core";
+import { useSearchParams } from "next/navigation";
+import { dashboardMetricsSchema, parsePeriod, type DashboardMetrics, type DashboardPeriod } from "@flowai/core";
 import { Button } from "@/components/ui/button";
 import { DashboardCharts } from "./charts";
 import { DashboardSkeleton } from "./dashboard-skeleton";
@@ -18,21 +18,29 @@ async function fetchDashboard(period: DashboardPeriod): Promise<DashboardMetrics
   return dashboardMetricsSchema.parse(await res.json());
 }
 
-type Props = { orgId: string; initialPeriod: DashboardPeriod; initialData: DashboardMetrics };
+type Props = {
+  orgId: string;
+  initialPeriod: DashboardPeriod;
+  initialData: DashboardMetrics;
+  initialDataUpdatedAt: number;
+};
 
-export function DashboardView({ orgId, initialPeriod, initialData }: Props) {
-  const [period, setPeriod] = useState<DashboardPeriod>(initialPeriod);
+export function DashboardView({ orgId, initialPeriod, initialData, initialDataUpdatedAt }: Props) {
+  const searchParams = useSearchParams();
+  const period = parsePeriod(searchParams.get("periodo"));
 
   const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ["dashboard", orgId, period],
     queryFn: () => fetchDashboard(period),
     initialData: period === initialPeriod ? initialData : undefined,
+    initialDataUpdatedAt: period === initialPeriod ? initialDataUpdatedAt : undefined,
+    staleTime: 30_000,
     retry: false,
   });
 
   function changePeriod(next: DashboardPeriod) {
-    setPeriod(next);
     // Só a URL muda (sem nova renderização no servidor): os dados vêm do React Query.
+    // Com data=null o Next copia o state interno do histórico e sincroniza useSearchParams.
     window.history.replaceState(null, "", `?periodo=${next}`);
   }
 

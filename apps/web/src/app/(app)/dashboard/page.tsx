@@ -3,6 +3,7 @@ import { parsePeriod } from "@flowai/core";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { getDashboardMetrics } from "@/lib/dashboard/get-dashboard-metrics";
+import { nowMs } from "@/lib/dashboard/now";
 import { getActiveOrg } from "@/lib/org/active-org";
 
 type Props = { searchParams: Promise<{ periodo?: string | string[] }> };
@@ -16,7 +17,13 @@ async function DashboardContent({ searchParams }: Props) {
     <>
       <p className="text-muted-foreground">{org.name}</p>
       <div className="pt-4">
-        <DashboardView orgId={org.id} initialPeriod={period} initialData={data} />
+        <DashboardView
+          key={org.id}
+          orgId={org.id}
+          initialPeriod={period}
+          initialData={data}
+          initialDataUpdatedAt={nowMs()}
+        />
       </div>
     </>
   );

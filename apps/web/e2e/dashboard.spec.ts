@@ -114,3 +114,28 @@ test.describe("com dados", () => {
     await expect(kpi(page, "Conversas hoje")).toContainText("2");
   });
 });
+
+test("período acompanha a URL (sidebar, reload) e o teclado", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org URL");
+  await page.getByRole("radio", { name: "30 dias" }).click();
+  await expect(page).toHaveURL(/periodo=30d/);
+  await expect(page.getByRole("radio", { name: "30 dias" })).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page).not.toHaveURL(/periodo=/);
+  await expect(page.getByRole("radio", { name: "7 dias" })).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("radio", { name: "30 dias" }).click();
+  await page.reload();
+  await expect(page).toHaveURL(/periodo=30d/);
+  await expect(page.getByRole("radio", { name: "30 dias" })).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("radio", { name: "30 dias" }).focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("radio", { name: "7 dias" })).toHaveAttribute("aria-checked", "true");
+  await expect(page).toHaveURL(/periodo=7d/);
+  await expect(page.getByRole("radio", { name: "7 dias" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("radio", { name: "30 dias" })).toHaveAttribute("aria-checked", "true");
+  await expect(page).toHaveURL(/periodo=30d/);
+});
