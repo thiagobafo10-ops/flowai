@@ -68,3 +68,10 @@ begin
   values (p_org, p_user, p_role);
 end;
 $$;
+
+-- Permissões: apenas authenticate_as/clear_authentication podem ser chamadas
+-- pela role `authenticated` (necessário para trocar de usuário no meio do teste).
+revoke execute on all functions in schema tests from public, anon, authenticated;
+grant usage on schema tests to authenticated;
+grant execute on function tests.authenticate_as(uuid) to authenticated;
+grant execute on function tests.clear_authentication() to authenticated;
