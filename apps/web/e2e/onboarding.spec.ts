@@ -17,7 +17,7 @@ test("critérios 1–3: cadastro → organização → dashboard", async ({ page
   await page.getByRole("button", { name: "Criar organização" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("banner").getByText("Açaí & Cia!!")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Navegação principal" }).getByText("Açaí & Cia!!")).toBeVisible();
   await expect(page.getByRole("main").getByText("Açaí & Cia!!")).toBeVisible();
   await expect(page.getByText("Ainda não há dados. Conecte um canal para começar a receber conversas.")).toBeVisible();
 
@@ -27,13 +27,14 @@ test("critérios 1–3: cadastro → organização → dashboard", async ({ page
   expect(countMemberships(email)).toBe(1);
 
   // sair e entrar de novo mantém a org
-  await page.getByRole("button", { name: "Sair" }).click();
+  await page.getByRole("button", { name: "Menu do usuário" }).click();
+  await page.getByRole("menuitem", { name: "Sair" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill("senha-segura-123");
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("banner").getByText("Açaí & Cia!!")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Açaí & Cia!!")).toBeVisible();
 });
 
 test("nome vazio mostra erro de validação", async ({ page }) => {

@@ -44,7 +44,7 @@ test("erro do banco mostra tela de erro e não leva ao onboarding", async ({ pag
   expect(countMemberships(email)).toBe(1);
 
   await page.goto("/dashboard");
-  await expect(page.getByRole("banner").getByText("Org Resiliente")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Org Resiliente")).toBeVisible();
 });
 
 test("botão Tentar novamente recupera após falha transitória", async ({ page }) => {
@@ -57,7 +57,7 @@ test("botão Tentar novamente recupera após falha transitória", async ({ page 
     restoreMembershipsRead();
   }
   await page.getByRole("button", { name: "Tentar novamente" }).click();
-  await expect(page.getByRole("banner").getByText("Org Retry")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Org Retry")).toBeVisible();
 });
 
 test("login grava auditoria auth.login e sair remove o cookie de organização", async ({ page, context }) => {
@@ -65,7 +65,8 @@ test("login grava auditoria auth.login e sair remove o cookie de organização",
   await signUpWithOrg(page, email, "Org Cookie");
   expect((await context.cookies()).some((c) => c.name === "flowai_org")).toBe(true);
 
-  await page.getByRole("button", { name: "Sair" }).click();
+  await page.getByRole("button", { name: "Menu do usuário" }).click();
+  await page.getByRole("menuitem", { name: "Sair" }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect((await context.cookies()).some((c) => c.name === "flowai_org")).toBe(false);
 

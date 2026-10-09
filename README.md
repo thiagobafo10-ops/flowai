@@ -54,3 +54,10 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - **`events` e `audit_logs` são escritos apenas por código definer do banco** (triggers/funções `SECURITY DEFINER`). A API não insere eventos nem chama `write_audit_log`; login é auditado via `log_auth_event` (allowlist). Alterações em `memberships`, `organizations`, `channels`, `ai_agents` e `automations` são auditadas por trigger (em updates, só os nomes das colunas alteradas).
 - **Rate limits do app são defesa em profundidade.** Os controles reais contra abuso de cadastro/login são os limites do Supabase Auth e captcha, configurados no projeto em produção.
 - **`x-forwarded-for` precisa vir da plataforma de hospedagem** (proxy confiável que sobrescreve o cabeçalho); caso contrário o IP usado em rate limit e auditoria pode ser forjado pelo cliente.
+
+## Convenções do app
+
+- **`getActiveOrg()` por página e por ação.** Toda página e Server Action/Route Handler de `(app)` chama `getActiveOrg()` por conta própria; o layout (sidebar/cabeçalho) não é barreira de segurança, apenas apresentação.
+- **Navegação central.** Módulos, rotas, ícones e descrições vivem em `apps/web/src/lib/navigation.ts` e são usados pela sidebar, pelo título do cabeçalho e pelas páginas "em construção".
+- **Leituras dinâmicas dentro de `<Suspense>`** (`cacheComponents`): cookies, headers e `getActiveOrg` nunca ficam no corpo síncrono de um layout/página.
+- **Preferências de UI em cookie:** `flowai_sidebar` (`expanded|collapsed`) é lido no servidor para evitar "pulo" visual; o tema usa `next-themes`.
