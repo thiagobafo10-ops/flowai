@@ -715,6 +715,12 @@ isOneToOne: false
 "create_organization_with_owner":
 { Args: { "p_name": string }; Returns: string
                            },
+"dashboard_metrics":
+{ Args: { "p_days": number,"p_org": string }; Returns: Json
+                           },
+"emit_event":
+{ Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
+                           },
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
                            },
