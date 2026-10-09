@@ -9,7 +9,7 @@ const numeric = z.union([
 ]);
 const num = numeric;
 const rate = numeric.nullable();
-const day = z.string().regex(/^d{4}-d{2}-d{2}$/);
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const dashboardMetricsSchema = z.object({
   period_days: num,
