@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { resolveActiveOrg, type OrgRole } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
@@ -10,7 +11,7 @@ export type ActiveOrg = { id: string; name: string; role: OrgRole };
  * Única fonte de organização ativa no servidor. O cookie é apenas uma
  * preferência: só vale se houver membership retornada pela RLS da sessão do usuário.
  */
-export async function getActiveOrg(): Promise<ActiveOrg | null> {
+export const getActiveOrg = cache(async (): Promise<ActiveOrg | null> => {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -36,4 +37,4 @@ export async function getActiveOrg(): Promise<ActiveOrg | null> {
   const org = membership?.organizations;
   if (!membership || !org) return null;
   return { id: org.id, name: org.name, role: membership.role };
-}
+});
