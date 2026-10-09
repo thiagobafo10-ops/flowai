@@ -62,7 +62,21 @@ test("no celular a gaveta abre e fecha ao navegar", async ({ page }) => {
   await page.getByRole("button", { name: "Abrir menu" }).click();
   await page.getByRole("dialog").getByRole("link", { name: "Contatos" }).click();
   await expect(page).toHaveURL(/\/contatos$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Contatos" })).toBeVisible();
   await expect(page.getByRole("dialog")).toBeHidden();
+});
+
+test("módulos não construídos mostram Em construção", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Placeholder");
+  for (const [href, title, text] of [
+    ["/inbox", "Inbox", "Todas as conversas de WhatsApp e Instagram em um só lugar."],
+    ["/configuracoes", "Configurações", "Organização, equipe e integrações."],
+  ]) {
+    await page.goto(href);
+    await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+    await expect(page.getByText(text)).toBeVisible();
+    await expect(page.getByText("Em construção")).toBeVisible();
+  }
 });
 
 test("menu do usuário mostra e-mail e sai", async ({ page }) => {
