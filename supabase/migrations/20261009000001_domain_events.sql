@@ -162,7 +162,7 @@ create trigger conversations_emit_events after insert or update of status on pub
   for each row execute function public.trg_conversations_emit_events();
 create trigger messages_emit_events after insert on public.messages
   for each row execute function public.trg_messages_emit_events();
-create trigger deals_set_status before insert or update of stage_id on public.deals
+create trigger deals_set_status before insert or update of stage_id, status on public.deals
   for each row execute function public.trg_deals_set_status();
 create trigger deals_emit_events after insert or update on public.deals
   for each row execute function public.trg_deals_emit_events();

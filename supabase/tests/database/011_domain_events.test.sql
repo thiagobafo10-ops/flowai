@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(42);
 
 select tests.create_user('ua@t.test') as ua \gset
 select tests.create_user('uagent@t.test') as uagent \gset
@@ -104,6 +104,30 @@ insert into public.contacts (organization_id, name) values (:'org', 'C3') return
 insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, title) values (:'org', :'pipe', :'s_ganho', :'c3', 'W') returning id as dw \gset
 insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, title) values (:'org', :'pipe', :'s_novo', :'c3', 'O');
 select throws_ok(format($$update public.deals set stage_id = %L where id = %L$$, :'s_novo', :'dw'), '23505', null, 'reabrir deal com outro aberto viola unique');
+
+-- 12b. status sempre derivado da etapa; edição direta de status é sobrescrita
+insert into public.contacts (organization_id, name) values (:'org', 'C4') returning id as c4 \gset
+insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, title, value)
+  values (:'org', :'pipe', :'s_int', :'c4', 'X', 5) returning id as d4 \gset
+select tests.authenticate_as(:'uagent');
+update public.deals set status = 'won' where id = :'d4';
+select tests.clear_authentication();
+select is((select status::text from public.deals where id = :'d4'), 'open', 'update status=won em etapa aberta é sobrescrito');
+select is((select count(*)::int from public.events where deal_id = :'d4' and type = 'deal_won'), 0, 'sem deal_won por edição direta de status');
+select tests.authenticate_as(:'uagent');
+update public.deals set status = 'lost' where id = :'d4';
+select tests.clear_authentication();
+select is((select status::text from public.deals where id = :'d4'), 'open', 'update status=lost em etapa aberta é sobrescrito');
+select is((select count(*)::int from public.events where deal_id = :'d4' and type = 'deal_lost'), 0, 'sem deal_lost por edição direta de status');
+update public.deals set stage_id = :'s_int' where id = :'d4';
+select is((select count(*)::int from public.events where deal_id = :'d4' and type = 'deal_stage_changed'), 0, 'mesma etapa não gera deal_stage_changed');
+update public.deals set stage_id = :'s_perdido' where id = :'d4';
+select is((select status::text from public.deals where id = :'d4'), 'lost', 'mover para Perdido => lost');
+select is((select count(*)::int from public.events where deal_id = :'d4' and type = 'deal_lost'), 1, 'deal_lost via UPDATE');
+update public.deals set title = 'D3', value = 99 where id = :'d1';
+select is((select count(*)::int from public.events where deal_id = :'d1' and type = 'deal_won'), 1, 'deal_won não reemitido em update de título/valor');
+update public.conversations set status = 'open' where id = :'cv2';
+select is((select count(*)::int from public.events where conversation_id = :'cv2' and type in ('handoff', 'conversation_closed')), 2, 'reabrir conversa não gera evento');
 
 -- 13. emit_event bloqueado
 select tests.authenticate_as(:'uagent');
