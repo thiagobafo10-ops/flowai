@@ -45,6 +45,7 @@ create table public.conversations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
+  unique (organization_id, id, channel_id),
   foreign key (organization_id, contact_id)
     references public.contacts (organization_id, id) on delete cascade,
   foreign key (organization_id, channel_id)
@@ -77,8 +78,9 @@ create table public.messages (
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (channel_id, external_id),
-  foreign key (organization_id, conversation_id)
-    references public.conversations (organization_id, id) on delete cascade,
+  -- a mensagem deve usar o mesmo canal da conversa
+  foreign key (organization_id, conversation_id, channel_id)
+    references public.conversations (organization_id, id, channel_id) on delete cascade,
   foreign key (organization_id, channel_id)
     references public.channels (organization_id, id) on delete cascade,
   foreign key (organization_id, sender_user_id)
@@ -163,8 +165,16 @@ create policy messages_insert on public.messages
   );
 create policy messages_update on public.messages
   for update to authenticated
-  using (public.has_role(organization_id, 'agent'))
-  with check (public.has_role(organization_id, 'agent'));
+  using (
+    public.has_role(organization_id, 'agent')
+    and direction = 'outbound'
+    and sender_user_id = (select auth.uid())
+  )
+  with check (
+    public.has_role(organization_id, 'agent')
+    and direction = 'outbound'
+    and sender_user_id = (select auth.uid())
+  );
 
 -- Realtime (RLS se aplica aos assinantes)
 alter publication supabase_realtime add table public.messages, public.conversations, public.deals;
