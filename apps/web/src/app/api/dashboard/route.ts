@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { unstable_rethrow } from "next/navigation";
 import { parsePeriod } from "@flowai/core";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { getDashboardMetrics } from "@/lib/dashboard/get-dashboard-metrics";
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     const metrics = await getDashboardMetrics(org.id, period);
     return NextResponse.json(metrics, { headers });
   } catch (err) {
+    unstable_rethrow(err);
     console.error("dashboard api failed", err);
     return NextResponse.json(
       { error: "Não foi possível carregar o dashboard." },
