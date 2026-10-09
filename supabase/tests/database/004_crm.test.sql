@@ -154,9 +154,8 @@ select lives_ok(format($$update public.contacts set assigned_to = %L where id = 
 -- Fix round 1: reorder de stages (unique deferrable)
 select tests.authenticate_as(:'uadmin');
 select lives_ok($q$do $$ begin
-  update public.pipeline_stages set position = 100 where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
+  update public.pipeline_stages set position = 9 where id = '00000000-0000-0000-0000-0000000000e1'; -- colide com S9
   update public.pipeline_stages set position = 0 where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
-  update public.pipeline_stages set position = 9 where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
   set constraints all immediate;
 end $$$q$, 'admin troca posições de stages');
 select tests.clear_authentication();
