@@ -5,3 +5,6 @@ supabase/.temp
 playwright-report
 test-results
 .superpowers/
+.env
+.env.*
+!.env.example
