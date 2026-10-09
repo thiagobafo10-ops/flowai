@@ -98,7 +98,7 @@ create table public.pipeline_stages (
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (organization_id, pipeline_id, id),
-  unique (pipeline_id, position),
+  unique (pipeline_id, position) deferrable initially deferred,
   check (not (is_won and is_lost)),
   foreign key (organization_id, pipeline_id)
     references public.pipelines (organization_id, id) on delete cascade

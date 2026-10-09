@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(39);
 
 select tests.create_user('a@t.test') as ua \gset
 select tests.create_user('b@t.test') as ub \gset
@@ -150,6 +150,41 @@ select throws_ok(format($$update public.contacts set assigned_to = %L where id =
 select tests.authenticate_as(:'uagent');
 select lives_ok(format($$update public.contacts set assigned_to = %L where id = '00000000-0000-0000-0000-0000000000c3'$$, :'uadmin'),
   'assigned_to membro da org ok');
+
+-- Fix round 1: reorder de stages (unique deferrable)
+select tests.authenticate_as(:'uadmin');
+select lives_ok($q$do $$ begin
+  update public.pipeline_stages set position = 100 where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
+  update public.pipeline_stages set position = 0 where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
+  update public.pipeline_stages set position = 9 where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
+  set constraints all immediate;
+end $$$q$, 'admin troca posições de stages');
+select tests.clear_authentication();
+select is((select position from public.pipeline_stages where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1'), 0, 'S9 agora na posição 0');
+select is((select position from public.pipeline_stages where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1'), 9, 'S1 agora na posição 9');
+
+-- agent move deal de stage no mesmo pipeline
+select tests.authenticate_as(:'uagent');
+select lives_ok($$update public.deals set stage_id = (select id from public.pipeline_stages where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1') where title = 'D'$$, 'agent move deal de stage');
+select tests.clear_authentication();
+select is((select s.name from public.deals d join public.pipeline_stages s on s.id = d.stage_id where d.title = 'D'), 'S9', 'stage do deal alterado');
+
+-- organization_id imutável
+select tests.authenticate_as(:'uagent');
+select throws_ok(format($$update public.contacts set organization_id = %L where id = '00000000-0000-0000-0000-0000000000c3'$$, :'org_b'),
+  '42501', null, 'membro não troca organization_id do contato');
+
+-- owner_id de outra org
+select tests.clear_authentication();
+select throws_ok(format($$insert into public.deals(organization_id, contact_id, pipeline_id, stage_id, title, status, owner_id)
+  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'O', 'won', %L)$$, :'org_a', :'ub'),
+  '23503', null, 'owner_id só de membro da org');
+
+-- viewer update silencioso
+select tests.authenticate_as(:'uview');
+update public.contacts set name = 'x' where id = '00000000-0000-0000-0000-0000000000c3';
+select tests.clear_authentication();
+select isnt((select name from public.contacts where id = '00000000-0000-0000-0000-0000000000c3'), 'x', 'viewer não altera contato');
 
 select * from finish();
 rollback;
