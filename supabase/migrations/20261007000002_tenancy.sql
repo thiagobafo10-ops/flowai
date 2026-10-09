@@ -1,5 +1,9 @@
 -- Tenancy: organizations, profiles, memberships e helpers de autorização.
 
+-- TRUNCATE/REFERENCES/TRIGGER ignoram RLS: nunca para anon/authenticated (inclui tabelas futuras).
+alter default privileges for role postgres in schema public
+  revoke truncate, references, trigger on tables from anon, authenticated;
+
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -113,6 +117,14 @@ alter table public.profiles enable row level security;
 alter table public.memberships enable row level security;
 
 revoke all on public.organizations, public.profiles, public.memberships from anon;
+revoke truncate, references, trigger on public.organizations, public.profiles, public.memberships
+  from anon, authenticated;
+
+-- Imutabilidade de colunas: só estas colunas são atualizáveis pela API.
+revoke update on public.memberships from authenticated;
+grant update (role) on public.memberships to authenticated;
+revoke update on public.profiles from authenticated;
+grant update (full_name, avatar_url) on public.profiles to authenticated;
 
 -- organizations: sem insert (apenas via RPC)
 create policy organizations_select on public.organizations
