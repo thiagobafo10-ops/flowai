@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const period = parsePeriod(request.nextUrl.searchParams.get("periodo"));
     const metrics = await getDashboardMetrics(org.id, period);
     return NextResponse.json(metrics, { headers });
-  } catch {
+  } catch (err) {
+    console.error("dashboard api failed", err);
     return NextResponse.json(
       { error: "Não foi possível carregar o dashboard." },
       { status: 500, headers },

@@ -1,21 +1,10 @@
-import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { ModulePlaceholder } from "@/components/module-placeholder";
-import { getActiveOrg } from "@/lib/org/active-org";
-
-async function RequireOrg() {
-  const org = await getActiveOrg();
-  if (!org) redirect("/onboarding");
-  return null;
-}
+import { RequireOrg } from "@/components/require-org";
 
 export default function Page() {
   return (
-    <>
-      <Suspense fallback={null}>
-        <RequireOrg />
-      </Suspense>
+    <RequireOrg>
       <ModulePlaceholder href="/pipeline" />
-    </>
+    </RequireOrg>
   );
 }
