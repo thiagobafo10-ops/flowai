@@ -1,0 +1,12 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(7);
+select has_extension('vector');
+select has_extension('pgmq');
+select has_extension('pg_cron');
+select has_extension('unaccent');
+select has_type('public', 'org_role', 'enum org_role existe');
+select is(public.role_rank('owner'), 4);
+select ok(public.role_rank('admin') > public.role_rank('agent') and public.role_rank('agent') > public.role_rank('viewer'), 'hierarquia de papéis');
+select * from finish();
+rollback;
