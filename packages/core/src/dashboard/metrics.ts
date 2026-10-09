@@ -1,7 +1,15 @@
 import { z } from "zod";
 
-const num = z.coerce.number();
-const rate = z.preprocess((v) => (v === null || v === undefined ? null : v), z.coerce.number().nullable());
+const numeric = z.union([
+  z.number().finite(),
+  z
+    .string()
+    .refine((v) => v.trim() !== "" && Number.isFinite(Number(v)), "invalid number")
+    .transform((v) => Number(v)),
+]);
+const num = numeric;
+const rate = numeric.nullable();
+const day = z.string().regex(/^d{4}-d{2}-d{2}$/);
 
 export const dashboardMetricsSchema = z.object({
   period_days: num,
@@ -18,8 +26,8 @@ export const dashboardMetricsSchema = z.object({
     conversion_rate: rate,
   }),
   series: z.object({
-    conversations_per_day: z.array(z.object({ day: z.string(), count: num })),
-    ai_vs_handoff_per_day: z.array(z.object({ day: z.string(), ai: num, handoff: num })),
+    conversations_per_day: z.array(z.object({ day, count: num })),
+    ai_vs_handoff_per_day: z.array(z.object({ day, ai: num, handoff: num })),
   }),
   funnel: z.array(
     z.object({

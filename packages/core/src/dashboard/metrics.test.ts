@@ -27,8 +27,7 @@ describe("dashboardMetricsSchema", () => {
     expect(dashboardMetricsSchema.safeParse(sample).success).toBe(true);
   });
   it("rejects missing kpis", () => {
-    const { kpis: _k, ...rest } = sample;
-    expect(dashboardMetricsSchema.safeParse(rest).success).toBe(false);
+    expect(dashboardMetricsSchema.safeParse({ ...sample, kpis: undefined }).success).toBe(false);
   });
   it("coerces string numbers", () => {
     const r = dashboardMetricsSchema.parse({ ...sample, kpis: { ...sample.kpis, potential_value: "1000.00" } });
@@ -41,11 +40,44 @@ describe("dashboardMetricsSchema", () => {
   });
 });
 
+describe("strict numerics", () => {
+  const k = (o: object) => ({ ...sample, kpis: { ...sample.kpis, ...o } });
+  it("coerces numeric string rate", () => {
+    expect(dashboardMetricsSchema.parse(k({ resolution_rate: "0.5" })).kpis.resolution_rate).toBe(0.5);
+  });
+  it.each([
+    ["empty rate", { resolution_rate: "" }],
+    ["blank rate", { resolution_rate: " " }],
+    ["abc rate", { resolution_rate: "abc" }],
+    ["empty count", { leads: "" }],
+    ["null count", { leads: null }],
+    ["Infinity", { leads: Infinity }],
+    ["array", { leads: [] }],
+  ])("rejects %s", (_n, o) => expect(dashboardMetricsSchema.safeParse(k(o)).success).toBe(false));
+  it("rejects missing rate key", () => {
+    const kpis = { ...sample.kpis } as Record<string, unknown>;
+    delete kpis.resolution_rate;
+    expect(dashboardMetricsSchema.safeParse({ ...sample, kpis }).success).toBe(false);
+  });
+  it("rejects timestamp day", () => {
+    const s2 = { ...sample, series: { ...sample.series, conversations_per_day: [{ day: "2026-10-03T00:00:00Z", count: 1 }] } };
+    expect(dashboardMetricsSchema.safeParse(s2).success).toBe(false);
+  });
+});
+
 describe("toChartData", () => {
   it("maps labels and funnel", () => {
     const d = toChartData(dashboardMetricsSchema.parse(sample));
     expect(d.conversations).toEqual([{ label: "03/10", count: 2 }]);
     expect(d.aiVsHandoff).toEqual([{ label: "03/10", ai: 1, handoff: 3 }]);
     expect(d.funnel).toEqual([{ name: "Novo", count: 4, value: 10 }]);
+  });
+  it("preserves funnel order", () => {
+    const f = [
+      { stage_id: "a", name: "Novo", position: 0, count: 4, value: 10 },
+      { stage_id: "b", name: "Ganho", position: 1, count: 2, value: "20.00" },
+    ];
+    const out = toChartData(dashboardMetricsSchema.parse({ ...sample, funnel: f }));
+    expect(out.funnel.map((x) => x.name)).toEqual(["Novo", "Ganho"]);
   });
 });
