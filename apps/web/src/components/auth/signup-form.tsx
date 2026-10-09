@@ -19,9 +19,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const MSG_CONFIRM_EMAIL =
+  "Enviamos um e-mail de confirmação. Verifique sua caixa de entrada para continuar.";
+
 export function SignupForm() {
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -33,12 +37,19 @@ export function SignupForm() {
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
+    setNotice(null);
     startTransition(async () => {
       const result = await signUp(values);
-      // Em caso de sucesso a action redireciona e não retorna.
-      if (result && !result.ok) {
+      // Com sessão, a action redireciona e não retorna.
+      if (!result) return;
+      if (!result.ok) {
         setFormError(result.error);
         toast.error(result.error);
+        return;
+      }
+      if (result.data.needsEmailConfirmation) {
+        setNotice(MSG_CONFIRM_EMAIL);
+        toast.success(MSG_CONFIRM_EMAIL);
       }
     });
   });
@@ -61,7 +72,7 @@ export function SignupForm() {
             />
             {errors.fullName && (
               <p className="text-sm text-destructive">
-                Informe seu nome completo (2 a 100 caracteres).
+                {errors.fullName.message}
               </p>
             )}
           </div>
@@ -96,6 +107,11 @@ export function SignupForm() {
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}
+            </p>
+          )}
+          {notice && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {notice}
             </p>
           )}
           <Button type="submit" className="w-full" disabled={pending}>

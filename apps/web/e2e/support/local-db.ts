@@ -52,3 +52,27 @@ export function countMemberships(email: string): number {
     ),
   );
 }
+
+function assertEmail(email: string): void {
+  if (!/^[\w.+@-]+$/.test(email)) throw new Error("e-mail inválido para helper");
+}
+
+export function countAuditLogins(email: string): number {
+  assertEmail(email);
+  return Number(
+    psql(
+      `select count(*) from public.audit_logs a join auth.users u on u.id = a.actor_id
+       where u.email = '${email}' and a.action = 'auth.login' and a.organization_id is null
+         and a.entity_type = 'user' and a.entity_id = u.id`,
+    ),
+  );
+}
+
+/** Simula falha do banco na leitura de memberships (somente Supabase local). */
+export function breakMembershipsRead(): void {
+  psql("revoke select on public.memberships from authenticated");
+}
+
+export function restoreMembershipsRead(): void {
+  psql("grant select on public.memberships to authenticated");
+}

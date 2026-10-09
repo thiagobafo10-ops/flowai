@@ -1,11 +1,13 @@
 "use server";
 
 import { isIP } from "node:net";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInSchema, signUpSchema } from "@flowai/core";
 import type { SignInInput, SignUpInput } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { getRequestIp } from "@/lib/request-ip";
+import { ACTIVE_ORG_COOKIE } from "@/lib/org/active-org";
 import type { ActionResult } from "@/lib/action-result";
 
 const MSG_DUPLICATE = "Este e-mail já está cadastrado.";
@@ -34,7 +36,11 @@ async function isAllowed(
   return data !== false;
 }
 
-export async function signUp(input: SignUpInput): Promise<ActionResult> {
+export type SignUpResult = { needsEmailConfirmation: true };
+
+export async function signUp(
+  input: SignUpInput,
+): Promise<ActionResult<SignUpResult>> {
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -51,7 +57,7 @@ export async function signUp(input: SignUpInput): Promise<ActionResult> {
     return { ok: false, error: MSG_RATE_LIMIT };
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { full_name: fullName } },
@@ -62,6 +68,12 @@ export async function signUp(input: SignUpInput): Promise<ActionResult> {
     }
     console.error("signUp failed", error);
     return { ok: false, error: MSG_UNEXPECTED };
+  }
+
+  // Com confirmação de e-mail ligada, o Supabase não devolve sessão: o usuário
+  // precisa confirmar antes de entrar (sem redirect para rota protegida).
+  if (!data.session) {
+    return { ok: true, data: { needsEmailConfirmation: true } };
   }
 
   redirect("/onboarding");
@@ -96,14 +108,12 @@ export async function signIn(input: SignInInput): Promise<ActionResult> {
     return { ok: false, error: MSG_UNEXPECTED };
   }
 
-  const { error: auditError } = await supabase.rpc("write_audit_log", {
-    p_org: null as unknown as string,
+  // Fail-open: falha ao auditar não impede o login.
+  const { error: auditError } = await supabase.rpc("log_auth_event", {
     p_action: "auth.login",
-    p_entity_type: "user",
-    p_entity_id: data.user.id,
     p_ip: isIP(ip) ? ip : undefined,
   });
-  if (auditError) console.error("write_audit_log failed", auditError);
+  if (auditError) console.error("log_auth_event failed", auditError);
 
   redirect("/dashboard");
 }
@@ -111,5 +121,7 @@ export async function signIn(input: SignInInput): Promise<ActionResult> {
 export async function signOut(): Promise<void> {
   const supabase = await createServerClient();
   await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete(ACTIVE_ORG_COOKIE);
   redirect("/login");
 }

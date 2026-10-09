@@ -14,6 +14,22 @@ describe("signUpSchema", () => {
   it("rejeita nome com menos de 2 caracteres", () => {
     expect(signUpSchema.safeParse({ fullName: " a ", email: "a@b.com", password: "12345678" }).success).toBe(false);
   });
+  it("nome curto tem mensagem em pt-BR", () => {
+    const r = signUpSchema.safeParse({ fullName: " a ", email: "a@b.com", password: "12345678" });
+    expect(r.error?.issues[0]?.message).toBe("Informe seu nome completo.");
+  });
+  it("aceita nome com 100 caracteres e rejeita 101 com mensagem em pt-BR", () => {
+    expect(signUpSchema.safeParse({ fullName: "a".repeat(100), email: "a@b.com", password: "12345678" }).success).toBe(true);
+    const r = signUpSchema.safeParse({ fullName: "a".repeat(101), email: "a@b.com", password: "12345678" });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toBe("O nome deve ter no máximo 100 caracteres.");
+  });
+  it("aceita senha com 72 caracteres e rejeita 73 com mensagem em pt-BR", () => {
+    expect(signUpSchema.safeParse({ fullName: "Ana", email: "a@b.com", password: "x".repeat(72) }).success).toBe(true);
+    const r = signUpSchema.safeParse({ fullName: "Ana", email: "a@b.com", password: "x".repeat(73) });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toBe("A senha deve ter no máximo 72 caracteres.");
+  });
   it("rejeita e-mail inválido", () => {
     const r = signUpSchema.safeParse({ fullName: "Ana", email: "ana", password: "12345678" });
     expect(r.error?.issues[0]?.message).toBe("Informe um e-mail válido.");

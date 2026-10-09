@@ -7,12 +7,16 @@ const emailSchema = z
   .pipe(z.email({ message: "Informe um e-mail válido." }));
 
 export const signUpSchema = z.object({
-  fullName: z.string().trim().min(2).max(100),
+  fullName: z
+    .string()
+    .trim()
+    .min(2, { message: "Informe seu nome completo." })
+    .max(100, { message: "O nome deve ter no máximo 100 caracteres." }),
   email: emailSchema,
   password: z
     .string()
     .min(8, { message: "A senha deve ter pelo menos 8 caracteres." })
-    .max(72),
+    .max(72, { message: "A senha deve ter no máximo 72 caracteres." }),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
