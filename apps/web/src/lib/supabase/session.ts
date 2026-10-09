@@ -46,6 +46,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  // APIs: sem redirect; cada Route Handler valida a sessão e responde 401.
+  if (pathname.startsWith("/api/")) return response;
   if (!user && !isPublicRoute(pathname)) return redirectTo(request, "/login", response);
   if (user && isPublicRoute(pathname)) return redirectTo(request, "/dashboard", response);
   return response;
