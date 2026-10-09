@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { countMemberships } from "./support/local-db";
 
 test("critérios 1–3: cadastro → organização → dashboard", async ({ page }) => {
   const email = `e2e+${Date.now()}@flowai.test`;
@@ -13,12 +14,14 @@ test("critérios 1–3: cadastro → organização → dashboard", async ({ page
   await page.getByRole("button", { name: "Criar organização" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText("Açaí & Cia!!").first()).toBeVisible();
+  await expect(page.getByRole("banner").getByText("Açaí & Cia!!")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Açaí & Cia!!")).toBeVisible();
   await expect(page.getByText("Ainda não há dados. Conecte um canal para começar a receber conversas.")).toBeVisible();
 
   // voltar ao onboarding não cria outra org
   await page.goto("/onboarding");
   await expect(page).toHaveURL(/\/dashboard$/);
+  expect(countMemberships(email)).toBe(1);
 
   // sair e entrar de novo mantém a org
   await page.getByRole("button", { name: "Sair" }).click();
@@ -26,7 +29,8 @@ test("critérios 1–3: cadastro → organização → dashboard", async ({ page
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill("senha-segura-123");
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByText("Açaí & Cia!!").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("banner").getByText("Açaí & Cia!!")).toBeVisible();
 });
 
 test("nome vazio mostra erro de validação", async ({ page }) => {

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createOrganizationSchema } from "@flowai/core";
 import type { CreateOrganizationInput } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
-import { ACTIVE_ORG_COOKIE } from "@/lib/org/active-org";
+import { ACTIVE_ORG_COOKIE, getActiveOrg } from "@/lib/org/active-org";
 import type { ActionResult } from "@/lib/action-result";
 
 const MSG_NAME_REQUIRED = "Informe o nome da empresa.";
@@ -22,6 +22,9 @@ export async function createOrganization(
       fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
     };
   }
+
+  // Proteção server-side contra organização duplicada.
+  if (await getActiveOrg()) redirect("/dashboard");
 
   const supabase = await createServerClient();
   const { data: orgId, error } = await supabase.rpc(
