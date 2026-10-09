@@ -13,6 +13,10 @@ describe("resolveActiveOrg", () => {
   it("sem cookie, usa a membership mais antiga", () => {
     expect(resolveActiveOrg(null, [m("b", "2026-02-01"), m("a", "2026-01-01")])).toBe("a");
   });
+  it("em empate de createdAt escolhe o menor organizationId", () => {
+    expect(resolveActiveOrg(null, [m("b", "2026-01-01"), m("a", "2026-01-01")])).toBe("a");
+    expect(resolveActiveOrg(null, [m("a", "2026-01-01"), m("b", "2026-01-01")])).toBe("a");
+  });
   it("sem memberships retorna null", () => {
     expect(resolveActiveOrg("a", [])).toBeNull();
   });
