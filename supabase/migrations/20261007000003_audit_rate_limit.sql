@@ -2,8 +2,8 @@
 
 create table public.audit_logs (
   id uuid primary key default gen_random_uuid(),
-  organization_id uuid references public.organizations(id) on delete cascade,
-  actor_id uuid references public.profiles(id) on delete set null,
+  organization_id uuid, -- no FK on purpose: audit trail outlives entities
+  actor_id uuid, -- no FK on purpose (append-only stays absolute)
   action text not null,
   entity_type text not null,
   entity_id uuid,
@@ -75,8 +75,17 @@ declare
   v_prev int;
   v_elapsed numeric;
 begin
-  if p_window_seconds is null or p_window_seconds <= 0 then
-    raise exception 'invalid window';
+  if p_key is null or length(p_key) = 0 or length(p_key) > 200 then
+    raise exception 'invalid rate limit key' using errcode = '22023';
+  end if;
+  if p_limit is null or p_limit < 1 then
+    raise exception 'invalid rate limit' using errcode = '22023';
+  end if;
+  if p_window_seconds is null or p_window_seconds < 1 then
+    raise exception 'invalid window' using errcode = '22023';
+  end if;
+  if random() < 0.01 then
+    delete from public.rate_limits where window_start < v_now - interval '1 day';
   end if;
   v_w := to_timestamp(floor(extract(epoch from v_now) / p_window_seconds) * p_window_seconds);
 
