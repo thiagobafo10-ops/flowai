@@ -25,6 +25,10 @@ insert into public.pipeline_stages (id, organization_id, pipeline_id, name, posi
   ('00000000-0000-0000-0000-0000000000e1', :'org_a', '00000000-0000-0000-0000-0000000000a1', 'S1', 0),
   ('00000000-0000-0000-0000-0000000000e2', :'org_a', '00000000-0000-0000-0000-0000000000a2', 'S2', 0),
   ('00000000-0000-0000-0000-0000000000e3', :'org_b', '00000000-0000-0000-0000-0000000000b1', 'SB', 0);
+-- etapas finais: o status do deal agora segue a etapa (gatilho da Fase 2)
+insert into public.pipeline_stages (id, organization_id, pipeline_id, name, position, is_won, is_lost) values
+  ('00000000-0000-0000-0000-0000000000e4', :'org_a', '00000000-0000-0000-0000-0000000000a1', 'SW', 5, true, false),
+  ('00000000-0000-0000-0000-0000000000e5', :'org_a', '00000000-0000-0000-0000-0000000000a1', 'SL', 6, false, true);
 insert into public.tags (id, organization_id, name) values
   ('00000000-0000-0000-0000-0000000000f1', :'org_a', 'VIP');
 
@@ -73,7 +77,7 @@ select throws_ok(format($$insert into public.deals(organization_id, contact_id, 
   values (%L, '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'Deal 2')$$, :'org_a'),
   '23505', null, 'segundo deal open para (contato, pipeline) rejeitado');
 select lives_ok(format($$insert into public.deals(organization_id, contact_id, pipeline_id, stage_id, title, status)
-  values (%L, '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'Deal 3', 'won')$$, :'org_a'),
+  values (%L, '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e4', 'Deal 3', 'won')$$, :'org_a'),
   'deal não-open adicional permitido');
 
 -- lead_score
@@ -138,10 +142,10 @@ select is((select count(*)::int from public.pipeline_stages where pipeline_id = 
 -- deals RLS: agent insere, viewer não
 select tests.authenticate_as(:'uagent');
 select lives_ok(format($$insert into public.deals(organization_id, contact_id, pipeline_id, stage_id, title, status)
-  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'Ag', 'lost')$$, :'org_a'), 'agent insere deal');
+  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e5', 'Ag', 'lost')$$, :'org_a'), 'agent insere deal');
 select tests.authenticate_as(:'uview');
 select throws_ok(format($$insert into public.deals(organization_id, contact_id, pipeline_id, stage_id, title, status)
-  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'V', 'lost')$$, :'org_a'),
+  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e5', 'V', 'lost')$$, :'org_a'),
   '42501', null, 'viewer não insere deal');
 -- assigned_to precisa ser membro da org
 select tests.clear_authentication();
@@ -176,7 +180,7 @@ select throws_ok(format($$update public.contacts set organization_id = %L where 
 -- owner_id de outra org
 select tests.clear_authentication();
 select throws_ok(format($$insert into public.deals(organization_id, contact_id, pipeline_id, stage_id, title, status, owner_id)
-  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'O', 'won', %L)$$, :'org_a', :'ub'),
+  values (%L, '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e4', 'O', 'won', %L)$$, :'org_a', :'ub'),
   '23503', null, 'owner_id só de membro da org');
 
 -- viewer update silencioso
