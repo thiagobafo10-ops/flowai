@@ -100,8 +100,8 @@ Entregar o "esqueleto" do produto e o primeiro módulo de valor:
 |---|---|---|
 | `contacts` INSERT | `contact_created` | `{source}` |
 | `conversations` INSERT | `conversation_created` | `{channel_id}` |
-| `conversations` UPDATE, `status` muda para `pending_human` | `handoff` | `{from_status}` |
-| `conversations` UPDATE, `status` muda para `closed` | `conversation_closed` | `{from_status}` |
+| `conversations` UPDATE, `status` muda para `pending_human` (ou INSERT já em `pending_human`, com `from_status: null`) | `handoff` | `{from_status}` |
+| `conversations` UPDATE, `status` muda para `closed` (ou INSERT já em `closed`, com `from_status: null`) | `conversation_closed` | `{from_status}` |
 | `messages` INSERT, `direction='inbound'` e `is_internal_note=false` | `message_received` | `{message_id}` |
 | `messages` INSERT, `sender_type='ai'` | `ai_replied` | `{message_id}` |
 | `deals` INSERT | `deal_created` | `{stage_id, value}` |
@@ -113,6 +113,9 @@ Conversa/contato/deal relacionados são preenchidos nas colunas `conversation_id
 
 ### 3.3 Status do deal segue a etapa
 Gatilho `BEFORE INSERT OR UPDATE OF stage_id` em `deals`: etapa `is_won` → `status='won'`; `is_lost` → `status='lost'`; demais → `status='open'`. (O índice único "um deal aberto por contato/pipeline" continua valendo.)
+Mudar `is_won`/`is_lost` de uma etapa (gatilho `AFTER UPDATE OF is_won, is_lost` em `pipeline_stages`) recalcula o status dos deals da etapa, emitindo `deal_won`/`deal_lost` quando aplicável; se reabrir um deal violar o índice único, a mudança da flag falha com `23505`.
+
+`organizations.timezone` é validado contra `pg_timezone_names` (`public.is_valid_timezone`, CHECK `organizations_timezone_valid`).
 
 ---
 
@@ -155,14 +158,14 @@ Gatilho `BEFORE INSERT OR UPDATE OF stage_id` em `deals`: etapa `is_won` → `st
 | `new_contacts` | eventos `contact_created` na janela |
 | `leads` | contatos com `status='lead'` (agora) |
 | `opportunities` | deals `open` cuja etapa tem `position > 0` no pipeline padrão (agora) |
-| `potential_value` | soma de `value` dos deals `open` (agora) |
+| `potential_value` | soma de `value` dos deals `open` com `currency = 'BRL'` (agora); deals em outra moeda não somam |
 | `ai_handled_conversations` | conversas distintas com `ai_replied` na janela |
 | `handoffs` | eventos `handoff` na janela |
-| `resolution_rate` | conversas distintas com `conversation_closed` na janela ÷ conversas distintas com `message_received` na janela; `null` se denominador 0 |
-| `conversion_rate` | eventos `deal_won` na janela ÷ eventos `deal_created` na janela; `null` se denominador 0 |
+| `resolution_rate` | conversas distintas com `message_received` na janela **e** `conversation_closed` na janela ÷ conversas distintas com `message_received` na janela; `null` se denominador 0 (sempre em [0,1]) |
+| `conversion_rate` | deals distintos com `deal_created` na janela **e** `deal_won` na janela ÷ deals distintos com `deal_created` na janela; `null` se denominador 0 (sempre em [0,1]; ganhos repetidos do mesmo deal contam uma vez) |
 
 - Séries: um ponto por dia da janela (dias sem movimento = 0), datas no fuso da org.
-- Funil: todas as etapas do pipeline padrão em ordem, com quantidade e soma de valor dos deals cujo `stage_id` é a etapa (snapshot atual, inclui Ganho/Perdido).
+- Funil: todas as etapas do pipeline padrão em ordem, com quantidade (todas as moedas) e soma de valor (só `currency = 'BRL'`) dos deals cujo `stage_id` é a etapa (snapshot atual, inclui Ganho/Perdido).
 - `has_activity`: existe ao menos um evento na organização (qualquer data) ou ao menos um canal com `status='active'`.
 
 ---
