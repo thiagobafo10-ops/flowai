@@ -10,6 +10,7 @@ import {
   type CreateOrganizationInput,
 } from "@flowai/core";
 import { createOrganization } from "@/app/onboarding/actions";
+import { applyFieldErrors } from "@/lib/apply-field-errors";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,6 +28,7 @@ export function CreateOrganizationForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<CreateOrganizationInput>({
     resolver: zodResolver(createOrganizationSchema),
@@ -39,6 +41,8 @@ export function CreateOrganizationForm() {
       const result = await createOrganization(values);
       // Em caso de sucesso a action redireciona e não retorna.
       if (result && !result.ok) {
+        // Erros de campo: só inline. Erros gerais: inline + toast.
+        if (applyFieldErrors(setError, result.fieldErrors)) return;
         setFormError(result.error);
         toast.error(result.error);
       }
@@ -61,10 +65,11 @@ export function CreateOrganizationForm() {
               id="name"
               autoComplete="organization"
               aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? "name-error" : undefined}
               {...register("name")}
             />
             {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
+              <p id="name-error" className="text-sm text-destructive">{errors.name.message}</p>
             )}
           </div>
           {formError && (

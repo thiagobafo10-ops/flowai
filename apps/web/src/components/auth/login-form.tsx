@@ -8,6 +8,7 @@ import { Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { signInSchema, type SignInInput } from "@flowai/core";
 import { signIn } from "@/app/(auth)/actions";
+import { applyFieldErrors } from "@/lib/apply-field-errors";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +26,7 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<SignInInput>({
     resolver: zodResolver(signInSchema),
@@ -37,6 +39,8 @@ export function LoginForm() {
       const result = await signIn(values);
       // Em caso de sucesso a action redireciona e não retorna.
       if (result && !result.ok) {
+        // Erros de campo: só inline. Erros gerais: inline + toast.
+        if (applyFieldErrors(setError, result.fieldErrors)) return;
         setFormError(result.error);
         toast.error(result.error);
       }
@@ -58,10 +62,11 @@ export function LoginForm() {
               type="email"
               autoComplete="email"
               aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
               {...register("email")}
             />
             {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
+              <p id="email-error" className="text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
           <div className="space-y-2">
@@ -71,10 +76,11 @@ export function LoginForm() {
               type="password"
               autoComplete="current-password"
               aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? "password-error" : undefined}
               {...register("password")}
             />
             {errors.password && (
-              <p className="text-sm text-destructive">
+              <p id="password-error" className="text-sm text-destructive">
                 {errors.password.message}
               </p>
             )}

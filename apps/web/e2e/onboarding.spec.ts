@@ -45,5 +45,5 @@ test("nome vazio mostra erro de validação", async ({ page }) => {
   await page.getByRole("button", { name: "Criar conta" }).click();
   await page.getByLabel("Nome da empresa").fill("   ");
   await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page.getByText("Informe o nome da empresa.").first()).toBeVisible();
+  await expect(page.getByText("Informe o nome da empresa.")).toBeVisible();
 });
