@@ -12,6 +12,9 @@
 create unique index pipeline_stages_pipeline_lower_name_key
   on public.pipeline_stages (pipeline_id, lower(name));
 
+alter table public.pipeline_stages
+  add constraint pipeline_stages_name_length check (char_length(btrim(name)) between 1 and 40);
+
 revoke insert, delete on public.pipeline_stages from authenticated;
 revoke update (position, is_won, is_lost) on public.pipeline_stages from authenticated;
 
@@ -28,13 +31,14 @@ declare
   v_pos int;
   v_id uuid;
 begin
-  select organization_id into v_org from public.pipelines where id = p_pipeline for update;
+  select organization_id into v_org from public.pipelines where id = p_pipeline;
   if v_org is null or not public.has_role(v_org, 'admin') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
   if char_length(v_name) < 1 or char_length(v_name) > 40 then
     raise exception 'invalid_name' using errcode = '22023';
   end if;
+  perform 1 from public.pipelines where id = p_pipeline for update;
 
   select coalesce(min(position) filter (where is_won or is_lost), max(position) + 1, 0)
     into v_pos from public.pipeline_stages where pipeline_id = p_pipeline;
@@ -60,10 +64,11 @@ as $$
 declare
   v_org uuid;
 begin
-  select organization_id into v_org from public.pipelines where id = p_pipeline for update;
+  select organization_id into v_org from public.pipelines where id = p_pipeline;
   if v_org is null or not public.has_role(v_org, 'admin') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  perform 1 from public.pipelines where id = p_pipeline for update;
 
   if p_stage_ids is null
      or cardinality(p_stage_ids) is distinct from (select count(*) from public.pipeline_stages where pipeline_id = p_pipeline)
@@ -77,7 +82,7 @@ begin
 
   update public.pipeline_stages s set position = o.ord::int - 1
     from unnest(p_stage_ids) with ordinality as o(id, ord)
-    where s.id = o.id and s.pipeline_id = p_pipeline;
+    where s.id = o.id and s.pipeline_id = p_pipeline and s.position is distinct from o.ord::int - 1;
 end;
 $$;
 
@@ -92,22 +97,35 @@ declare
   v_org uuid;
   v_pipeline uuid;
   v_outcome boolean;
+  v_target_outcome boolean;
 begin
-  select s.organization_id, s.pipeline_id, (s.is_won or s.is_lost)
-    into v_org, v_pipeline, v_outcome
-    from public.pipeline_stages s where s.id = p_stage;
+  -- 1) org/pipeline sem lock (imutáveis) -> checagem de papel
+  select organization_id, pipeline_id into v_org, v_pipeline
+    from public.pipeline_stages where id = p_stage;
   if v_org is null or not public.has_role(v_org, 'admin') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 
+  -- 2) trava o pipeline e só então relê as flags (evita corrida com set_stage_outcome)
   perform 1 from public.pipelines where id = v_pipeline for update;
 
+  select (is_won or is_lost) into v_outcome
+    from public.pipeline_stages where id = p_stage;
+  if v_outcome is null then
+    raise exception 'stage_not_found' using errcode = '22023';
+  end if;
   if v_outcome then
     raise exception 'stage_is_outcome' using errcode = '22023';
   end if;
-  if p_target_stage is null or p_target_stage = p_stage
-     or not exists (select 1 from public.pipeline_stages where id = p_target_stage and pipeline_id = v_pipeline) then
+
+  select (is_won or is_lost) into v_target_outcome
+    from public.pipeline_stages
+    where id = p_target_stage and pipeline_id = v_pipeline;
+  if p_target_stage is null or p_target_stage = p_stage or v_target_outcome is null then
     raise exception 'invalid_target_stage' using errcode = '22023';
+  end if;
+  if v_target_outcome then
+    raise exception 'target_is_outcome' using errcode = '22023';
   end if;
 
   update public.deals set stage_id = p_target_stage where stage_id = p_stage;
@@ -116,8 +134,12 @@ begin
   update public.pipeline_stages s set position = r.rn::int - 1
     from (select id, row_number() over (order by position) as rn
             from public.pipeline_stages where pipeline_id = v_pipeline) r
-    where s.id = r.id;
+    where s.id = r.id and s.position is distinct from r.rn::int - 1;
 
+  if (select count(*) from public.pipeline_stages where pipeline_id = v_pipeline and is_won) <> 1
+     or (select count(*) from public.pipeline_stages where pipeline_id = v_pipeline and is_lost) <> 1 then
+    raise exception 'outcome_required' using errcode = '22023';
+  end if;
   if not exists (select 1 from public.pipeline_stages
                   where pipeline_id = v_pipeline and not is_won and not is_lost) then
     raise exception 'last_open_stage' using errcode = '22023';

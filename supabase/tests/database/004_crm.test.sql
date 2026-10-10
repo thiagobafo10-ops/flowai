@@ -164,7 +164,7 @@ select lives_ok($q$do $$ begin
   update public.pipeline_stages set position = 9 where id = '00000000-0000-0000-0000-0000000000e1'; -- colide com S9
   update public.pipeline_stages set position = 0 where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';
   set constraints all immediate;
-end $$$q$, 'admin troca posições de stages');
+end $$$q$, 'unique deferrable de position permite troca de posições (como postgres)');
 select tests.clear_authentication();
 select is((select position from public.pipeline_stages where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1'), 0, 'S9 agora na posição 0');
 select is((select position from public.pipeline_stages where name = 'S1' and pipeline_id = '00000000-0000-0000-0000-0000000000a1'), 9, 'S1 agora na posição 9');

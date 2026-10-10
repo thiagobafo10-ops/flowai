@@ -111,7 +111,8 @@ Transformar os módulos **Contatos** e **Pipeline** (hoje "Em construção") em 
 - Mensagens: validação inline; "Você não tem permissão para esta ação."; "Não foi possível concluir. Tente novamente."; mensagens específicas das §2–4.
 
 ## 6. Banco (resumo)
-- Migration nova `20261010000001_crm_functions.sql`: `save_contact`, `reorder_stages`, `delete_stage_moving_deals`, `set_stage_outcome`, invariantes de etapas (gatilho que valida exatamente um Ganho/um Perdido/ao menos uma aberta ao fim da transação — constraint trigger deferrable), unicidade de nome de etapa por pipeline (`lower(name)`), unicidade de nome de campo personalizado por contato (já existe), gatilhos de auditoria, índices `events(contact_id)`, `events(deal_id)`, `deals(organization_id, pipeline_id)`.
+- Migration `20261010000001_crm_contacts.sql`: `save_contact`, `search_contacts`, edição de tags só para admin+, gatilhos de auditoria (`pipelines`, `pipeline_stages`, e delete em `contacts`/`deals`), índices `events(contact_id)`, `events(deal_id)`, `deals(organization_id, pipeline_id)`. Unicidade de nome de campo personalizado por contato já existe.
+- Migration `20261010000002_crm_stages.sql`: `create_stage`, `reorder_stages`, `delete_stage_moving_deals`, `set_stage_outcome` (SECURITY DEFINER, admin checado dentro; trava o pipeline `FOR UPDATE` e verifica os invariantes ao final), revogação de escrita direta em `pipeline_stages` (exceto `update (name)`), unicidade `(pipeline_id, lower(name))` e `check` de tamanho do nome (1–40). Os invariantes (um Ganho, um Perdido, ao menos uma aberta) são garantidos por essas funções, não por constraint trigger deferível.
 - Nenhuma migration existente é editada.
 
 ## 7. Testes

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(48);
 
 select tests.create_user('o16@t.test') as uo \gset
 select tests.create_user('b16@t.test') as ub \gset
@@ -71,7 +71,7 @@ select is((select count(*)::int from public.pipeline_stages where id = :'st_int'
 select is((select array_agg(position order by position) from public.pipeline_stages where pipeline_id = :'pipe'),
   array[0,1,2,3,4,5,6], 'posições contíguas após exclusão');
 
--- última etapa aberta (pipeline com uma etapa aberta)
+-- destino encerrado e destino em outro pipeline
 insert into public.pipelines (organization_id, name) values (:'org_a', 'Mini') returning id as mini \gset
 insert into public.pipeline_stages (organization_id, pipeline_id, name, position, is_won, is_lost) values
   (:'org_a', :'mini', 'Unica', 0, false, false),
@@ -81,9 +81,20 @@ select id as m_unica from public.pipeline_stages where pipeline_id = :'mini' and
 select id as m_g from public.pipeline_stages where pipeline_id = :'mini' and name = 'G' \gset
 select tests.authenticate_as(:'uadmin');
 select throws_ok(format($$select public.delete_stage_moving_deals(%L, %L)$$, :'m_unica', :'m_g'),
-  '22023', 'last_open_stage', 'excluir última etapa aberta => 22023 last_open_stage');
+  '22023', 'target_is_outcome', 'destino Ganho/Perdido => 22023 target_is_outcome');
 select tests.clear_authentication();
 select is((select count(*)::int from public.pipeline_stages where pipeline_id = :'mini'), 3, 'mini pipeline intacto');
+
+select id as b_stage from public.pipeline_stages where organization_id = :'org_b' limit 1 \gset
+select tests.authenticate_as(:'uadmin');
+select throws_ok(format($$select public.delete_stage_moving_deals(%L, %L)$$, :'m_unica', :'st_novo'),
+  '22023', null, 'destino em outro pipeline => 22023');
+select throws_ok(format($$select public.reorder_stages(%L, (select array_agg(id) from (select id from public.pipeline_stages where pipeline_id = %L and id <> %L union all select %L::uuid) q))$$,
+  :'pipe', :'pipe', :'st_novo', :'b_stage'), '22023', null, 'reorder com etapa de outra org => 22023');
+select throws_ok(format($$update public.pipeline_stages set name = '' where id = %L$$, :'st_novo'), '23514', null, 'renomear para vazio => 23514');
+select throws_ok(format($$update public.pipeline_stages set name = repeat('x', 41) where id = %L$$, :'st_novo'), '23514', null, 'renomear com 41 caracteres => 23514');
+select throws_ok(format($$select public.create_stage(%L, repeat('x', 41))$$, :'pipe'), '22023', null, 'create_stage com 41 caracteres => erro');
+select tests.clear_authentication();
 
 -- ============================================================ set_stage_outcome
 insert into public.contacts (organization_id, name) values (:'org_a', 'C3') returning id as c3 \gset
@@ -132,6 +143,8 @@ select throws_ok(format($$delete from public.pipeline_stages where id = %L$$, :'
 select tests.authenticate_as(:'ub');
 select throws_ok(format($$select public.create_stage(%L, 'X')$$, :'pipe'), '42501', null, 'admin de outra org: create_stage => 42501');
 select throws_ok(format($$select public.set_stage_outcome(%L, 'won')$$, :'st_novo'), '42501', null, 'admin de outra org: set_stage_outcome => 42501');
+select throws_ok(format($$select public.reorder_stages(%L, array[%L]::uuid[])$$, :'pipe', :'st_novo'), '42501', null, 'admin de outra org: reorder_stages => 42501');
+select throws_ok(format($$select public.delete_stage_moving_deals(%L, %L)$$, :'st_novo', :'st_neg'), '42501', null, 'admin de outra org: delete_stage_moving_deals => 42501');
 select tests.clear_authentication();
 select is((select count(*)::int from public.pipeline_stages where pipeline_id = :'pipe'), 7, 'nenhuma alteração cross-org');
 
