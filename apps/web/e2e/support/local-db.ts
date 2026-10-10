@@ -157,6 +157,19 @@ begin
 end $$`);
 }
 
+/** Apaga, como postgres, o deal com este título na org do usuário (somente Supabase local). */
+export function deleteDealByTitle(email: string, title: string): void {
+  assertEmail(email);
+  // Título só com letras, números, espaços e pontuação comum; aspas simples são duplicadas.
+  if (!/^[\p{L}\p{N} \-—.,:()]{1,120}$/u.test(title)) throw new Error("título inválido para helper");
+  const escaped = title.replace(/'/g, "''");
+  psql(`
+delete from public.deals d
+  using public.memberships m, auth.users u
+  where u.email = '${email}' and m.user_id = u.id
+    and d.organization_id = m.organization_id and d.title = '${escaped}'`);
+}
+
 /** Adiciona um usuário já cadastrado como membro da org do dono (somente Supabase local). */
 export function addMember(ownerEmail: string, memberEmail: string, role: "viewer" | "agent" | "admin"): void {
   assertEmail(ownerEmail);

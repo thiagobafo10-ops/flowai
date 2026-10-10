@@ -1,7 +1,9 @@
 import {
   CONTACTS_PAGE_SIZE,
   TAG_COLORS,
+  contactDisplayName,
   type ContactFilters,
+  type KanbanFilters,
   type ContactSource,
   type ContactStatus,
   type TagColor,
@@ -216,5 +218,100 @@ export async function getContact(orgId: string, id: string): Promise<ContactDeta
       };
     }),
     timezone: orgRes.data?.timezone ?? "America/Sao_Paulo",
+  };
+}
+
+export type BoardStage = { id: string; name: string; position: number; isWon: boolean; isLost: boolean };
+export type BoardDeal = {
+  id: string;
+  stageId: string;
+  title: string;
+  value: number;
+  contact: { id: string; name: string; phone: string | null; email: string | null; leadScore: number };
+  ownerId: string | null;
+  ownerName: string | null;
+};
+export type Board = { pipelineId: string; stages: BoardStage[]; deals: BoardDeal[] };
+
+const CLOSED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+/** Quadro do pipeline padrão: deals abertos e (conforme o filtro) encerrados recentes ou todos. */
+export async function getBoard(orgId: string, f: KanbanFilters): Promise<Board> {
+  const supabase = await createServerClient();
+  const { data: pipeline, error: pipeError } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (pipeError) throw new Error("Falha ao carregar pipeline", { cause: pipeError });
+  if (!pipeline) throw new Error("Pipeline padrão não encontrado");
+
+  let dealsQuery = supabase
+    .from("deals")
+    .select(
+      "id, stage_id, title, value, status, owner_id, updated_at, contacts(id, name, phone, email, lead_score)",
+    )
+    .eq("organization_id", orgId)
+    .eq("pipeline_id", pipeline.id);
+  if (f.ownerId) dealsQuery = dealsQuery.eq("owner_id", f.ownerId);
+  if (f.closed === "30d") {
+    const since = new Date(Date.now() - CLOSED_WINDOW_MS).toISOString();
+    dealsQuery = dealsQuery.or(`status.eq.open,updated_at.gte.${since}`);
+  }
+
+  const [stagesRes, dealsRes, members] = await Promise.all([
+    supabase
+      .from("pipeline_stages")
+      .select("id, name, position, is_won, is_lost")
+      .eq("organization_id", orgId)
+      .eq("pipeline_id", pipeline.id)
+      .order("position"),
+    dealsQuery.order("updated_at", { ascending: false }),
+    listMembers(orgId),
+  ]);
+  if (stagesRes.error) throw new Error("Falha ao carregar etapas", { cause: stagesRes.error });
+  if (dealsRes.error) throw new Error("Falha ao carregar deals", { cause: dealsRes.error });
+
+  const memberName = new Map(members.map((m) => [m.userId, m.name]));
+  const q = fold(f.q);
+  const deals: BoardDeal[] = [];
+  for (const d of dealsRes.data) {
+    if (!d.contacts) continue;
+    const contact = {
+      id: d.contacts.id,
+      name: contactDisplayName(d.contacts),
+      phone: d.contacts.phone,
+      email: d.contacts.email,
+      leadScore: d.contacts.lead_score,
+    };
+    if (q && !fold(`${contact.name} ${contact.phone ?? ""} ${contact.email ?? ""} ${d.title}`).includes(q)) continue;
+    deals.push({
+      id: d.id,
+      stageId: d.stage_id,
+      title: d.title,
+      value: Number(d.value),
+      contact,
+      ownerId: d.owner_id,
+      ownerName: d.owner_id ? (memberName.get(d.owner_id) ?? null) : null,
+    });
+  }
+
+  return {
+    pipelineId: pipeline.id,
+    stages: stagesRes.data.map((s) => ({
+      id: s.id,
+      name: s.name,
+      position: s.position,
+      isWon: s.is_won,
+      isLost: s.is_lost,
+    })),
+    deals,
   };
 }
