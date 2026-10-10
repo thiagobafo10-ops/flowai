@@ -67,21 +67,22 @@ type RowProps = {
   index: number;
   total: number;
   busy: boolean;
+  /** Esta etapa está sendo renomeada. */
+  saving: boolean;
   /** Única etapa aberta do pipeline: não pode ser excluída. */
   isLastOpen: boolean;
   onMove: (from: number, to: number) => void;
   onOutcome: (stage: StageWithCount, outcome: "won" | "lost") => void;
   onDelete: (stage: StageWithCount) => void;
-  onRenamed: () => void;
+  onRename: (stage: StageWithCount, name: string, onError: (message: string) => void) => void;
 };
 
-function StageRow({ stage, index, total, busy, isLastOpen, onMove, onOutcome, onDelete, onRenamed }: RowProps) {
+function StageRow({ stage, index, total, busy, saving, isLastOpen, onMove, onOutcome, onDelete, onRename }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: stage.id });
   const [name, setName] = useState(stage.name);
   const [prevName, setPrevName] = useState(stage.name);
   const [error, setError] = useState<string | null>(null);
-  const [saving, startSave] = useTransition();
   if (stage.name !== prevName) {
     setPrevName(stage.name);
     setName(stage.name);
@@ -97,15 +98,7 @@ function StageRow({ stage, index, total, busy, isLastOpen, onMove, onOutcome, on
       return;
     }
     setError(null);
-    startSave(async () => {
-      const result = await renameStage(stage.id, parsed.data);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      toast.success("Etapa salva.");
-      onRenamed();
-    });
+    onRename(stage, parsed.data, setError);
   }
 
   const errorId = `stage-${stage.id}-error`;
@@ -146,7 +139,7 @@ function StageRow({ stage, index, total, busy, isLastOpen, onMove, onOutcome, on
             }}
           />
         </div>
-        <Button type="button" variant="outline" size="sm" disabled={!dirty || saving} onClick={save}>
+        <Button type="button" variant="outline" size="sm" disabled={!dirty || busy} onClick={save}>
           {saving && <Loader2Icon className="animate-spin" />}
           Salvar
         </Button>
@@ -399,6 +392,7 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
     setItems(stages);
   }
   const [busy, startTransition] = useTransition();
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<StageWithCount | null>(null);
 
@@ -430,6 +424,20 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
     move(from, to);
   }
 
+  function onRename(stage: StageWithCount, name: string, onError: (message: string) => void) {
+    setSavingId(stage.id);
+    startTransition(async () => {
+      const result = await renameStage(stage.id, name);
+      setSavingId(null);
+      if (!result.ok) {
+        onError(result.error);
+        return;
+      }
+      toast.success("Etapa salva.");
+      router.refresh();
+    });
+  }
+
   function onOutcome(stage: StageWithCount, outcome: "won" | "lost") {
     startTransition(async () => {
       const result = await setStageOutcome(stage.id, outcome);
@@ -452,7 +460,7 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="stages-settings" aria-busy={busy}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground">{items.length === 1 ? "1 etapa" : `${items.length} etapas`}</p>
         <Button type="button" onClick={() => setAdding(true)}>
@@ -483,11 +491,12 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
                 index={i}
                 total={items.length}
                 busy={busy}
+                saving={busy && savingId === s.id}
                 isLastOpen={!s.isWon && !s.isLost && openCount === 1}
                 onMove={move}
                 onOutcome={onOutcome}
                 onDelete={setDeleting}
-                onRenamed={() => router.refresh()}
+                onRename={onRename}
               />
             ))}
           </ol>

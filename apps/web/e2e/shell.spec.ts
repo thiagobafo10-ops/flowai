@@ -1,23 +1,9 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { clearRateLimits } from "./support/local-db";
-
-const PASSWORD = "senha-segura-123";
+import { newEmail, signUpWithOrg } from "./support/auth";
+import { gotoReady, reloadReady } from "./support/nav";
 
 test.beforeEach(() => clearRateLimits());
-
-async function signUpWithOrg(page: Page, email: string, org: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await page.getByLabel("Nome da empresa").fill(org);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
-
-const newEmail = () => `e2e+shell${Date.now()}${Math.floor(Math.random() * 1e4)}@flowai.test`;
 
 test("sidebar mostra os 9 módulos na ordem e marca o ativo", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Shell");
@@ -43,7 +29,7 @@ test("tema escuro persiste após recarregar", async ({ page }) => {
   await page.getByRole("button", { name: "Alterar tema" }).click();
   await page.getByRole("menuitem", { name: "Escuro" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.reload();
+  await reloadReady(page);
   await expect(page.locator("html")).toHaveClass(/dark/);
 });
 
@@ -51,7 +37,7 @@ test("recolher a sidebar persiste após recarregar", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Recolher");
   await page.getByRole("button", { name: "Recolher menu" }).click();
   await expect(page.getByRole("button", { name: "Expandir menu" })).toBeVisible();
-  await page.reload();
+  await reloadReady(page);
   await expect(page.getByRole("button", { name: "Expandir menu" })).toBeVisible();
 });
 
@@ -71,7 +57,7 @@ test("módulos não construídos mostram Em construção", async ({ page }) => {
   for (const [href, title, text] of [
     ["/inbox", "Inbox", "Todas as conversas de WhatsApp e Instagram em um só lugar."],
   ]) {
-    await page.goto(href);
+    await gotoReady(page, href);
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
     await expect(page.getByText(text)).toBeVisible();
     await expect(page.getByText("Em construção")).toBeVisible();

@@ -5,24 +5,10 @@ import {
   restoreDashboardRpc,
   seedDashboardData,
 } from "./support/local-db";
+import { newEmail, signUpWithOrg } from "./support/auth";
+import { gotoReady, reloadReady } from "./support/nav";
 
-const PASSWORD = "senha-segura-123";
 test.beforeEach(() => clearRateLimits());
-
-const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
-async function signUpWithOrg(page: Page, email: string, orgName: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await page.getByLabel("Nome da empresa").fill(orgName);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
-
 test("API do dashboard exige sessão", async ({ request }) => {
   const res = await request.get("/api/dashboard?periodo=7d", { maxRedirects: 0 });
   expect(res.status()).toBe(401);
@@ -79,7 +65,7 @@ test.describe("com dados", () => {
     const email = newEmail();
     await signUpWithOrg(page, email, "Org Com Dados");
     seedDashboardData(email);
-    await page.goto("/dashboard");
+    await gotoReady(page, "/dashboard");
   });
 
   test("mostra os números esperados (7 dias)", async ({ page }) => {
@@ -126,7 +112,7 @@ test("período acompanha a URL (sidebar, reload) e o teclado", async ({ page }) 
   await expect(page.getByRole("radio", { name: "7 dias" })).toHaveAttribute("aria-checked", "true");
 
   await page.getByRole("radio", { name: "30 dias" }).click();
-  await page.reload();
+  await reloadReady(page);
   await expect(page).toHaveURL(/periodo=30d/);
   await expect(page.getByRole("radio", { name: "30 dias" })).toHaveAttribute("aria-checked", "true");
 

@@ -1,26 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
 import { addMember, clearRateLimits, seedContacts } from "./support/local-db";
+import { newEmail, signUp, signUpWithOrg } from "./support/auth";
+import { gotoReady, reloadReady, settled } from "./support/nav";
 
-const PASSWORD = "senha-segura-123";
 test.beforeEach(() => clearRateLimits());
 
-const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
-async function signUpWithOrg(page: Page, email: string, orgName: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await page.getByLabel("Nome da empresa").fill(orgName);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
+const tagsCard = (page: Page) => page.getByRole("region", { name: "Tags", exact: true });
+const fieldsCard = (page: Page) => page.getByRole("region", { name: "Campos personalizados", exact: true });
 
 test("lista, criação, duplicidade, busca e filtros", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Contatos");
-  await page.goto("/contatos");
+  await gotoReady(page, "/contatos");
   await expect(page.getByRole("heading", { name: "Contatos" })).toBeVisible();
   await expect(page.getByText("Nenhum contato ainda")).toBeVisible();
 
@@ -88,7 +78,7 @@ test("paginação por URL", async ({ page }) => {
   const email = newEmail();
   await signUpWithOrg(page, email, "Org Paginação");
   seedContacts(email, 30);
-  await page.goto("/contatos?ordem=nome");
+  await gotoReady(page, "/contatos?ordem=nome");
   await expect(page.getByText("Página 1 de 2")).toBeVisible();
   await page.getByRole("link", { name: "Próxima" }).click();
   await expect(page).toHaveURL(/pagina=2/);
@@ -96,13 +86,13 @@ test("paginação por URL", async ({ page }) => {
   await expect(page.getByRole("row", { name: /Contato 30/ })).toBeVisible();
 
   // Página além do fim volta para a primeira.
-  await page.goto("/contatos?pagina=99");
+  await gotoReady(page, "/contatos?pagina=99");
   await expect(page.getByText("Página 1 de 2")).toBeVisible();
   await expect(page).not.toHaveURL(/pagina=99/);
 });
 
 async function createJoao(page: Page) {
-  await page.goto("/contatos");
+  await gotoReady(page, "/contatos");
   await page.getByRole("button", { name: "Novo contato" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Novo contato" });
   await dialog.getByLabel("Nome", { exact: true }).fill("João Silva");
@@ -112,12 +102,9 @@ async function createJoao(page: Page) {
   await expect(dialog.getByRole("button", { name: "VIP", pressed: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Salvar" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("row", { name: /João Silva/ })).toBeVisible();
-  // router.refresh() pós-salvar pode renderizar a linha de novo durante o clique.
-  await expect(async () => {
-    await page.getByRole("link", { name: "João Silva" }).first().click();
-    await expect(page).toHaveURL(/\/contatos\/[0-9a-f-]{36}$/, { timeout: 2000 });
-  }).toPass();
+  const href = await page.getByRole("link", { name: "João Silva" }).first().getAttribute("href");
+  await gotoReady(page, href!);
+  await expect(page).toHaveURL(/\/contatos\/[0-9a-f-]{36}$/);
 }
 
 test("ficha: dados, campos, tags, edição e exclusão", async ({ page }) => {
@@ -135,7 +122,8 @@ test("ficha: dados, campos, tags, edição e exclusão", async ({ page }) => {
   await page.getByLabel("Valor", { exact: true }).fill("Campinas");
   await page.getByRole("button", { name: "Adicionar campo" }).click();
   await expect(page.getByText("Campinas")).toBeVisible();
-  await page.reload();
+  await settled(fieldsCard(page));
+  await reloadReady(page);
   await expect(page.getByText("Cidade")).toBeVisible();
   await expect(page.getByText("Campinas")).toBeVisible();
 
@@ -152,7 +140,8 @@ test("ficha: dados, campos, tags, edição e exclusão", async ({ page }) => {
   // Remover tag pelo chip.
   await page.getByRole("button", { name: "Remover tag VIP" }).click();
   await expect(page.getByRole("button", { name: "Remover tag VIP" })).toHaveCount(0);
-  await page.reload();
+  await settled(tagsCard(page));
+  await reloadReady(page);
   await expect(page.getByRole("button", { name: "Remover tag VIP" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "João Souza" })).toBeVisible();
 
@@ -174,14 +163,9 @@ test("ficha: viewer não vê ações de escrita", async ({ page, browser, baseUR
   const ctx = await browser.newContext({ baseURL });
   try {
     const vp = await ctx.newPage();
-    await vp.goto("/signup");
-    await vp.getByLabel("Nome completo").fill("Vera Viewer");
-    await vp.getByLabel("E-mail").fill(viewerEmail);
-    await vp.getByLabel("Senha").fill(PASSWORD);
-    await vp.getByRole("button", { name: "Criar conta" }).click();
-    await expect(vp).toHaveURL(/\/onboarding$/);
+    await signUp(vp, viewerEmail, "Vera Viewer");
     addMember(ownerEmail, viewerEmail, "viewer");
-    await vp.goto("/contatos");
+    await gotoReady(vp, "/contatos");
     await vp.getByRole("link", { name: "João Silva" }).first().click();
     await expect(vp.getByRole("heading", { name: "João Silva" })).toBeVisible();
     await expect(vp.getByText("VIP").first()).toBeVisible();
@@ -196,7 +180,7 @@ test("ficha: viewer não vê ações de escrita", async ({ page, browser, baseUR
 
 test("ficha: contato inexistente", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Ficha 404");
-  await page.goto("/contatos/3f0c1f0e-6a52-4a4e-9a55-1d2f7a0b9c11");
+  await gotoReady(page, "/contatos/3f0c1f0e-6a52-4a4e-9a55-1d2f7a0b9c11");
   await expect(page.getByText("Contato não encontrado")).toBeVisible();
 });
 
@@ -210,8 +194,9 @@ test("ficha: alternar tags em sequência rápida não perde atualizações", asy
     await page.getByLabel("Nova tag").fill(name);
     await page.getByRole("button", { name: "Criar tag" }).click();
     await expect(picker.getByRole("button", { name, pressed: true })).toBeVisible();
+    await settled(tagsCard(page));
   }
-  await page.reload();
+  await reloadReady(page);
   await page.getByRole("button", { name: "Adicionar tag" }).click();
   const picker2 = page.getByRole("group", { name: "Tags" });
   await expect(picker2.getByRole("button", { name: "Alfa", pressed: true })).toBeVisible();
@@ -219,7 +204,8 @@ test("ficha: alternar tags em sequência rápida não perde atualizações", asy
   // Desliga as duas em sequência, sem esperar entre os cliques.
   await picker2.getByRole("button", { name: "Alfa" }).click();
   await picker2.getByRole("button", { name: "Beta" }).click();
-  await page.reload();
+  await settled(tagsCard(page));
+  await reloadReady(page);
   await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Remover tag Beta" })).toHaveCount(0);
@@ -229,7 +215,8 @@ test("ficha: alternar tags em sequência rápida não perde atualizações", asy
   const picker3 = page.getByRole("group", { name: "Tags" });
   await picker3.getByRole("button", { name: "Alfa" }).click();
   await picker3.getByRole("button", { name: "Beta" }).click();
-  await page.reload();
+  await settled(tagsCard(page));
+  await reloadReady(page);
   await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remover tag Beta" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();

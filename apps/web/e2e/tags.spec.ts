@@ -1,30 +1,14 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { addMember, clearRateLimits, psql, seedContacts } from "./support/local-db";
+import { newEmail, signUp, signUpWithOrg } from "./support/auth";
+import { gotoReady } from "./support/nav";
 
-const PASSWORD = "senha-segura-123";
 test.beforeEach(() => clearRateLimits());
 
-const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
-async function signUp(page: Page, email: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-}
-
-async function signUpWithOrg(page: Page, email: string, orgName: string) {
-  await signUp(page, email);
-  await page.getByLabel("Nome da empresa").fill(orgName);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
 
 test("configurações: abas e bloco Em construção", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Config");
-  await page.goto("/configuracoes");
+  await gotoReady(page, "/configuracoes");
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
   await expect(page.getByText("Organização, equipe e integrações.")).toBeVisible();
   await expect(page.getByText("Em construção")).toBeVisible();
@@ -37,7 +21,7 @@ test("tags: criar, duplicar, renomear, excluir e filtro de tag inexistente", asy
   const email = newEmail();
   await signUpWithOrg(page, email, "Org Tags");
   seedContacts(email, 3);
-  await page.goto("/configuracoes/tags");
+  await gotoReady(page, "/configuracoes/tags");
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
   await expect(page.getByText("Nenhuma tag ainda")).toBeVisible();
 
@@ -78,7 +62,7 @@ test("tags: criar, duplicar, renomear, excluir e filtro de tag inexistente", asy
     `select t.id from public.tags t join public.memberships m on m.organization_id = t.organization_id join auth.users u on u.id = m.user_id where u.email = '${email}' and t.name = 'Muito quente'`,
   );
   expect(tagId).toMatch(/^[0-9a-f-]{36}$/);
-  await page.goto("/configuracoes/tags");
+  await gotoReady(page, "/configuracoes/tags");
   await page.getByRole("row", { name: /Muito quente/ }).getByRole("button", { name: "Excluir" }).click();
   const confirm = page.getByRole("dialog");
   await expect(
@@ -89,11 +73,11 @@ test("tags: criar, duplicar, renomear, excluir e filtro de tag inexistente", asy
   await expect(page.getByText("Nenhuma tag ainda")).toBeVisible();
 
   // Review Focus #5: tag inexistente na org é ignorada.
-  await page.goto(`/contatos?tag=${tagId}`);
+  await gotoReady(page, `/contatos?tag=${tagId}`);
   await expect(page.getByRole("heading", { level: 1, name: "Contatos" })).toBeVisible();
   await expect(page.getByText("3 contatos")).toBeVisible();
   await expect(page.getByRole("row", { name: /Contato 01/ })).toBeVisible();
-  await page.goto("/contatos?tag=00000000-0000-4000-8000-000000000000");
+  await gotoReady(page, "/contatos?tag=00000000-0000-4000-8000-000000000000");
   await expect(page.getByText("3 contatos")).toBeVisible();
 });
 
@@ -101,7 +85,7 @@ test("tags: agente cria mas não edita, exclui nem vê Pipeline", async ({ page,
   const ownerEmail = newEmail();
   const agentEmail = newEmail();
   await signUpWithOrg(page, ownerEmail, "Org Tags Agente");
-  await page.goto("/configuracoes/tags");
+  await gotoReady(page, "/configuracoes/tags");
   await page.getByRole("button", { name: "Nova tag" }).first().click();
   const d = page.getByRole("dialog", { name: "Nova tag" });
   await d.getByLabel("Nome").fill("Existente");
@@ -112,7 +96,7 @@ test("tags: agente cria mas não edita, exclui nem vê Pipeline", async ({ page,
   const agent = await ctx.newPage();
   await signUp(agent, agentEmail);
   addMember(ownerEmail, agentEmail, "agent");
-  await agent.goto("/configuracoes/tags");
+  await gotoReady(agent, "/configuracoes/tags");
   await expect(agent.getByRole("row", { name: /Existente/ })).toBeVisible();
   await expect(agent.getByRole("button", { name: "Nova tag" }).first()).toBeVisible();
   await expect(agent.getByRole("button", { name: "Editar" })).toHaveCount(0);

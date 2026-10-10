@@ -38,7 +38,14 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
 | `npm run db:types` | Regenera `packages/core/src/db/database.types.ts` a partir do banco local |
 | `npm run dev -w apps/web` | App web em http://localhost:3000 |
-| `npm run e2e -w apps/web` | Testes Playwright — exigem o Supabase local rodando (o setup limpa `rate_limits` via `docker exec`) |
+| `npm run e2e -w apps/web` | Testes Playwright — exigem o Supabase local rodando (o setup limpa `rate_limits` via `docker exec`). Faz `next build` e serve o build de produção em http://localhost:3100 (veja abaixo) |
+
+### Testes e2e
+
+- O Playwright sobe o app com `npm run build && npx next start -p 3100` (em `apps/web`): os testes rodam contra o **build de produção**, sem compilação sob demanda do dev server. Como o e2e já faz o build, não é preciso (nem útil) rodar `npm run build` antes ou depois dele, e o `npm run dev` na porta 3000 pode continuar aberto.
+- Fora do CI, um servidor já rodando na porta 3100 é reaproveitado (`reuseExistingServer`); se ele for de um build antigo, pare-o antes de rodar o e2e.
+- Após `npm run db:reset`, espere os containers do Supabase ficarem saudáveis antes do e2e.
+- Convenções dos testes: navegue com `gotoReady`/`reloadReady` (`e2e/support/nav.ts`), que esperam o marcador de hidratação `html[data-hydrated="1"]`; antes de recarregar ou navegar após uma ação otimista, espere o contêiner ficar com `aria-busy="false"` (`settled`). Cadastro e organização vêm de `e2e/support/auth.ts`.
 
 ## Arquitetura
 

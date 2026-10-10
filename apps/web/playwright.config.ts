@@ -1,17 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// O e2e roda contra o build de produção (next build + next start na porta 3100):
+// sem compilação sob demanda nem recarga do dev server no meio dos testes.
 export default defineConfig({
   testDir: "e2e",
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   reporter: "list",
-  use: { baseURL: "http://localhost:3000" },
+  use: { baseURL: "http://localhost:3100" },
   webServer: {
-    command: "npm run dev",
-    port: 3000,
-    reuseExistingServer: true,
-    timeout: 120_000,
+    command: "npm run build && npx next start -p 3100",
+    cwd: __dirname,
+    url: "http://localhost:3100",
+    reuseExistingServer: !process.env.CI,
+    timeout: 240_000,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

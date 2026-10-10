@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import {
   breakMembershipsRead,
   clearRateLimits,
@@ -6,24 +6,11 @@ import {
   countMemberships,
   restoreMembershipsRead,
 } from "./support/local-db";
+import { PASSWORD, newEmail, signUpWithOrg } from "./support/auth";
+import { gotoReady } from "./support/nav";
 
-const PASSWORD = "senha-segura-123";
 // Cada teste cadastra um usuário; o limite de cadastro é 5/IP/hora.
 test.beforeEach(() => clearRateLimits());
-
-const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
-async function signUpWithOrg(page: Page, email: string, orgName: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await page.getByLabel("Nome da empresa").fill(orgName);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
 
 test("erro do banco mostra tela de erro e não leva ao onboarding", async ({ page }) => {
   const email = newEmail();
@@ -31,11 +18,11 @@ test("erro do banco mostra tela de erro e não leva ao onboarding", async ({ pag
 
   breakMembershipsRead();
   try {
-    await page.goto("/dashboard");
+    await gotoReady(page, "/dashboard");
     await expect(page.getByText("Não foi possível carregar seus dados.")).toBeVisible();
     await expect(page).toHaveURL(/\/dashboard$/);
 
-    await page.goto("/onboarding");
+    await gotoReady(page, "/onboarding");
     await expect(page.getByText("Não foi possível carregar seus dados.")).toBeVisible();
     await expect(page.getByLabel("Nome da empresa")).toHaveCount(0);
   } finally {
@@ -43,7 +30,7 @@ test("erro do banco mostra tela de erro e não leva ao onboarding", async ({ pag
   }
   expect(countMemberships(email)).toBe(1);
 
-  await page.goto("/dashboard");
+  await gotoReady(page, "/dashboard");
   await expect(page.getByRole("main").getByText("Org Resiliente")).toBeVisible();
 });
 
@@ -51,7 +38,7 @@ test("botão Tentar novamente recupera após falha transitória", async ({ page 
   await signUpWithOrg(page, newEmail(), "Org Retry");
   breakMembershipsRead();
   try {
-    await page.goto("/dashboard");
+    await gotoReady(page, "/dashboard");
     await expect(page.getByRole("button", { name: "Tentar novamente" })).toBeVisible();
   } finally {
     restoreMembershipsRead();
@@ -78,7 +65,7 @@ test("login grava auditoria auth.login e sair remove o cookie de organização",
 });
 
 test("nome curto no cadastro mostra a mensagem do schema", async ({ page }) => {
-  await page.goto("/signup");
+  await gotoReady(page, "/signup");
   await page.getByLabel("Nome completo").fill("A");
   await page.getByLabel("E-mail").fill(newEmail());
   await page.getByLabel("Senha").fill(PASSWORD);

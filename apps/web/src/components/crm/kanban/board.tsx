@@ -200,7 +200,7 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
   const hasFilters = !!(filters.q || filters.ownerId || filters.closed !== "30d");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="pipeline-board" aria-busy={move.isPending || isFetching}>
       <FiltersBar filters={filters} members={members} hasFilters={hasFilters} />
       {isError && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl p-3 text-sm ring-1 ring-destructive/40">

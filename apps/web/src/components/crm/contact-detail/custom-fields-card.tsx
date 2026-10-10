@@ -64,7 +64,7 @@ export function CustomFieldsCard({ contactId, fields: propFields, canEdit }: Pro
   }
 
   return (
-    <Card>
+    <Card role="region" aria-label="Campos personalizados" aria-busy={pending}>
       <CardHeader>
         <CardTitle>Campos personalizados</CardTitle>
       </CardHeader>

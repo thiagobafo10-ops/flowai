@@ -1,39 +1,29 @@
 import { test, expect } from "@playwright/test";
 import { clearRateLimits } from "./support/local-db";
+import { PASSWORD, newEmail, signUp } from "./support/auth";
+import { gotoReady } from "./support/nav";
 
 test.beforeEach(() => clearRateLimits());
 
-const email = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
 test("cadastro leva ao onboarding", async ({ page }) => {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email());
-  await page.getByLabel("Senha").fill("senha-segura-123");
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await signUp(page, newEmail());
 });
 
 test("e-mail já cadastrado mostra erro e não avança", async ({ page, context }) => {
-  const e = email();
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana");
-  await page.getByLabel("E-mail").fill(e);
-  await page.getByLabel("Senha").fill("senha-segura-123");
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
+  const e = newEmail();
+  await signUp(page, e, "Ana");
   await context.clearCookies();
-  await page.goto("/signup");
+  await gotoReady(page, "/signup");
   await page.getByLabel("Nome completo").fill("Ana");
   await page.getByLabel("E-mail").fill(e);
-  await page.getByLabel("Senha").fill("senha-segura-123");
+  await page.getByLabel("Senha").fill(PASSWORD);
   await page.getByRole("button", { name: "Criar conta" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Este e-mail já está cadastrado." })).toBeVisible();
   await expect(page).toHaveURL(/\/signup$/);
 });
 
 test("senha errada mostra erro genérico", async ({ page }) => {
-  await page.goto("/login");
+  await gotoReady(page, "/login");
   await page.getByLabel("E-mail").fill("ninguem@flowai.test");
   await page.getByLabel("Senha").fill("errada-123");
   await page.getByRole("button", { name: "Entrar" }).click();
@@ -46,7 +36,7 @@ test("rota protegida sem sessão redireciona para login", async ({ page }) => {
 });
 
 test("erro de campo é ligado ao input e não vira toast", async ({ page }) => {
-  await page.goto("/signup");
+  await gotoReady(page, "/signup");
   await page.getByLabel("Nome completo").fill("Ana");
   await page.getByLabel("E-mail").fill("x@flowai.test");
   await page.getByLabel("Senha").fill("123");

@@ -1,25 +1,14 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { addMember, clearRateLimits, deleteDealByTitle } from "./support/local-db";
+import { newEmail, signUp, signUpWithOrg } from "./support/auth";
+import { gotoReady, reloadReady, settled } from "./support/nav";
 
-const PASSWORD = "senha-segura-123";
 test.beforeEach(() => clearRateLimits());
 
-const newEmail = () => `e2e+${Date.now()}${Math.random().toString(16).slice(2, 6)}@flowai.test`;
-
-async function signUpWithOrg(page: Page, email: string, orgName: string) {
-  await page.goto("/signup");
-  await page.getByLabel("Nome completo").fill("Ana Souza");
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Criar conta" }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await page.getByLabel("Nome da empresa").fill(orgName);
-  await page.getByRole("button", { name: "Criar organização" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-}
+const board = (page: Page) => page.getByTestId("pipeline-board");
 
 async function createContact(page: Page, name: string): Promise<string> {
-  await page.goto("/contatos");
+  await gotoReady(page, "/contatos");
   await page.getByRole("button", { name: "Novo contato" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Novo contato" });
   await dialog.getByLabel("Nome", { exact: true }).fill(name);
@@ -43,6 +32,10 @@ async function createDeal(page: Page, stage: string, contact: string, value: str
 }
 
 async function drag(page: Page, card: Locator, target: Locator) {
+  // Nada pode estar por cima do card (diálogo ou menu abertos interceptam o ponteiro).
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await card.hover();
   const from = (await card.boundingBox())!;
   const to = (await target.boundingBox())!;
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
@@ -59,7 +52,7 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
   await signUpWithOrg(page, newEmail(), "Org Pipeline");
   const anaId = await createContact(page, "Ana");
   await createContact(page, "Bia");
-  await page.goto("/pipeline");
+  await gotoReady(page, "/pipeline");
   await expect(page.getByRole("heading", { name: "Pipeline" })).toBeVisible();
 
   await createDeal(page, "Novo", "Ana", "1.500,00");
@@ -82,15 +75,16 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
   await expect(
     column(page, "Interessado").getByRole("group", { name: "Oportunidade — Ana" }),
   ).toBeVisible();
-  await page.reload();
+  await settled(board(page));
+  await reloadReady(page);
   await expect(
     column(page, "Interessado").getByRole("group", { name: "Oportunidade — Ana" }),
   ).toBeVisible();
-  await page.goto("/dashboard");
+  await gotoReady(page, "/dashboard");
   await expect(kpi(page, "Oportunidades").getByText("1", { exact: true })).toBeVisible();
 
   // Contato com deal aberto aparece desabilitado; forçar pela URL mostra o erro do servidor.
-  await page.goto("/pipeline");
+  await gotoReady(page, "/pipeline");
   await column(page, "Novo").getByRole("button", { name: "Novo deal" }).click();
   const dialog = page.getByRole("dialog", { name: "Novo deal" });
   await dialog.getByLabel("Contato").fill("Ana");
@@ -98,7 +92,7 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
   await expect(option).toBeDisabled();
   await expect(option).toContainText("já tem deal aberto");
   await page.keyboard.press("Escape");
-  await page.goto(`/pipeline?novo=${anaId}`);
+  await gotoReady(page, `/pipeline?novo=${anaId}`);
   const forced = page.getByRole("dialog", { name: "Novo deal" });
   await expect(forced).toContainText("Ana");
   await forced.getByRole("button", { name: "Salvar" }).click();
@@ -110,7 +104,8 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
   await card.getByRole("button", { name: "Mover deal" }).click();
   await page.getByRole("menuitem", { name: "Ganho" }).click();
   await expect(column(page, "Ganho").getByRole("group", { name: "Oportunidade — Ana" })).toBeVisible();
-  await page.goto("/dashboard");
+  await settled(board(page));
+  await gotoReady(page, "/dashboard");
   await expect(kpi(page, "Conversão").getByText("100,0%", { exact: true })).toBeVisible();
 });
 
@@ -118,7 +113,7 @@ test("mover deal já excluído por outra pessoa mostra erro e atualiza o quadro"
   const email = newEmail();
   await signUpWithOrg(page, email, "Org Pipeline Stale");
   await createContact(page, "Ana");
-  await page.goto("/pipeline");
+  await gotoReady(page, "/pipeline");
   await createDeal(page, "Novo", "Ana", "100");
   const card = column(page, "Novo").getByRole("group", { name: "Oportunidade — Ana" });
   await expect(card).toBeVisible();
@@ -134,7 +129,7 @@ test("mover deal já excluído por outra pessoa mostra erro e atualiza o quadro"
 test("ficha do contato: Criar deal abre o diálogo com o contato", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Pipeline Ficha");
   const id = await createContact(page, "Ana");
-  await page.goto(`/contatos/${id}`);
+  await gotoReady(page, `/contatos/${id}`);
   await page.getByRole("link", { name: "Criar deal" }).click();
   await expect(page).toHaveURL(/\/pipeline\?novo=/);
   const dialog = page.getByRole("dialog", { name: "Novo deal" });
@@ -150,7 +145,7 @@ test("ficha do contato: Criar deal abre o diálogo com o contato", async ({ page
 test("teclado: menu, título e arrasto não conflitam", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Pipeline Teclado");
   await createContact(page, "Ana");
-  await page.goto("/pipeline");
+  await gotoReady(page, "/pipeline");
   await createDeal(page, "Novo", "Ana", "100");
   const card = column(page, "Novo").getByRole("group", { name: "Oportunidade — Ana" });
 
@@ -190,21 +185,16 @@ test("visualizador não arrasta nem move; diálogo é somente leitura", async ({
   const ownerEmail = newEmail();
   await signUpWithOrg(page, ownerEmail, "Org Pipeline Viewer");
   await createContact(page, "Ana");
-  await page.goto("/pipeline");
+  await gotoReady(page, "/pipeline");
   await createDeal(page, "Novo", "Ana", "100");
 
   const viewerEmail = newEmail();
   const ctx = await browser.newContext({ baseURL });
   try {
     const vp = await ctx.newPage();
-    await vp.goto("/signup");
-    await vp.getByLabel("Nome completo").fill("Vera Viewer");
-    await vp.getByLabel("E-mail").fill(viewerEmail);
-    await vp.getByLabel("Senha").fill(PASSWORD);
-    await vp.getByRole("button", { name: "Criar conta" }).click();
-    await expect(vp).toHaveURL(/\/onboarding$/);
+    await signUp(vp, viewerEmail, "Vera Viewer");
     addMember(ownerEmail, viewerEmail, "viewer");
-    await vp.goto("/pipeline");
+    await gotoReady(vp, "/pipeline");
     const card = column(vp, "Novo").getByRole("group", { name: "Oportunidade — Ana" });
     await expect(card).toBeVisible();
     await expect(vp.getByRole("button", { name: "Mover deal" })).toHaveCount(0);

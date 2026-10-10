@@ -56,7 +56,7 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
   }
 
   return (
-    <Card>
+    <Card role="region" aria-label="Tags" aria-busy={pending}>
       <CardHeader>
         <CardTitle>Tags</CardTitle>
       </CardHeader>

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { HydrationMarker } from "@/components/hydration-marker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <QueryProvider>
             {children}
             <Toaster />
+            <HydrationMarker />
           </QueryProvider>
         </ThemeProvider>
       </body>
