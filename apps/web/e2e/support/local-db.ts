@@ -246,3 +246,37 @@ update public.organizations set timezone = '${timezone}' where id = ${orgOf(emai
 update public.contacts set last_interaction_at = '${iso}'
   where organization_id = ${orgOf(email)} and name = '${sqlText(contactName, "nome")}'`);
 }
+
+/**
+ * Simula, como postgres, uma mensagem recebida no canal Simulador da org do usuário
+ * (criando e ativando o canal se preciso) via `ingest_inbound_message`.
+ * O texto vai em dollar-quoting com tag aleatória: nunca interpolado como SQL.
+ */
+export function simulateInboundSql(
+  email: string,
+  input: { name: string | null; phone: string; text: string; externalId?: string },
+): void {
+  assertEmail(email);
+  if (!/^\d{10,15}$/.test(input.phone)) throw new Error("telefone inválido para helper");
+  const tag = `t${Math.random().toString(36).slice(2, 10)}`;
+  const dq = (v: string) => {
+    if (v.includes(`$${tag}$`) || v.endsWith("$")) throw new Error("texto inválido para helper");
+    return `$${tag}$${v}$${tag}$`;
+  };
+  const externalId = input.externalId ?? `sim_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+  psql(`
+do $body$
+declare v_org uuid := ${orgOf(email)}; v_ch uuid;
+begin
+  if v_org is null then raise exception 'org não encontrada'; end if;
+  select id into v_ch from public.channels where organization_id = v_org and type = 'simulator';
+  if v_ch is null then
+    insert into public.channels (organization_id, type, name, status)
+      values (v_org, 'simulator', 'Simulador', 'active') returning id into v_ch;
+  else
+    update public.channels set status = 'active' where id = v_ch;
+  end if;
+  perform public.ingest_inbound_message(v_ch, ${dq(externalId)}, ${dq(input.phone)},
+    ${input.name === null ? "null" : dq(input.name)}, ${dq(input.text)}, now());
+end $body$`);
+}
