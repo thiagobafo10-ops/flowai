@@ -315,3 +315,49 @@ export async function getBoard(orgId: string, f: KanbanFilters): Promise<Board> 
     deals,
   };
 }
+
+export type StageWithCount = BoardStage & { dealCount: number };
+
+/** Etapas do pipeline padrão com a contagem de TODOS os deals (inclusive encerrados). */
+export async function getStagesWithCounts(orgId: string): Promise<{ pipelineId: string; stages: StageWithCount[] }> {
+  const supabase = await createServerClient();
+  const { data: pipeline, error: pipeError } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (pipeError) throw new Error("Falha ao carregar pipeline", { cause: pipeError });
+  if (!pipeline) throw new Error("Pipeline padrão não encontrado");
+
+  const { data, error } = await supabase
+    .from("pipeline_stages")
+    .select("id, name, position, is_won, is_lost")
+    .eq("organization_id", orgId)
+    .eq("pipeline_id", pipeline.id)
+    .order("position");
+  if (error) throw new Error("Falha ao carregar etapas", { cause: error });
+
+  const counts = await Promise.all(
+    data.map(async (s) => {
+      const { count, error: countError } = await supabase
+        .from("deals")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("stage_id", s.id);
+      if (countError) throw new Error("Falha ao contar deals", { cause: countError });
+      return count ?? 0;
+    }),
+  );
+  return {
+    pipelineId: pipeline.id,
+    stages: data.map((s, i) => ({
+      id: s.id,
+      name: s.name,
+      position: s.position,
+      isWon: s.is_won,
+      isLost: s.is_lost,
+      dealCount: counts[i],
+    })),
+  };
+}
