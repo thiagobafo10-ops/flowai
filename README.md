@@ -51,6 +51,8 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 
 - Spec do MVP (todas as fases): [`docs/superpowers/specs/2026-10-07-flowai-mvp-design.md`](docs/superpowers/specs/2026-10-07-flowai-mvp-design.md)
 - Plano da Fase 1 (fundação): [`docs/superpowers/plans/2026-10-07-fase-1-fundacao.md`](docs/superpowers/plans/2026-10-07-fase-1-fundacao.md)
+- Fase 2 (layout e dashboard): spec [`docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md`](docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md), plano [`docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md`](docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md)
+- Fase 3 (CRM: contatos, tags, pipeline): spec [`docs/superpowers/specs/2026-10-09-fase-3-crm-design.md`](docs/superpowers/specs/2026-10-09-fase-3-crm-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-3-crm.md`](docs/superpowers/plans/2026-10-10-fase-3-crm.md)
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança
