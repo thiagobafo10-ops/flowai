@@ -8,7 +8,12 @@ export function SettingsTabs({ showPipeline }: { showPipeline: boolean }) {
   const pathname = usePathname();
   const tabs = [
     { href: "/configuracoes/tags", label: "Tags" },
-    ...(showPipeline ? [{ href: "/configuracoes/pipeline", label: "Pipeline" }] : []),
+    ...(showPipeline
+      ? [
+          { href: "/configuracoes/pipeline", label: "Pipeline" },
+          { href: "/configuracoes/canais", label: "Canais" },
+        ]
+      : []),
   ];
   return (
     <nav aria-label="Seções de configurações" className="flex gap-1 border-b">
