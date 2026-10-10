@@ -9,6 +9,11 @@ describe("dealSchema", () => {
     expect(dealSchema.parse({ ...d, value: "1.234,56" }).value).toBe(1234.56);
     expect(dealSchema.parse({ ...d, value: "1234.56" }).value).toBe(1234.56);
     expect(dealSchema.parse({ ...d, value: "1234,5" }).value).toBe(1234.5);
+    expect(dealSchema.parse({ ...d, value: "1.500" }).value).toBe(1500);
+    expect(dealSchema.parse({ ...d, value: "10.000" }).value).toBe(10000);
+    expect(dealSchema.parse({ ...d, value: "1.234" }).value).toBe(1234);
+    expect(dealSchema.parse({ ...d, value: "1.234.567" }).value).toBe(1234567);
+    expect(dealSchema.parse({ ...d, value: "10.5" }).value).toBe(10.5);
     expect(dealSchema.parse({ ...d, value: 10.456 }).value).toBe(10.46);
     expect(dealSchema.parse({ ...d, value: "" }).value).toBe(0);
     const p = dealSchema.parse(d);

@@ -8,8 +8,8 @@ describe("parseKanbanFilters", () => {
     expect(parseKanbanFilters({})).toEqual({ q: "", ownerId: null, closed: "30d" });
   });
   it("parses", () => {
-    expect(parseKanbanFilters({ q: " x ", responsavel: U, fechados: "todos" })).toEqual({ q: "x", ownerId: U, closed: "todos" });
-    expect(parseKanbanFilters({ responsavel: "no", fechados: "zz" })).toEqual({ q: "", ownerId: null, closed: "30d" });
+    expect(parseKanbanFilters({ q: " x ", responsavel: U, encerrados: "todos" })).toEqual({ q: "x", ownerId: U, closed: "todos" });
+    expect(parseKanbanFilters({ responsavel: "no", encerrados: "zz" })).toEqual({ q: "", ownerId: null, closed: "30d" });
   });
 });
 

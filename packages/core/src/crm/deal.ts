@@ -5,7 +5,8 @@ function parseMoney(v: unknown): unknown {
   if (typeof v !== "string") return v;
   const t = v.trim();
   if (t === "") return 0;
-  const normalized = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t;
+  const grouped = t.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(t);
+  const normalized = grouped ? t.replace(/\./g, "").replace(",", ".") : t;
   if (!/^\d+(\.\d+)?$/.test(normalized)) return Number.NaN;
   return Math.round(Number(normalized) * 100) / 100;
 }

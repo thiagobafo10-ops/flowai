@@ -10,7 +10,7 @@ export function parseKanbanFilters(sp: SearchParams): KanbanFilters {
   return {
     q: parseQuery(firstParam(sp, "q")),
     ownerId: uuidOrNull(firstParam(sp, "responsavel")),
-    closed: firstParam(sp, "fechados") === "todos" ? "todos" : "30d",
+    closed: firstParam(sp, "encerrados") === "todos" ? "todos" : "30d",
   };
 }
 
