@@ -26,15 +26,17 @@ function ContactsSkeleton() {
 }
 
 async function ContactsContent({ searchParams }: Props) {
-  const filters = parseContactFilters(await searchParams);
+  const parsedFilters = parseContactFilters(await searchParams);
   const org = await getActiveOrg();
   if (!org) return null;
 
-  const [{ rows, total }, tags, members] = await Promise.all([
-    listContacts(org.id, filters),
-    listTags(org.id),
-    listMembers(org.id),
-  ]);
+  const [tags, members] = await Promise.all([listTags(org.id), listMembers(org.id)]);
+  // Tag inexistente na organização (ex.: excluída) é ignorada em vez de zerar a lista.
+  const filters =
+    parsedFilters.tagId && !tags.some((t) => t.id === parsedFilters.tagId)
+      ? { ...parsedFilters, tagId: null }
+      : parsedFilters;
+  const { rows, total } = await listContacts(org.id, filters);
 
   // Página além do fim: o banco não devolve total_count; volta para a primeira.
   if (filters.page > 1 && rows.length === 0) redirect(contactsHref(filters, { page: 1 }));
