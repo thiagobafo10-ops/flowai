@@ -367,14 +367,14 @@ isOneToOne: false
                   ]
                 },"conversations": {
                   Row: {
-                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"intent": string | null,"last_message_at": string,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
+                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -739,6 +739,12 @@ isOneToOne: false
 "log_auth_event":
 { Args: { "p_action": string,"p_ip"?: unknown }; Returns: undefined
                            },
+"log_conversation_system_message":
+{ Args: { "p_conversation": string,"p_kind": string,"p_target_user"?: string }; Returns: undefined
+                           },
+"mark_conversation_read":
+{ Args: { "p_conversation": string }; Returns: undefined
+                           },
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
                            },
@@ -767,7 +773,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram","contact_source": "whatsapp"|"instagram"|"manual","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
+            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram"|"simulator","contact_source": "whatsapp"|"instagram"|"manual"|"simulator","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -887,7 +893,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram"],"contact_source": ["whatsapp", "instagram", "manual"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
+            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram", "simulator"],"contact_source": ["whatsapp", "instagram", "manual", "simulator"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
           }
         }
 } as const

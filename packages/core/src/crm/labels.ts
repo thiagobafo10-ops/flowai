@@ -9,7 +9,7 @@ export const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
   inactive: "Inativo",
 };
 
-export const CONTACT_SOURCE_LABELS: Record<ContactSource | "simulator", string> = {
+export const CONTACT_SOURCE_LABELS: Record<ContactSource, string> = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",
   manual: "Manual",
