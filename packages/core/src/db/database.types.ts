@@ -730,6 +730,9 @@ isOneToOne: false
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
                            },
+"ingest_inbound_message":
+{ Args: { "p_channel": string,"p_external_id": string,"p_sender_external_id": string,"p_sender_name": string,"p_sent_at": string,"p_text": string }; Returns: string
+                           },
 "is_member":
 { Args: { "p_org": string }; Returns: boolean
                            },
