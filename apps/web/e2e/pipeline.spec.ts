@@ -208,3 +208,85 @@ test("visualizador não arrasta nem move; diálogo é somente leitura", async ({
     await ctx.close();
   }
 });
+
+const sidebarLink = (page: Page, name: string) =>
+  page.getByRole("complementary", { name: "Navegação principal" }).getByRole("link", { name, exact: true });
+
+test("navegar pela sidebar mostra dados atuais no dashboard e no quadro", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Pipeline Navegação");
+  await createContact(page, "Ana");
+  await gotoReady(page, "/pipeline");
+  await createDeal(page, "Interessado", "Ana", "100");
+  await settled(board(page));
+
+  await gotoReady(page, "/dashboard");
+  await expect(kpi(page, "Oportunidades").getByText("1", { exact: true })).toBeVisible();
+
+  // Dashboard → Pipeline → move para Ganho → Dashboard, sem recarregar a página.
+  await sidebarLink(page, "Pipeline").click();
+  const card = column(page, "Interessado").getByRole("group", { name: /Oportunidade — Ana/ });
+  await card.getByRole("button", { name: "Mover deal" }).click();
+  await page.getByRole("menuitem", { name: "Ganho" }).click();
+  await expect(column(page, "Ganho").getByRole("group", { name: /Oportunidade — Ana/ })).toBeVisible();
+  await settled(board(page));
+  await sidebarLink(page, "Dashboard").click();
+  await expect(kpi(page, "Conversão").getByText("100,0%", { exact: true })).toBeVisible();
+  await expect(kpi(page, "Oportunidades").getByText("0", { exact: true })).toBeVisible();
+
+  // Configurações → renomeia etapa → Pipeline mostra o nome novo.
+  await sidebarLink(page, "Pipeline").click();
+  await expect(column(page, "Qualificado")).toBeVisible();
+  await sidebarLink(page, "Configurações").click();
+  await page.getByRole("navigation", { name: "Seções de configurações" }).getByRole("link", { name: "Pipeline" }).click();
+  const row = page.getByRole("listitem", { name: "Etapa Qualificado", exact: true });
+  await row.getByLabel("Nome da etapa").fill("Contato feito");
+  await row.getByRole("button", { name: "Salvar" }).click();
+  await expect(page.getByRole("listitem", { name: "Etapa Contato feito", exact: true })).toBeVisible();
+  await settled(page.getByTestId("stages-settings"));
+  await sidebarLink(page, "Pipeline").click();
+  await expect(column(page, "Contato feito")).toBeVisible();
+  await expect(column(page, "Qualificado")).toHaveCount(0);
+});
+
+test("quadro: rótulos acessíveis, soltar na mesma etapa e busca por telefone", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Pipeline Acessível");
+  await gotoReady(page, "/contatos");
+  await page.getByRole("button", { name: "Novo contato" }).first().click();
+  const cd = page.getByRole("dialog", { name: "Novo contato" });
+  await cd.getByLabel("Nome", { exact: true }).fill("Bruna");
+  await cd.getByLabel("Telefone").fill("(11) 98888-7777");
+  await cd.getByRole("button", { name: "Salvar" }).click();
+  await expect(cd).toBeHidden();
+
+  await gotoReady(page, "/pipeline");
+  await column(page, "Novo").getByRole("button", { name: "Novo deal" }).click();
+  const dialog = page.getByRole("dialog", { name: "Novo deal" });
+  await dialog.getByLabel("Contato").fill("Bruna");
+  await dialog.getByRole("button", { name: /Bruna/ }).click();
+  await dialog.getByLabel("Título").fill("Contrato anual");
+  await dialog.getByRole("button", { name: "Salvar" }).click();
+  await expect(dialog).toBeHidden();
+
+  // O rótulo do card inclui o contato; o card se anuncia como arrastável.
+  const card = column(page, "Novo").getByRole("group", { name: /Contrato anual.*Bruna/ });
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("aria-roledescription", "arrastável");
+
+  // Pegar e soltar na própria etapa não anuncia movimento.
+  await settled(board(page));
+  await card.focus();
+  await page.keyboard.press("Space");
+  await expect(card).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Space");
+  await expect(page.getByText("Movimento cancelado.")).toBeAttached();
+  await expect(page.getByText("Deal movido para Novo.")).toHaveCount(0);
+  await expect(column(page, "Novo").getByRole("group", { name: /Contrato anual/ })).toBeVisible();
+
+  // Busca pelos dígitos do telefone, em outro formato.
+  await page.getByRole("searchbox", { name: "Buscar deals" }).fill("8888-7777");
+  await expect(page).toHaveURL(/q=8888-7777/);
+  await expect(column(page, "Novo").getByRole("group", { name: /Contrato anual/ })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Buscar deals" }).fill("1234-5678");
+  await expect(page).toHaveURL(/q=1234-5678/);
+  await expect(page.getByRole("group", { name: /Contrato anual/ })).toHaveCount(0);
+});

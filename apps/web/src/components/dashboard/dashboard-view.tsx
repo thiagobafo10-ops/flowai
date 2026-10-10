@@ -35,6 +35,8 @@ export function DashboardView({ orgId, initialPeriod, initialData, initialDataUp
     initialData: period === initialPeriod ? initialData : undefined,
     initialDataUpdatedAt: period === initialPeriod ? initialDataUpdatedAt : undefined,
     staleTime: 30_000,
+    // Ao voltar pela sidebar o cache pode ser de antes de um deal mudar: sempre revalida.
+    refetchOnMount: "always",
     retry: false,
   });
 

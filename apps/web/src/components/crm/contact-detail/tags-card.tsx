@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -19,19 +19,30 @@ type Props = {
 
 export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Props) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const busy = saving || refreshing;
   const [picking, setPicking] = useState(false);
   const [allTags, setAllTags] = useState(initialAll);
   const [error, setError] = useState<string | null>(null);
-  // Estado local (otimista), ressincronizado quando o servidor devolve as tags.
+  // Estado local (otimista), ressincronizado quando o servidor devolve as tags — mas não no
+  // meio de uma gravação, para não desfazer cliques ainda na fila.
   const propIds = tags.map((t) => t.id);
   const propKey = propIds.join(",");
   const [seenKey, setSeenKey] = useState(propKey);
   const [selected, setSelected] = useState(propIds);
-  if (seenKey !== propKey) {
+  if (seenKey !== propKey && !busy) {
     setSeenKey(propKey);
     setSelected(propIds);
   }
+  // Conjunto mais recente (lido por callbacks assíncronos, ex.: tag criada no seletor).
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  });
+  // Fila: só o último conjunto desejado é gravado; gravações nunca correm em paralelo.
+  const queue = useRef<{ running: boolean; next: string[] | null }>({ running: false, next: null });
+
   const tagById = new Map(allTags.map((t) => [t.id, t]));
   const shown = selected.flatMap((id) => {
     const t = tagById.get(id);
@@ -39,24 +50,39 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
   });
 
   function update(ids: string[]) {
-    if (pending) return;
-    const previous = selected;
+    const q = queue.current;
     setError(null);
+    const before = selectedRef.current;
+    selectedRef.current = ids;
     setSelected(ids);
-    startTransition(async () => {
-      const result = await setContactTags(contactId, ids);
-      if (!result.ok) {
-        setSelected(previous);
-        setError(result.error);
-        toast.error(result.error);
-        return;
+    q.next = ids;
+    if (q.running) return;
+    q.running = true;
+    setSaving(true);
+    void (async () => {
+      let lastSaved = before;
+      while (q.next) {
+        const next = q.next;
+        q.next = null;
+        const result = await setContactTags(contactId, next);
+        if (!result.ok) {
+          q.next = null;
+          selectedRef.current = lastSaved;
+          setSelected(lastSaved);
+          setError(result.error);
+          toast.error(result.error);
+          break;
+        }
+        lastSaved = next;
       }
-      router.refresh();
-    });
+      q.running = false;
+      setSaving(false);
+      startRefresh(() => router.refresh());
+    })();
   }
 
   return (
-    <Card role="region" aria-label="Tags" aria-busy={pending}>
+    <Card role="region" aria-label="Tags" aria-busy={busy}>
       <CardHeader>
         <CardTitle>Tags</CardTitle>
       </CardHeader>
@@ -70,8 +96,7 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
                 <button
                   type="button"
                   aria-label={`Remover tag ${t.name}`}
-                  disabled={pending}
-                  onClick={() => update(selected.filter((id) => id !== t.id))}
+                  onClick={() => update(selectedRef.current.filter((id) => id !== t.id))}
                   className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <XIcon className="size-3" />
@@ -89,9 +114,12 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
               <TagPicker
                 tags={allTags}
                 selected={selected}
-                disabled={pending}
+                createDisabled={saving}
                 onChange={update}
-                onCreated={(t) => setAllTags((prev) => (prev.some((p) => p.id === t.id) ? prev : [...prev, t]))}
+                onCreated={(t) => {
+                  setAllTags((prev) => (prev.some((p) => p.id === t.id) ? prev : [...prev, t]));
+                  if (!selectedRef.current.includes(t.id)) update([...selectedRef.current, t.id]);
+                }}
               />
             )}
           </>

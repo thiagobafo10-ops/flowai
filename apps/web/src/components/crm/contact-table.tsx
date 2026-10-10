@@ -7,6 +7,7 @@ import {
   type ContactStatus,
 } from "@flowai/core";
 import type { ContactRow, MemberOption, TagOption } from "@/lib/crm/queries";
+import { formatDateTime, initials } from "@/lib/crm/format";
 import { cn } from "@/lib/utils";
 import { TagBadge } from "./tag-badge";
 
@@ -17,21 +18,6 @@ const STATUS_CLASSES: Record<ContactStatus, string> = {
   customer: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-200",
   inactive: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
-
-function initials(name: string): string {
-  const parts = name.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
-  const chars = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : [parts[0] ?? "?"];
-  return chars.map((p) => p.charAt(0).toUpperCase()).join("");
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return EMPTY;
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "America/Sao_Paulo",
-  }).format(new Date(iso));
-}
 
 function Avatar({ name }: { name: string }) {
   return (
@@ -52,9 +38,15 @@ function StatusBadge({ status }: { status: ContactStatus }) {
   );
 }
 
-type Props = { rows: ContactRow[]; tags: TagOption[]; members: MemberOption[] };
+type Props = {
+  rows: ContactRow[];
+  tags: TagOption[];
+  members: MemberOption[];
+  /** Fuso da organização, para "Última interação". */
+  timeZone: string;
+};
 
-export function ContactTable({ rows, tags, members }: Props) {
+export function ContactTable({ rows, tags, members, timeZone }: Props) {
   const tagById = new Map(tags.map((t) => [t.id, t]));
   const memberById = new Map(members.map((m) => [m.userId, m.name]));
   const tagsOf = (r: ContactRow) =>
@@ -106,7 +98,7 @@ export function ContactTable({ rows, tags, members }: Props) {
                     </div>
                   </td>
                   <td className="px-3 py-2">{assignee(r)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(r.lastInteractionAt)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(r.lastInteractionAt, timeZone)}</td>
                   <td className="px-3 py-2">{CONTACT_SOURCE_LABELS[r.source]}</td>
                 </tr>
               );

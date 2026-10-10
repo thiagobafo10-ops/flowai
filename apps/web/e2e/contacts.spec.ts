@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
-import { addMember, clearRateLimits, seedContacts } from "./support/local-db";
+import {
+  addCustomField,
+  addMember,
+  clearRateLimits,
+  contactIdByName,
+  seedContacts,
+  setTimezoneAndLastInteraction,
+} from "./support/local-db";
 import { newEmail, signUp, signUpWithOrg } from "./support/auth";
 import { gotoReady, reloadReady, settled } from "./support/nav";
 
@@ -178,10 +185,87 @@ test("ficha: viewer não vê ações de escrita", async ({ page, browser, baseUR
   }
 });
 
-test("ficha: contato inexistente", async ({ page }) => {
+test("ficha: contato de outra organização não é encontrado", async ({ page, browser, baseURL }) => {
+  // Outra pessoa, com a própria org e um contato real.
+  const otherEmail = newEmail();
+  const ctx = await browser.newContext({ baseURL });
+  try {
+    await signUpWithOrg(await ctx.newPage(), otherEmail, "Org Alheia");
+  } finally {
+    await ctx.close();
+  }
+  seedContacts(otherEmail, 1);
+  const foreignId = contactIdByName(otherEmail, "Contato 01");
+  expect(foreignId).toMatch(/^[0-9a-f-]{36}$/);
+
   await signUpWithOrg(page, newEmail(), "Org Ficha 404");
-  await gotoReady(page, "/contatos/3f0c1f0e-6a52-4a4e-9a55-1d2f7a0b9c11");
+  await gotoReady(page, `/contatos/${foreignId}`);
   await expect(page.getByText("Contato não encontrado")).toBeVisible();
+  await expect(page.getByText("Contato 01")).toHaveCount(0);
+});
+
+test("ficha: editar no diálogo não apaga campos gravados por outra pessoa", async ({ page }) => {
+  const email = newEmail();
+  await signUpWithOrg(page, email, "Org Ficha Edição");
+  await createJoao(page);
+  await expect(page.getByText("Nenhum campo personalizado.")).toBeVisible();
+
+  // Com a ficha já aberta, outra pessoa grava um campo.
+  addCustomField(email, "João Silva", "Cidade", "Campinas");
+
+  await page.getByRole("button", { name: "Editar", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Editar contato" });
+  await dialog.getByLabel("Nome", { exact: true }).fill("João Souza");
+  await dialog.getByRole("button", { name: "Salvar" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: "João Souza" })).toBeVisible();
+
+  await reloadReady(page);
+  await expect(page.getByRole("heading", { name: "João Souza" })).toBeVisible();
+  await expect(fieldsCard(page).getByText("Cidade")).toBeVisible();
+  await expect(fieldsCard(page).getByText("Campinas")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();
+});
+
+test("ficha: criar tag e marcar outra em seguida aplica as duas", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Ficha Tag Rápida");
+  await createJoao(page);
+
+  // "Beta" existe, mas não está no contato.
+  await page.getByRole("button", { name: "Adicionar tag" }).click();
+  const picker = page.getByRole("group", { name: "Tags" });
+  await page.getByLabel("Nova tag").fill("Beta");
+  await page.getByRole("button", { name: "Criar tag" }).click();
+  await expect(picker.getByRole("button", { name: "Beta", pressed: true })).toBeVisible();
+  await settled(tagsCard(page));
+  await picker.getByRole("button", { name: "Beta" }).click();
+  await expect(picker.getByRole("button", { name: "Beta", pressed: false })).toBeVisible();
+  await settled(tagsCard(page));
+
+  // Cria "Alfa" e, sem esperar, marca "Beta".
+  await page.getByLabel("Nova tag").fill("Alfa");
+  await page.getByRole("button", { name: "Criar tag" }).click();
+  await picker.getByRole("button", { name: "Beta" }).click();
+
+  await expect(picker.getByRole("button", { name: "Alfa", pressed: true })).toBeVisible();
+  await expect(picker.getByRole("button", { name: "Beta", pressed: true })).toBeVisible();
+  await settled(tagsCard(page));
+  await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag Beta" })).toBeVisible();
+
+  await reloadReady(page);
+  await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag Beta" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();
+});
+
+test("lista: Última interação usa o fuso da organização", async ({ page }) => {
+  const email = newEmail();
+  await signUpWithOrg(page, email, "Org Fuso");
+  seedContacts(email, 1);
+  setTimezoneAndLastInteraction(email, "Asia/Tokyo", "Contato 01", "2026-01-01T00:00:00Z");
+  await gotoReady(page, "/contatos");
+  await expect(page.getByRole("row", { name: /Contato 01/ })).toContainText("01/01/2026 09:00");
 });
 
 test("ficha: alternar tags em sequência rápida não perde atualizações", async ({ page }) => {

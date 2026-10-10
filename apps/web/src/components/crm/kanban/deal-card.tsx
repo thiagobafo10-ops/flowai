@@ -52,6 +52,7 @@ export function DealCard({ deal, stages, canMove, onOpen, onMove }: CardProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: deal.id,
     disabled: !canMove,
+    attributes: { roleDescription: "arrastável" },
   });
   return (
     <div
@@ -65,7 +66,7 @@ export function DealCard({ deal, stages, canMove, onOpen, onMove }: CardProps) {
       // Os atributos do dnd-kit trazem role="button"; o card contém botões, então é um grupo.
       role="group"
       tabIndex={0}
-      aria-label={deal.title}
+      aria-label={`${deal.title}, contato ${deal.contact.name}`}
       onClick={onOpen}
       className={cn(
         "cursor-pointer rounded-lg bg-card p-3 text-card-foreground shadow-xs ring-1 ring-foreground/10 outline-none focus-visible:ring-2 focus-visible:ring-ring",

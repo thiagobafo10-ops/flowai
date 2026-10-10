@@ -62,6 +62,36 @@ const OUTCOME_HINT = "Marque outra etapa como Ganho/Perdido antes.";
 const LAST_OPEN_HINT = "O pipeline precisa de ao menos uma etapa aberta.";
 const dealsLabel = (n: number) => (n === 1 ? "1 deal" : `${n} deals`);
 
+/**
+ * Aviso antes de mover a marca de Ganho/Perdido: os deals da etapa escolhida passam a encerrados
+ * e os da etapa que perde a marca voltam a ficar abertos. Nulo quando nenhum deal muda.
+ */
+function outcomeChangeMessage(
+  target: StageWithCount,
+  current: StageWithCount | undefined,
+  outcome: "won" | "lost",
+): string | null {
+  const word = outcome === "won" ? "ganho" : "perdido";
+  const n = target.dealCount;
+  const m = current?.dealCount ?? 0;
+  const parts: string[] = [];
+  if (n > 0) {
+    parts.push(
+      n === 1
+        ? `1 deal de ${target.name} será marcado como ${word}`
+        : `${n} deals de ${target.name} serão marcados como ${word}s`,
+    );
+  }
+  if (current && m > 0) {
+    parts.push(
+      m === 1
+        ? `1 deal de ${current.name} voltará a ficar aberto`
+        : `${m} deals de ${current.name} voltarão a ficar abertos`,
+    );
+  }
+  return parts.length > 0 ? `${parts.join(" e ")}.` : null;
+}
+
 type RowProps = {
   stage: StageWithCount;
   index: number;
@@ -79,7 +109,7 @@ type RowProps = {
 
 function StageRow({ stage, index, total, busy, saving, isLastOpen, onMove, onOutcome, onDelete, onRename }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: stage.id });
+    useSortable({ id: stage.id, attributes: { roleDescription: "reordenável" } });
   const [name, setName] = useState(stage.name);
   const [prevName, setPrevName] = useState(stage.name);
   const [error, setError] = useState<string | null>(null);
@@ -395,6 +425,11 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<StageWithCount | null>(null);
+  const [confirmOutcome, setConfirmOutcome] = useState<{
+    stage: StageWithCount;
+    outcome: "won" | "lost";
+    message: string;
+  } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -439,6 +474,16 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
   }
 
   function onOutcome(stage: StageWithCount, outcome: "won" | "lost") {
+    const current = items.find((s) => s.id !== stage.id && (outcome === "won" ? s.isWon : s.isLost));
+    const message = outcomeChangeMessage(stage, current, outcome);
+    if (message) {
+      setConfirmOutcome({ stage, outcome, message });
+      return;
+    }
+    applyOutcome(stage, outcome);
+  }
+
+  function applyOutcome(stage: StageWithCount, outcome: "won" | "lost") {
     startTransition(async () => {
       const result = await setStageOutcome(stage.id, outcome);
       if (!result.ok) {
@@ -505,6 +550,30 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
 
       <AddStageDialog open={adding} onClose={() => setAdding(false)} />
       <DeleteStageDialog stage={deleting} stages={items} onClose={() => setDeleting(null)} />
+      <Dialog open={!!confirmOutcome} onOpenChange={(o) => !o && setConfirmOutcome(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmOutcome?.outcome === "lost" ? "Marcar como Perdido" : "Marcar como Ganho"}</DialogTitle>
+            <DialogDescription>{confirmOutcome?.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmOutcome(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!confirmOutcome) return;
+                setConfirmOutcome(null);
+                applyOutcome(confirmOutcome.stage, confirmOutcome.outcome);
+              }}
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

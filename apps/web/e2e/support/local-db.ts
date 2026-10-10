@@ -187,3 +187,62 @@ begin
   insert into public.memberships (organization_id, user_id, role) values (v_org, v_user, '${role}');
 end $$`);
 }
+
+// Nomes de contato/etapa/campo/título: letras, números, espaços e pontuação comum (aspas duplicadas).
+function sqlText(value: string, what: string): string {
+  if (!/^[\p{L}\p{N} \-—.,:()@+]{1,120}$/u.test(value)) throw new Error(`${what} inválido para helper`);
+  return value.replace(/'/g, "''");
+}
+
+const orgOf = (email: string) => `(select m.organization_id from public.memberships m
+    join auth.users u on u.id = m.user_id where u.email = '${email}' limit 1)`;
+
+/** Id do contato com este nome na org do usuário (somente Supabase local). */
+export function contactIdByName(email: string, name: string): string {
+  assertEmail(email);
+  return psql(
+    `select id from public.contacts where organization_id = ${orgOf(email)} and name = '${sqlText(name, "nome")}' limit 1`,
+  );
+}
+
+/** Grava um campo personalizado no contato, como postgres (simula outra pessoa editando). */
+export function addCustomField(email: string, contactName: string, key: string, value: string): void {
+  assertEmail(email);
+  psql(`
+insert into public.contact_custom_fields (organization_id, contact_id, key, value)
+select c.organization_id, c.id, '${sqlText(key, "campo")}', '${sqlText(value, "valor")}'
+  from public.contacts c
+  where c.organization_id = ${orgOf(email)} and c.name = '${sqlText(contactName, "nome")}'`);
+}
+
+/** Cria (como postgres) um deal do contato na etapa, criando o contato se preciso. */
+export function seedDeal(email: string, contactName: string, stageName: string, title: string): void {
+  assertEmail(email);
+  const contact = sqlText(contactName, "nome");
+  psql(`
+do $$
+declare v_org uuid := ${orgOf(email)}; v_pipe uuid; v_contact uuid;
+begin
+  if v_org is null then raise exception 'org não encontrada'; end if;
+  select id into v_pipe from public.pipelines where organization_id = v_org and is_default;
+  select id into v_contact from public.contacts where organization_id = v_org and name = '${contact}' limit 1;
+  if v_contact is null then
+    insert into public.contacts (organization_id, name) values (v_org, '${contact}') returning id into v_contact;
+  end if;
+  insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, title)
+    values (v_org, v_pipe,
+      (select id from public.pipeline_stages where pipeline_id = v_pipe and name = '${sqlText(stageName, "etapa")}'),
+      v_contact, '${sqlText(title, "título")}');
+end $$`);
+}
+
+/** Define o fuso da org e a última interação de um contato (somente Supabase local). */
+export function setTimezoneAndLastInteraction(email: string, timezone: string, contactName: string, iso: string): void {
+  assertEmail(email);
+  if (!/^[A-Za-z_]+\/[A-Za-z_]+$/.test(timezone)) throw new Error("fuso inválido para helper");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(iso)) throw new Error("data inválida para helper");
+  psql(`
+update public.organizations set timezone = '${timezone}' where id = ${orgOf(email)};
+update public.contacts set last_interaction_at = '${iso}'
+  where organization_id = ${orgOf(email)} and name = '${sqlText(contactName, "nome")}'`);
+}

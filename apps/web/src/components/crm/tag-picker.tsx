@@ -15,12 +15,16 @@ type Props = {
   tags: PickerTag[];
   selected: string[];
   onChange: (ids: string[]) => void;
-  /** Chamado quando uma tag é criada na hora, para o pai incluí-la na lista. */
+  /**
+   * Chamado quando uma tag é criada na hora: o pai a inclui na lista e a marca, a partir do
+   * conjunto mais recente (não do `selected` de quando a criação começou).
+   */
   onCreated: (tag: PickerTag) => void;
-  disabled?: boolean;
+  /** Desabilita criar tag (ex.: o pai ainda grava a seleção anterior). */
+  createDisabled?: boolean;
 };
 
-export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Props) {
+export function TagPicker({ tags, selected, onChange, onCreated, createDisabled }: Props) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -31,7 +35,7 @@ export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Pro
 
   function create() {
     const value = name.trim();
-    if (!value) return;
+    if (!value || pending || createDisabled) return;
     setError(null);
     startTransition(async () => {
       const result = await createTagInline(value);
@@ -41,7 +45,6 @@ export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Pro
         return;
       }
       onCreated(result.data);
-      if (!selected.includes(result.data.id)) onChange([...selected, result.data.id]);
       setName("");
     });
   }
@@ -57,7 +60,6 @@ export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Pro
               key={t.id}
               type="button"
               aria-pressed={on}
-              disabled={disabled}
               onClick={() => toggle(t.id)}
               className={cn(
                 "rounded-full px-2.5 py-0.5 text-xs font-medium outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-ring",
@@ -76,6 +78,7 @@ export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Pro
           placeholder="Nova tag"
           value={name}
           maxLength={40}
+          disabled={createDisabled}
           aria-invalid={!!error}
           aria-describedby={error ? "new-tag-error" : undefined}
           onChange={(e) => setName(e.target.value)}
@@ -86,7 +89,7 @@ export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Pro
             }
           }}
         />
-        <Button type="button" variant="outline" disabled={pending || !name.trim()} onClick={create}>
+        <Button type="button" variant="outline" disabled={pending || createDisabled || !name.trim()} onClick={create}>
           Criar tag
         </Button>
       </div>

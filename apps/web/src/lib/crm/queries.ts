@@ -1,7 +1,9 @@
+import { cache } from "react";
 import {
   CONTACTS_PAGE_SIZE,
   TAG_COLORS,
   contactDisplayName,
+  matchesDealQuery,
   type ContactFilters,
   type KanbanFilters,
   type ContactSource,
@@ -68,7 +70,8 @@ export async function listContacts(
   return { rows, total: data.length > 0 ? Number(data[0].total_count) : 0 };
 }
 
-export async function listMembers(orgId: string): Promise<MemberOption[]> {
+/** Membros da org (memoizado por requisição: várias partes da página pedem a mesma lista). */
+export const listMembers = cache(async (orgId: string): Promise<MemberOption[]> => {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("memberships")
@@ -78,9 +81,10 @@ export async function listMembers(orgId: string): Promise<MemberOption[]> {
   return data
     .map((m) => ({ userId: m.user_id, name: m.profiles?.full_name?.trim() || "Sem nome" }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-}
+});
 
-export async function listTags(orgId: string): Promise<TagOption[]> {
+/** Tags da org com contagem de contatos (memoizado por requisição). */
+export const listTags = cache(async (orgId: string): Promise<TagOption[]> => {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("tags")
@@ -94,7 +98,17 @@ export async function listTags(orgId: string): Promise<TagOption[]> {
     color: toTagColor(t.color),
     contactCount: t.contact_tags[0]?.count ?? 0,
   }));
-}
+});
+
+/** Fuso horário da organização (memoizado por requisição). */
+export const getOrgTimezone = cache(async (orgId: string): Promise<string> => {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.from("organizations").select("timezone").eq("id", orgId).single();
+  if (error) throw new Error("Falha ao carregar organização", { cause: error });
+  return data.timezone ?? DEFAULT_TIMEZONE;
+});
+
+const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
 export type ContactDeal = {
   id: string;
@@ -151,7 +165,7 @@ export async function getContact(orgId: string, id: string): Promise<ContactDeta
   if (error) throw new Error("Falha ao carregar contato", { cause: error });
   if (!c) return null;
 
-  const [dealsRes, eventsRes, stagesRes, orgRes, members] = await Promise.all([
+  const [dealsRes, eventsRes, stagesRes, timezone, members] = await Promise.all([
     supabase
       .from("deals")
       .select("id, title, value, status, stage_id, owner_id, updated_at")
@@ -167,10 +181,10 @@ export async function getContact(orgId: string, id: string): Promise<ContactDeta
       .order("created_at", { ascending: false })
       .limit(HISTORY_LIMIT),
     supabase.from("pipeline_stages").select("id, name").eq("organization_id", orgId),
-    supabase.from("organizations").select("timezone").eq("id", orgId).single(),
+    getOrgTimezone(orgId),
     listMembers(orgId),
   ]);
-  for (const r of [dealsRes, eventsRes, stagesRes, orgRes]) {
+  for (const r of [dealsRes, eventsRes, stagesRes]) {
     if (r.error) throw new Error("Falha ao carregar contato", { cause: r.error });
   }
 
@@ -217,7 +231,7 @@ export async function getContact(orgId: string, id: string): Promise<ContactDeta
         toStage: nameOf(p.to_stage_id),
       };
     }),
-    timezone: orgRes.data?.timezone ?? "America/Sao_Paulo",
+    timezone,
   };
 }
 
@@ -234,12 +248,6 @@ export type BoardDeal = {
 export type Board = { pipelineId: string; stages: BoardStage[]; deals: BoardDeal[] };
 
 const CLOSED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-
-const fold = (s: string) =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
 
 /** Quadro do pipeline padrão: deals abertos e (conforme o filtro) encerrados recentes ou todos. */
 export async function getBoard(orgId: string, f: KanbanFilters): Promise<Board> {
@@ -280,7 +288,6 @@ export async function getBoard(orgId: string, f: KanbanFilters): Promise<Board> 
   if (dealsRes.error) throw new Error("Falha ao carregar deals", { cause: dealsRes.error });
 
   const memberName = new Map(members.map((m) => [m.userId, m.name]));
-  const q = fold(f.q);
   const deals: BoardDeal[] = [];
   for (const d of dealsRes.data) {
     if (!d.contacts) continue;
@@ -291,7 +298,9 @@ export async function getBoard(orgId: string, f: KanbanFilters): Promise<Board> 
       email: d.contacts.email,
       leadScore: d.contacts.lead_score,
     };
-    if (q && !fold(`${contact.name} ${contact.phone ?? ""} ${contact.email ?? ""} ${d.title}`).includes(q)) continue;
+    if (!matchesDealQuery(f.q, { contactName: contact.name, phone: contact.phone, email: contact.email, title: d.title })) {
+      continue;
+    }
     deals.push({
       id: d.id,
       stageId: d.stage_id,
@@ -330,34 +339,24 @@ export async function getStagesWithCounts(orgId: string): Promise<{ pipelineId: 
   if (pipeError) throw new Error("Falha ao carregar pipeline", { cause: pipeError });
   if (!pipeline) throw new Error("Pipeline padrão não encontrado");
 
+  // Uma consulta: etapas com a contagem agregada dos deals (relação pela FK composta).
   const { data, error } = await supabase
     .from("pipeline_stages")
-    .select("id, name, position, is_won, is_lost")
+    .select("id, name, position, is_won, is_lost, deals!deals_organization_id_pipeline_id_stage_id_fkey(count)")
     .eq("organization_id", orgId)
     .eq("pipeline_id", pipeline.id)
     .order("position");
   if (error) throw new Error("Falha ao carregar etapas", { cause: error });
 
-  const counts = await Promise.all(
-    data.map(async (s) => {
-      const { count, error: countError } = await supabase
-        .from("deals")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId)
-        .eq("stage_id", s.id);
-      if (countError) throw new Error("Falha ao contar deals", { cause: countError });
-      return count ?? 0;
-    }),
-  );
   return {
     pipelineId: pipeline.id,
-    stages: data.map((s, i) => ({
+    stages: data.map((s) => ({
       id: s.id,
       name: s.name,
       position: s.position,
       isWon: s.is_won,
       isLost: s.is_lost,
-      dealCount: counts[i],
+      dealCount: s.deals[0]?.count ?? 0,
     })),
   };
 }

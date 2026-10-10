@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { stageNameSchema } from "@flowai/core";
+import { contactDisplayName, stageNameSchema } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
@@ -128,6 +128,61 @@ export async function setStageOutcome(id: string, outcome: "won" | "lost"): Prom
   }
   const supabase = await createServerClient();
   const { error } = await supabase.rpc("set_stage_outcome", { p_stage: id, p_outcome: outcome });
+  if (error?.code === "23505") {
+    const name = await conflictingContactName(supabase, org.id, id, outcome);
+    if (name) return { ok: false, error: `Não foi possível: o contato ${name} ficaria com dois deals abertos.` };
+  }
   if (error) return rpcError("set stage outcome failed", error);
   return { ok: true, data: undefined };
+}
+
+type Supabase = Awaited<ReturnType<typeof createServerClient>>;
+
+/**
+ * Após o 23505 de set_stage_outcome (nada foi gravado): os deals da etapa que perderia a marca
+ * voltariam a ficar abertos; o conflito é o contato que já tem outro deal aberto no pipeline.
+ */
+async function conflictingContactName(
+  supabase: Supabase,
+  orgId: string,
+  stageId: string,
+  outcome: "won" | "lost",
+): Promise<string | null> {
+  const { data: stage, error: stageError } = await supabase
+    .from("pipeline_stages")
+    .select("pipeline_id")
+    .eq("organization_id", orgId)
+    .eq("id", stageId)
+    .maybeSingle();
+  if (stageError || !stage) return null;
+
+  const { data: current, error: currentError } = await supabase
+    .from("pipeline_stages")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("pipeline_id", stage.pipeline_id)
+    .eq(outcome === "won" ? "is_won" : "is_lost", true)
+    .neq("id", stageId)
+    .maybeSingle();
+  if (currentError || !current) return null;
+
+  const { data: reopened, error: reopenedError } = await supabase
+    .from("deals")
+    .select("contact_id, contacts(name, phone, email)")
+    .eq("organization_id", orgId)
+    .eq("stage_id", current.id);
+  if (reopenedError || reopened.length === 0) return null;
+
+  const { data: open, error: openError } = await supabase
+    .from("deals")
+    .select("contact_id")
+    .eq("organization_id", orgId)
+    .eq("pipeline_id", stage.pipeline_id)
+    .eq("status", "open")
+    .in("contact_id", [...new Set(reopened.map((d) => d.contact_id))])
+    .limit(1);
+  if (openError || open.length === 0) return null;
+
+  const contact = reopened.find((d) => d.contact_id === open[0].contact_id)?.contacts;
+  return contact ? contactDisplayName(contact) : null;
 }

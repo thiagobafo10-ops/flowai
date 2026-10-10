@@ -8,7 +8,7 @@ import { ContactTable } from "@/components/crm/contact-table";
 import { RequireOrg } from "@/components/require-org";
 import { buttonVariants } from "@/components/ui/button";
 import { getActiveOrg } from "@/lib/org/active-org";
-import { listContacts, listMembers, listTags } from "@/lib/crm/queries";
+import { getOrgTimezone, listContacts, listMembers, listTags } from "@/lib/crm/queries";
 import { contactsHref } from "@/lib/crm/url";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,11 @@ async function ContactsContent({ searchParams }: Props) {
   const org = await getActiveOrg();
   if (!org) return null;
 
-  const [tags, members] = await Promise.all([listTags(org.id), listMembers(org.id)]);
+  const [tags, members, timeZone] = await Promise.all([
+    listTags(org.id),
+    listMembers(org.id),
+    getOrgTimezone(org.id),
+  ]);
   // Tag inexistente na organização (ex.: excluída) é ignorada em vez de zerar a lista.
   const filters =
     parsedFilters.tagId && !tags.some((t) => t.id === parsedFilters.tagId)
@@ -77,7 +81,7 @@ async function ContactsContent({ searchParams }: Props) {
         </div>
       ) : (
         <>
-          <ContactTable rows={rows} tags={tags} members={members} />
+          <ContactTable rows={rows} tags={tags} members={members} timeZone={timeZone} />
           <nav aria-label="Paginação" className="flex items-center justify-between gap-2">
             {filters.page > 1 ? (
               <Link href={contactsHref(filters, { page: filters.page - 1 })} className={buttonVariants({ variant: "outline" })}>

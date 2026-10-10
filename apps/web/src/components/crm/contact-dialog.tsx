@@ -72,6 +72,8 @@ function withRootErrorOnName(base: Resolver<FormValues, unknown, ContactInput>) 
   return resolver;
 }
 
+const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id));
+
 function ContactForm({
   tags: initialTags,
   members,
@@ -90,6 +92,7 @@ function ContactForm({
     handleSubmit,
     setError,
     setValue,
+    getValues,
     control,
     formState: { errors },
   } = useForm<FormValues, unknown, ContactInput>({
@@ -110,7 +113,10 @@ function ContactForm({
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
     startTransition(async () => {
-      const result = await saveContact(contact?.id ?? null, values);
+      // Edição: tags só se mudaram; campos personalizados nunca (não aparecem neste diálogo).
+      const result = await saveContact(contact?.id ?? null, values, {
+        tags: !sameIds(values.tagIds, v?.tagIds ?? []),
+      });
       if (!result.ok) {
         // Erros de campo: só inline. Erros gerais: inline + toast.
         if (applyFieldErrors(setError, result.fieldErrors)) return;
@@ -212,7 +218,11 @@ function ContactForm({
           tags={tags}
           selected={tagIds}
           onChange={(ids) => setValue("tagIds", ids, { shouldDirty: true })}
-          onCreated={(t) => setTags((prev) => (prev.some((p) => p.id === t.id) ? prev : [...prev, t]))}
+          onCreated={(t) => {
+            setTags((prev) => (prev.some((p) => p.id === t.id) ? prev : [...prev, t]));
+            const current = getValues("tagIds") ?? [];
+            if (!current.includes(t.id)) setValue("tagIds", [...current, t.id], { shouldDirty: true });
+          }}
         />
       </div>
       {formError && (

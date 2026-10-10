@@ -18,9 +18,15 @@ function dbError(context: string, error: { code?: string }): { ok: false; error:
   return { ok: false, error: MSG_UNEXPECTED };
 }
 
+/**
+ * Cria (contactId nulo) ou edita um contato. Na edição os campos personalizados nunca são
+ * enviados (o diálogo não os mostra) e as tags só quando `opts.tags` indica que mudaram:
+ * conjunto nulo = inalterado no banco, sem sobrescrever o que outra pessoa gravou.
+ */
 export async function saveContact(
   contactId: string | null,
   input: ContactInput,
+  opts: { tags?: boolean } = {},
 ): Promise<ActionResult<{ id: string; duplicateOf: { id: string; name: string } | null }>> {
   const org = await getActiveOrg();
   if (!org || !WRITE_ROLES.includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
@@ -36,6 +42,11 @@ export async function saveContact(
   }
   const c = parsed.data;
 
+  if (contactId !== null && !z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
+  const isEdit = contactId !== null;
+  const tagIds = !isEdit || opts.tags ? c.tagIds : null;
+  const customFields = isEdit ? null : c.customFields;
+
   const supabase = await createServerClient();
   const { data: id, error } = await supabase.rpc("save_contact", {
     p_org: org.id,
@@ -48,8 +59,9 @@ export async function saveContact(
       assigned_to: c.assignedTo,
       lead_score: c.leadScore,
     },
-    p_tag_ids: c.tagIds,
-    p_custom_fields: c.customFields,
+    // Os tipos gerados não marcam os parâmetros como anuláveis; a função trata null (= inalterado).
+    p_tag_ids: tagIds as string[],
+    p_custom_fields: customFields as { key: string; value: string }[],
   });
   if (error || !id) return dbError("save_contact failed", error ?? {});
 

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { addMember, clearRateLimits } from "./support/local-db";
+import { addMember, clearRateLimits, deleteDealByTitle, seedDeal } from "./support/local-db";
 import { newEmail, signUp, signUpWithOrg } from "./support/auth";
 import { gotoReady, settled } from "./support/nav";
 
@@ -103,6 +103,7 @@ test("etapas: reordenar pelo teclado na alça de arrastar", async ({ page }) => 
   await gotoReady(page, "/configuracoes/pipeline");
   const handle = page.getByRole("button", { name: "Arrastar etapa Novo", exact: true });
   await expect(handle).toBeVisible();
+  await expect(handle).toHaveAttribute("aria-roledescription", "reordenável");
   await handle.focus();
   await page.keyboard.press("Space");
   await expect(page.getByText("Sobre a etapa Novo.")).toBeAttached();
@@ -132,4 +133,44 @@ test("etapas: agente não acessa o editor", async ({ page, browser }) => {
   await expect(agent.getByText("Você não tem permissão para esta ação.")).toBeVisible();
   await expect(agent.getByRole("button", { name: "Adicionar etapa" })).toHaveCount(0);
   await ctx.close();
+});
+
+test("etapas: trocar o Ganho pede confirmação e explica conflito de deal aberto", async ({ page }) => {
+  const email = newEmail();
+  await signUpWithOrg(page, email, "Org Etapas Ganho");
+  seedDeal(email, "Ana", "Negociação", "Deal Ana");
+  seedDeal(email, "Bia", "Ganho", "Deal Bia ganho");
+
+  await gotoReady(page, "/configuracoes/pipeline");
+  await stageRow(page, "Negociação").getByRole("button", { name: "Ações da etapa Negociação" }).click();
+  await page.getByRole("menuitem", { name: "Marcar como Ganho" }).click();
+  const confirm = page.getByRole("dialog", { name: "Marcar como Ganho" });
+  await expect(confirm).toContainText(
+    "1 deal de Negociação será marcado como ganho e 1 deal de Ganho voltará a ficar aberto.",
+  );
+  // Cancelar não altera nada.
+  await confirm.getByRole("button", { name: "Cancelar" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(stageRow(page, "Ganho").getByText("Ganho", { exact: true })).toBeVisible();
+
+  // Conflito: Bia passaria a ter dois deals abertos.
+  seedDeal(email, "Bia", "Novo", "Deal Bia aberto");
+  await stageRow(page, "Negociação").getByRole("button", { name: "Ações da etapa Negociação" }).click();
+  await page.getByRole("menuitem", { name: "Marcar como Ganho" }).click();
+  await confirm.getByRole("button", { name: "Confirmar" }).click();
+  await expect(
+    page.getByText("Não foi possível: o contato Bia ficaria com dois deals abertos.").first(),
+  ).toBeVisible();
+  await settled(stagesList(page));
+  await expect(stageRow(page, "Ganho").getByText("Ganho", { exact: true })).toBeVisible();
+
+  // Sem o conflito, confirma e a marca muda.
+  deleteDealByTitle(email, "Deal Bia aberto");
+  await gotoReady(page, "/configuracoes/pipeline");
+  await stageRow(page, "Negociação").getByRole("button", { name: "Ações da etapa Negociação" }).click();
+  await page.getByRole("menuitem", { name: "Marcar como Ganho" }).click();
+  await confirm.getByRole("button", { name: "Confirmar" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(stageRow(page, "Negociação").getByText("Ganho", { exact: true })).toBeVisible();
+  await expect(stageRow(page, "Ganho").getByText("Ganho", { exact: true })).toHaveCount(0);
 });

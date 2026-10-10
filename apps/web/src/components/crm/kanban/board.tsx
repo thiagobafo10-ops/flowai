@@ -106,6 +106,13 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
   });
   const board = data;
 
+  // Nova renderização do servidor (navegação, router.refresh) vence o cache do cliente — exceto
+  // durante um movimento em andamento, cujo resultado otimista ela ainda não conhece.
+  useEffect(() => {
+    if (queryClient.isMutating({ mutationKey: ["moveDeal"] }) > 0) return;
+    queryClient.setQueryData(queryKey, initialBoard);
+  }, [initialBoard, queryKey, queryClient]);
+
   const firstOpenStage = board.stages.find((s) => !s.isWon && !s.isLost) ?? board.stages[0];
   const novoState = (c: typeof novoContact): DealDialogState | null =>
     c && canWrite && firstOpenStage ? { mode: "create", stageId: firstOpenStage.id, contact: c } : null;
@@ -119,8 +126,12 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
   }
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Etapa do deal ao começar o arrasto (para não anunciar "movido" ao soltar na mesma etapa).
+  const dragFromStage = useRef<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["board", orgId] });
+  // Movimentos e edições de deals mudam os números do dashboard.
+  const invalidateDashboard = () => queryClient.invalidateQueries({ queryKey: ["dashboard", orgId] });
 
   const move = useMutation({
     mutationKey: ["moveDeal"],
@@ -151,6 +162,7 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
       toast.error(err.message);
     },
     onSettled: () => {
+      void invalidateDashboard();
       // Só o último movimento em andamento atualiza o quadro (evita sobrescrever os otimistas).
       if (queryClient.isMutating({ mutationKey: ["moveDeal"] }) <= 1) void invalidate();
     },
@@ -176,6 +188,7 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
 
   function onDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id));
+    dragFromStage.current = board.deals.find((d) => d.id === e.active.id)?.stageId ?? null;
   }
   function onDragEnd(e: DragEndEvent) {
     setActiveId(null);
@@ -192,7 +205,8 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
   const announcements: Announcements = {
     onDragStart: ({ active }) => `Deal ${dealTitle(active.id)} selecionado.`,
     onDragOver: ({ over }) => (over ? `Sobre a etapa ${stageName(over.id)}.` : undefined),
-    onDragEnd: ({ over }) => (over ? `Deal movido para ${stageName(over.id)}.` : "Movimento cancelado."),
+    onDragEnd: ({ over }) =>
+      over && over.id !== dragFromStage.current ? `Deal movido para ${stageName(over.id)}.` : "Movimento cancelado.",
     onDragCancel: () => "Movimento cancelado.",
   };
 
@@ -244,7 +258,10 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
       <DealDialog
         state={dialog}
         onClose={closeDialog}
-        onChanged={() => void invalidate()}
+        onChanged={() => {
+          void invalidate();
+          void invalidateDashboard();
+        }}
         stages={board.stages}
         members={members}
         canWrite={canWrite}
