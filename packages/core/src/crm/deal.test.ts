@@ -16,6 +16,9 @@ describe("dealSchema", () => {
     expect(dealSchema.parse({ ...d, value: "10.5" }).value).toBe(10.5);
     expect(dealSchema.parse({ ...d, value: 10.456 }).value).toBe(10.46);
     expect(dealSchema.parse({ ...d, value: "" }).value).toBe(0);
+    // Ponto seguido de 3 dígitos só é milhar quando o primeiro grupo não começa com 0.
+    expect(dealSchema.parse({ ...d, value: "0.500" }).value).toBe(0.5);
+    expect(dealSchema.parse({ ...d, value: "999999999999.99" }).value).toBe(999999999999.99);
     const p = dealSchema.parse(d);
     expect(p.title).toBe("Venda");
     expect(p.ownerId).toBeNull();
@@ -24,6 +27,10 @@ describe("dealSchema", () => {
     expect(dealSchema.safeParse({ ...d, value: -1 }).success).toBe(false);
     expect(dealSchema.safeParse({ ...d, value: "abc" }).success).toBe(false);
     expect(dealSchema.safeParse({ ...d, value: "1e3" }).success).toBe(false);
+    const tooHigh = dealSchema.safeParse({ ...d, value: "1.000.000.000.000" });
+    expect(tooHigh.success).toBe(false);
+    expect(tooHigh.error?.issues[0]?.message).toBe("Valor muito alto.");
+    expect(dealSchema.safeParse({ ...d, value: 1e12 }).success).toBe(false);
     expect(dealSchema.safeParse({ ...d, title: " " }).success).toBe(false);
     expect(dealSchema.safeParse({ ...d, title: "a".repeat(121) }).success).toBe(false);
     expect(dealSchema.safeParse({ ...d, contactId: "x" }).success).toBe(false);

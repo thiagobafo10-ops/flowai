@@ -5,13 +5,23 @@ function parseMoney(v: unknown): unknown {
   if (typeof v !== "string") return v;
   const t = v.trim();
   if (t === "") return 0;
-  const grouped = t.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(t);
+  // "1.500" é milhar; "0.500" é decimal (milhar nunca começa com 0).
+  const grouped = t.includes(",") || /^[1-9]\d{0,2}(\.\d{3})+$/.test(t);
   const normalized = grouped ? t.replace(/\./g, "").replace(",", ".") : t;
   if (!/^\d+(\.\d+)?$/.test(normalized)) return Number.NaN;
   return Math.round(Number(normalized) * 100) / 100;
 }
 
-const value = z.preprocess(parseMoney, z.number("Informe um valor válido.").min(0, "O valor não pode ser negativo."));
+/** Maior valor de numeric(14,2). */
+export const MAX_DEAL_VALUE = 999999999999.99;
+
+const value = z.preprocess(
+  parseMoney,
+  z
+    .number("Informe um valor válido.")
+    .min(0, "O valor não pode ser negativo.")
+    .max(MAX_DEAL_VALUE, "Valor muito alto."),
+);
 
 export const dealSchema = z.object({
   contactId: z.uuid(),

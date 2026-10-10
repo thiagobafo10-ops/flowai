@@ -26,3 +26,25 @@ export function columnTotals(
   for (const col of Object.values(out)) col.value = Math.round(col.value * 100) / 100;
   return out;
 }
+
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+/**
+ * Busca do quadro: contato, telefone, e-mail ou título (sem acento, sem caixa).
+ * Com 3 ou mais dígitos na busca, compara também só os dígitos do telefone.
+ */
+export function matchesDealQuery(
+  query: string,
+  deal: { contactName: string; phone: string | null; email: string | null; title: string },
+): boolean {
+  const q = fold(query.trim());
+  if (!q) return true;
+  const text = fold(`${deal.contactName} ${deal.phone ?? ""} ${deal.email ?? ""} ${deal.title}`);
+  if (text.includes(q)) return true;
+  const digits = q.replace(/\D/g, "");
+  return digits.length >= 3 && !!deal.phone && deal.phone.replace(/\D/g, "").includes(digits);
+}
