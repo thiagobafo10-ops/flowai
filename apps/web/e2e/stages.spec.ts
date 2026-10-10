@@ -112,6 +112,30 @@ test("etapas: renomear, adicionar, reordenar, excluir movendo deals e marcar Gan
   await expect(stageRow(page, "Ganho").getByText("Ganho", { exact: true })).toHaveCount(0);
 });
 
+test("etapas: reordenar pelo teclado na alça de arrastar", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Etapas Teclado");
+  await page.goto("/configuracoes/pipeline");
+  const handle = page.getByRole("button", { name: "Arrastar etapa Novo", exact: true });
+  await expect(handle).toBeVisible();
+  // Aguarda a hidratação: repete até o dnd-kit reagir ao Espaço.
+  await expect(async () => {
+    await handle.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByText("Sobre a etapa Novo.")).toBeAttached({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByText("Sobre a etapa Interessado.")).toBeAttached();
+  await page.keyboard.press("Space");
+  await expect(page.getByText("Etapa solta na posição de Interessado.")).toBeAttached();
+  await expect
+    .poll(async () => (await kanbanOrder(page)).join(","))
+    .toBe("Interessado,Novo,Qualificado,Orçamento,Negociação,Ganho,Perdido");
+  await page.goto("/configuracoes/pipeline");
+  const items = page.getByRole("listitem", { name: /^Etapa / });
+  await expect(items.nth(0)).toHaveAttribute("aria-label", "Etapa Interessado");
+  await expect(items.nth(1)).toHaveAttribute("aria-label", "Etapa Novo");
+});
+
 test("etapas: agente não acessa o editor", async ({ page, browser }) => {
   const ownerEmail = newEmail();
   const agentEmail = newEmail();

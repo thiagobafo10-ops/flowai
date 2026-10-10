@@ -59,6 +59,7 @@ import { cn } from "@/lib/utils";
 import { selectClassName } from "./contact-dialog";
 
 const OUTCOME_HINT = "Marque outra etapa como Ganho/Perdido antes.";
+const LAST_OPEN_HINT = "O pipeline precisa de ao menos uma etapa aberta.";
 const dealsLabel = (n: number) => (n === 1 ? "1 deal" : `${n} deals`);
 
 type RowProps = {
@@ -66,13 +67,15 @@ type RowProps = {
   index: number;
   total: number;
   busy: boolean;
+  /** Única etapa aberta do pipeline: não pode ser excluída. */
+  isLastOpen: boolean;
   onMove: (from: number, to: number) => void;
   onOutcome: (stage: StageWithCount, outcome: "won" | "lost") => void;
   onDelete: (stage: StageWithCount) => void;
   onRenamed: () => void;
 };
 
-function StageRow({ stage, index, total, busy, onMove, onOutcome, onDelete, onRenamed }: RowProps) {
+function StageRow({ stage, index, total, busy, isLastOpen, onMove, onOutcome, onDelete, onRenamed }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: stage.id });
   const [name, setName] = useState(stage.name);
@@ -85,6 +88,7 @@ function StageRow({ stage, index, total, busy, onMove, onOutcome, onDelete, onRe
   }
   const dirty = name !== stage.name;
   const outcome = stage.isWon || stage.isLost;
+  const deleteHint = outcome ? OUTCOME_HINT : isLastOpen ? LAST_OPEN_HINT : null;
 
   function save() {
     const parsed = stageNameSchema.safeParse(name);
@@ -113,18 +117,16 @@ function StageRow({ stage, index, total, busy, onMove, onOutcome, onDelete, onRe
       className={cn("rounded-xl border bg-card p-3", isDragging && "relative z-10 opacity-80 shadow-lg")}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon-sm"
           aria-label={`Arrastar etapa ${stage.name}`}
           ref={setActivatorNodeRef}
-          className="cursor-grab touch-none"
+          className="inline-flex size-7 cursor-grab touch-none items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           {...attributes}
           {...listeners}
         >
-          <GripVerticalIcon />
-        </Button>
+          <GripVerticalIcon className="size-4" />
+        </button>
         <div className="min-w-40 flex-1">
           <Input
             aria-label="Nome da etapa"
@@ -196,13 +198,13 @@ function StageRow({ stage, index, total, busy, onMove, onOutcome, onDelete, onRe
             </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
-              disabled={outcome || busy}
-              title={outcome ? OUTCOME_HINT : undefined}
+              disabled={!!deleteHint || busy}
+              title={deleteHint ?? undefined}
               onClick={() => onDelete(stage)}
             >
               Excluir etapa
             </DropdownMenuItem>
-            {outcome && <p className="px-1.5 py-1 text-xs text-muted-foreground">{OUTCOME_HINT}</p>}
+            {deleteHint && <p className="px-1.5 py-1 text-xs text-muted-foreground">{deleteHint}</p>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -407,11 +409,15 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
 
   function move(from: number, to: number) {
     if (to < 0 || to >= items.length) return;
+    const prev = items;
     const next = arrayMove(items, from, to);
     setItems(next);
     startTransition(async () => {
       const result = await reorderStages(next.map((s) => s.id));
-      if (!result.ok) toast.error(result.error);
+      if (!result.ok) {
+        setItems(prev);
+        toast.error(result.error);
+      }
       router.refresh();
     });
   }
@@ -436,6 +442,7 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
     });
   }
 
+  const openCount = items.filter((s) => !s.isWon && !s.isLost).length;
   const nameOf = (id: unknown) => items.find((s) => s.id === id)?.name ?? "";
   const announcements: Announcements = {
     onDragStart: ({ active }) => `Etapa ${nameOf(active.id)} selecionada.`,
@@ -476,6 +483,7 @@ export function StagesSettings({ stages }: { stages: StageWithCount[] }) {
                 index={i}
                 total={items.length}
                 busy={busy}
+                isLastOpen={!s.isWon && !s.isLost && openCount === 1}
                 onMove={move}
                 onOutcome={onOutcome}
                 onDelete={setDeleting}
