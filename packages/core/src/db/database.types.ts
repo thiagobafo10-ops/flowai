@@ -736,6 +736,14 @@ isOneToOne: false
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
                            },
+"save_contact":
+{ Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
+                           },
+"search_contacts":
+{ Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
+              "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
+            }[]
+                           },
 "shares_org_with":
 { Args: { "p_user": string }; Returns: boolean
                            },
