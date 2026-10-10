@@ -142,9 +142,9 @@ insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, ti
 insert into public.deals (organization_id, pipeline_id, stage_id, contact_id, title)
   values (:'orgs', :'spipe', :'s_int', :'s2', 'I') returning id as sd2 \gset
 
-select tests.authenticate_as(:'us');
+-- escrita direta de is_won/is_lost revogada para authenticated: as mudanças de flag rodam como postgres
+-- (a propagação para deals é exercida pelos gatilhos; set_stage_outcome é coberto em 016).
 update public.pipeline_stages set is_won = false where id = :'s_ganho';
-select tests.clear_authentication();
 select is((select status::text from public.deals where id = :'sd1'), 'open', 'Ganho deixa de ser is_won => deal volta a open');
 
 update public.pipeline_stages set is_lost = true where id = :'s_int';

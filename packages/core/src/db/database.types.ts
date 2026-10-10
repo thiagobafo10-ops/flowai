@@ -715,8 +715,14 @@ isOneToOne: false
 "create_organization_with_owner":
 { Args: { "p_name": string }; Returns: string
                            },
+"create_stage":
+{ Args: { "p_name": string,"p_pipeline": string }; Returns: string
+                           },
 "dashboard_metrics":
 { Args: { "p_days": number,"p_org": string }; Returns: Json
+                           },
+"delete_stage_moving_deals":
+{ Args: { "p_stage": string,"p_target_stage": string }; Returns: undefined
                            },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
@@ -733,6 +739,9 @@ isOneToOne: false
 "log_auth_event":
 { Args: { "p_action": string,"p_ip"?: unknown }; Returns: undefined
                            },
+"reorder_stages":
+{ Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
+                           },
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
                            },
@@ -743,6 +752,9 @@ isOneToOne: false
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
               "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
             }[]
+                           },
+"set_stage_outcome":
+{ Args: { "p_outcome": string,"p_stage": string }; Returns: undefined
                            },
 "shares_org_with":
 { Args: { "p_user": string }; Returns: boolean

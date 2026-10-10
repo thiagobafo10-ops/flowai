@@ -52,7 +52,10 @@ select throws_ok(format($$insert into public.pipelines(organization_id, name) va
   '42501', null, 'agent não insere pipeline');
 select tests.authenticate_as(:'uadmin');
 select lives_ok(format($$insert into public.pipelines(organization_id, name) values (%L, 'P')$$, :'org_a'), 'admin insere pipeline');
-select lives_ok(format($$insert into public.pipeline_stages(organization_id, pipeline_id, name, position) values (%L, '00000000-0000-0000-0000-0000000000a1', 'S9', 9)$$, :'org_a'), 'admin insere stage');
+select throws_ok(format($$insert into public.pipeline_stages(organization_id, pipeline_id, name, position) values (%L, '00000000-0000-0000-0000-0000000000a1', 'S9', 9)$$, :'org_a'),
+  '42501', null, 'admin não insere stage direto (use create_stage; grant revogado)');
+select tests.clear_authentication();
+insert into public.pipeline_stages(organization_id, pipeline_id, name, position) values (:'org_a', '00000000-0000-0000-0000-0000000000a1', 'S9', 9); -- fixture como postgres
 select tests.authenticate_as(:'uagent');
 select throws_ok(format($$insert into public.pipeline_stages(organization_id, pipeline_id, name, position) values (%L, '00000000-0000-0000-0000-0000000000a1', 'S8', 8)$$, :'org_a'),
   '42501', null, 'agent não insere stage');
@@ -156,7 +159,7 @@ select lives_ok(format($$update public.contacts set assigned_to = %L where id = 
   'assigned_to membro da org ok');
 
 -- Fix round 1: reorder de stages (unique deferrable)
-select tests.authenticate_as(:'uadmin');
+select tests.clear_authentication(); -- escrita direta de position revogada para authenticated; valida o unique deferrable como postgres
 select lives_ok($q$do $$ begin
   update public.pipeline_stages set position = 9 where id = '00000000-0000-0000-0000-0000000000e1'; -- colide com S9
   update public.pipeline_stages set position = 0 where name = 'S9' and pipeline_id = '00000000-0000-0000-0000-0000000000a1';

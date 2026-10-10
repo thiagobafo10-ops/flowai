@@ -89,7 +89,8 @@ Transformar os módulos **Contatos** e **Pipeline** (hoje "Em construção") em 
 ### 4.3 Configurações → Pipeline (`/configuracoes/pipeline`, admin+)
 - Lista de etapas: renomear (1–40), reordenar (arrastar e botões "Subir"/"Descer"), "Adicionar etapa" (entra antes da primeira etapa encerrada), marcar "Ganho"/"Perdido".
 - Invariantes garantidos no banco: exatamente uma etapa `is_won`, exatamente uma `is_lost`, ao menos uma etapa aberta, nomes únicos por pipeline.
-- Funções `SECURITY INVOKER` (RLS de admin vale), transacionais:
+- Funções `SECURITY DEFINER` (`search_path` fixo, `has_role(org, 'admin')` checado dentro da função, org derivada da linha; senão `42501`), transacionais. A escrita direta de `authenticated` em `pipeline_stages` fica restrita a `update (name)` (insert, delete e update de `position`/`is_won`/`is_lost` revogados); renomear segue por update direto (RLS admin; nome único por pipeline, `lower(name)` → `23505`):
+  - `public.create_stage(p_pipeline uuid, p_name text) returns uuid` — insere antes da primeira etapa encerrada (Ganho/Perdido), renumerando posições.
   - `public.reorder_stages(p_pipeline uuid, p_stage_ids uuid[]) returns void` — `p_stage_ids` deve conter exatamente as etapas do pipeline; posições 0..n-1.
   - `public.delete_stage_moving_deals(p_stage uuid, p_target_stage uuid) returns void` — proibido para etapa de Ganho/Perdido; move deals para o destino (mesmo pipeline) e exclui; renumera posições.
   - `public.set_stage_outcome(p_stage uuid, p_outcome text) returns void` — `p_outcome ∈ {'won','lost'}`; transfere a marca da etapa atual para `p_stage` (que deixa de ter a marca oposta, se tinha); o gatilho da Fase 2 recalcula o status dos deals; conflito de deal aberto → erro 23505 traduzido para "Não foi possível: o contato {nome} ficaria com dois deals abertos."
