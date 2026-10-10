@@ -51,7 +51,8 @@ select tests.authenticate_as(:'uagent');
 select throws_ok(format($$insert into public.pipelines(organization_id, name) values (%L, 'P')$$, :'org_a'),
   '42501', null, 'agent não insere pipeline');
 select tests.authenticate_as(:'uadmin');
-select lives_ok(format($$insert into public.pipelines(organization_id, name) values (%L, 'P')$$, :'org_a'), 'admin insere pipeline');
+select throws_ok(format($$insert into public.pipelines(organization_id, name) values (%L, 'P')$$, :'org_a'),
+  '42501', null, 'admin não insere pipeline direto (grant revogado em 20261010000004)');
 select throws_ok(format($$insert into public.pipeline_stages(organization_id, pipeline_id, name, position) values (%L, '00000000-0000-0000-0000-0000000000a1', 'S9', 9)$$, :'org_a'),
   '42501', null, 'admin não insere stage direto (use create_stage; grant revogado)');
 select tests.clear_authentication();
