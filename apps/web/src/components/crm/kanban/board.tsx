@@ -12,7 +12,9 @@ import {
   rectIntersection,
   useSensor,
   useSensors,
+  type Announcements,
   type CollisionDetection,
+  type KeyboardCoordinateGetter,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -41,6 +43,38 @@ async function fetchBoard(filters: KanbanFilters): Promise<Board> {
   if (!res.ok) throw new Error(ERROR_MESSAGE);
   return (await res.json()) as Board;
 }
+
+const SCREEN_READER_INSTRUCTIONS =
+  "Para mover um deal, pressione espaço ou Enter, use as setas para escolher a etapa e pressione espaço ou Enter para soltar. Esc cancela.";
+
+/** Setas esquerda/direita saltam uma coluna por vez. */
+const columnCoordinateGetter: KeyboardCoordinateGetter = (event, { context }) => {
+  const { active, droppableRects, droppableContainers, collisionRect } = context;
+  if (!active || !collisionRect) return;
+  if (event.code !== "ArrowLeft" && event.code !== "ArrowRight") return;
+  event.preventDefault();
+  const columns = droppableContainers
+    .getEnabled()
+    .flatMap((c) => {
+      const rect = droppableRects.get(c.id);
+      return rect ? [rect] : [];
+    })
+    .sort((a, b) => a.left - b.left);
+  if (columns.length === 0) return;
+  const cx = collisionRect.left + collisionRect.width / 2;
+  let current = 0;
+  let best = Infinity;
+  columns.forEach((r, i) => {
+    const dist = Math.abs(r.left + r.width / 2 - cx);
+    if (dist < best) {
+      best = dist;
+      current = i;
+    }
+  });
+  const next = columns[current + (event.code === "ArrowRight" ? 1 : -1)];
+  if (!next) return;
+  return { x: next.left + (next.width - collisionRect.width) / 2, y: next.top + 40 };
+};
 
 const collision: CollisionDetection = (args) => {
   const within = pointerWithin(args);
@@ -89,31 +123,43 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["board", orgId] });
 
   const move = useMutation({
+    mutationKey: ["moveDeal"],
     mutationFn: async ({ id, stageId }: { id: string; stageId: string }) => {
       const result = await moveDeal(id, stageId);
       if (!result.ok) throw new Error(result.error);
     },
     onMutate: async ({ id, stageId }) => {
       await queryClient.cancelQueries({ queryKey: ["board", orgId] });
-      const previous = queryClient.getQueryData<Board>(queryKey);
+      const previousStageId = queryClient
+        .getQueryData<Board>(queryKey)
+        ?.deals.find((d) => d.id === id)?.stageId;
       queryClient.setQueryData<Board>(queryKey, (old) =>
         old ? { ...old, deals: old.deals.map((d) => (d.id === id ? { ...d, stageId } : d)) } : old,
       );
-      return { previous };
+      return { previousStageId, id };
     },
     onError: (err, _vars, ctx) => {
-      if (ctx?.previous) queryClient.setQueryData(queryKey, ctx.previous);
+      // Desfaz só este deal: outros movimentos otimistas em andamento permanecem.
+      const { previousStageId, id } = ctx ?? {};
+      if (previousStageId && id) {
+        queryClient.setQueryData<Board>(queryKey, (old) =>
+          old
+            ? { ...old, deals: old.deals.map((d) => (d.id === id ? { ...d, stageId: previousStageId } : d)) }
+            : old,
+        );
+      }
       toast.error(err.message);
     },
     onSettled: () => {
-      void invalidate();
+      // Só o último movimento em andamento atualiza o quadro (evita sobrescrever os otimistas).
+      if (queryClient.isMutating({ mutationKey: ["moveDeal"] }) <= 1) void invalidate();
     },
   });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: columnCoordinateGetter }),
   );
 
   const dealsByStage = useMemo(() => {
@@ -141,6 +187,15 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
     if (novoContact) router.replace(pipelineHref(filters));
   }
 
+  const dealTitle = (id: unknown) => board.deals.find((d) => d.id === id)?.title ?? "";
+  const stageName = (id: unknown) => board.stages.find((s) => s.id === id)?.name ?? "";
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Deal ${dealTitle(active.id)} selecionado.`,
+    onDragOver: ({ over }) => (over ? `Sobre a etapa ${stageName(over.id)}.` : undefined),
+    onDragEnd: ({ over }) => (over ? `Deal movido para ${stageName(over.id)}.` : "Movimento cancelado."),
+    onDragCancel: () => "Movimento cancelado.",
+  };
+
   const activeDeal = activeId ? board.deals.find((d) => d.id === activeId) : undefined;
   const hasFilters = !!(filters.q || filters.ownerId || filters.closed !== "30d");
 
@@ -157,6 +212,7 @@ export function PipelineBoard({ orgId, filters, initialBoard, members, canWrite,
       )}
       <DndContext
         id="pipeline-board"
+        accessibility={{ announcements, screenReaderInstructions: { draggable: SCREEN_READER_INSTRUCTIONS } }}
         sensors={sensors}
         collisionDetection={collision}
         onDragStart={onDragStart}

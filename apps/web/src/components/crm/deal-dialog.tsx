@@ -174,9 +174,11 @@ function DealForm({
     <form onSubmit={onSubmit} className="space-y-3" noValidate>
       <fieldset disabled={!canWrite || pending} className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="deal-contact">Contato</Label>
+          <Label id="deal-contact-label" htmlFor={contact ? undefined : "deal-contact"}>
+            Contato
+          </Label>
           {contact ? (
-            <div id="deal-contact" className="flex items-center justify-between gap-2 text-sm">
+            <div role="group" aria-labelledby="deal-contact-label" className="flex items-center justify-between gap-2 text-sm">
               {isEdit ? (
                 <Link href={`/contatos/${contact.id}`} className="font-medium underline underline-offset-2">
                   {contact.name}

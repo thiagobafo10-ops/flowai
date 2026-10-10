@@ -49,7 +49,7 @@ async function drag(page: Page, card: Locator, target: Locator) {
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2 + 10, { steps: 5 });
   await page.mouse.move(to.x + to.width / 2, to.y + 120, { steps: 20 });
-  await page.mouse.move(to.x + to.width / 2 + 2, to.y + 122, { steps: 3 });
+  await expect(target).toHaveAttribute("data-over", "true");
   await page.mouse.up();
 }
 
@@ -87,7 +87,7 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
     column(page, "Interessado").getByRole("group", { name: "Oportunidade — Ana" }),
   ).toBeVisible();
   await page.goto("/dashboard");
-  await expect(kpi(page, "Oportunidades")).toContainText("1");
+  await expect(kpi(page, "Oportunidades").getByText("1", { exact: true })).toBeVisible();
 
   // Contato com deal aberto aparece desabilitado; forçar pela URL mostra o erro do servidor.
   await page.goto("/pipeline");
@@ -111,7 +111,7 @@ test("cria, arrasta, move pelo menu, exclui e bloqueia deal duplicado", async ({
   await page.getByRole("menuitem", { name: "Ganho" }).click();
   await expect(column(page, "Ganho").getByRole("group", { name: "Oportunidade — Ana" })).toBeVisible();
   await page.goto("/dashboard");
-  await expect(kpi(page, "Conversão")).toContainText("100,0%");
+  await expect(kpi(page, "Conversão").getByText("100,0%", { exact: true })).toBeVisible();
 });
 
 test("mover deal já excluído por outra pessoa mostra erro e atualiza o quadro", async ({ page }) => {
@@ -145,6 +145,40 @@ test("ficha do contato: Criar deal abre o diálogo com o contato", async ({ page
   await expect(dialog).toBeHidden();
   await expect(page).not.toHaveURL(/novo=/);
   await expect(column(page, "Novo").getByRole("group", { name: "Oportunidade — Ana" })).toBeVisible();
+});
+
+test("teclado: menu, título e arrasto não conflitam", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Pipeline Teclado");
+  await createContact(page, "Ana");
+  await page.goto("/pipeline");
+  await createDeal(page, "Novo", "Ana", "100");
+  const card = column(page, "Novo").getByRole("group", { name: "Oportunidade — Ana" });
+
+  // Enter no botão "Mover deal" abre o menu (não inicia arrasto).
+  await card.getByRole("button", { name: "Mover deal" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Interessado" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Interessado" }).click();
+  const moved = column(page, "Interessado").getByRole("group", { name: "Oportunidade — Ana" });
+  await expect(moved).toBeVisible();
+
+  // Enter no título abre o diálogo.
+  await moved.getByRole("button", { name: "Oportunidade — Ana" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Deal" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  // Espaço no card + seta direita + espaço move uma coluna.
+  await moved.focus();
+  await page.keyboard.press("Space");
+  await expect(moved).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("ArrowRight");
+  // A seta saltou para a coluna seguinte: a etapa atual deixa de ser o alvo.
+  await expect(column(page, "Interessado")).toHaveAttribute("data-over", "false");
+  await page.keyboard.press("Space");
+  await expect(column(page, "Interessado").getByRole("group", { name: "Oportunidade — Ana" })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Oportunidade — Ana" })).toHaveCount(1);
 });
 
 test("API do pipeline exige sessão", async ({ request }) => {

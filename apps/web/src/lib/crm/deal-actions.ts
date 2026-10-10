@@ -21,6 +21,46 @@ function dbError(context: string, error: DbError): { ok: false; error: string } 
   return { ok: false, error: MSG_UNEXPECTED };
 }
 
+const MSG_STAGE_GONE = "Esta etapa não existe mais.";
+const MSG_OWNER_GONE = "O responsável não existe mais.";
+
+type Supabase = Awaited<ReturnType<typeof createServerClient>>;
+
+/** Etapa só vale se pertencer ao pipeline padrão da organização. */
+async function stagePipeline(
+  supabase: Supabase,
+  orgId: string,
+  stageId: string,
+): Promise<{ ok: true; pipelineId: string } | { ok: false; error: string }> {
+  const { data: pipe, error: pipeError } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (pipeError) return dbError("default pipeline lookup failed", pipeError);
+  if (!pipe) return { ok: false, error: MSG_STAGE_GONE };
+  const { data: stage, error } = await supabase
+    .from("pipeline_stages")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("pipeline_id", pipe.id)
+    .eq("id", stageId)
+    .maybeSingle();
+  if (error) return dbError("deal stage lookup failed", error);
+  if (!stage) return { ok: false, error: MSG_STAGE_GONE };
+  return { ok: true, pipelineId: pipe.id };
+}
+
+/** Violação de FK (23503) traduzida pela restrição envolvida. */
+function fkError(error: { message?: string }): { ok: false; error: string } {
+  const m = error.message ?? "";
+  if (m.includes("stage")) return { ok: false, error: MSG_STAGE_GONE };
+  if (m.includes("owner")) return { ok: false, error: MSG_OWNER_GONE };
+  if (m.includes("contact")) return { ok: false, error: "O contato não existe mais." };
+  return { ok: false, error: MSG_UNEXPECTED };
+}
+
 function parseDeal(input: DealInput): ActionResult<DealInput> {
   const parsed = dealSchema.safeParse(input);
   if (parsed.success) return { ok: true, data: parsed.data };
@@ -41,20 +81,14 @@ export async function createDeal(input: DealInput): Promise<ActionResult<{ id: s
   const d = parsed.data;
 
   const supabase = await createServerClient();
-  const { data: stage, error: stageError } = await supabase
-    .from("pipeline_stages")
-    .select("pipeline_id")
-    .eq("organization_id", org.id)
-    .eq("id", d.stageId)
-    .maybeSingle();
-  if (stageError) return dbError("deal stage lookup failed", stageError);
-  if (!stage) return { ok: false, error: "Esta etapa não existe mais.", fieldErrors: { stageId: ["Esta etapa não existe mais."] } };
+  const stage = await stagePipeline(supabase, org.id, d.stageId);
+  if (!stage.ok) return { ...stage, fieldErrors: { stageId: [stage.error] } };
 
   const { data, error } = await supabase
     .from("deals")
     .insert({
       organization_id: org.id,
-      pipeline_id: stage.pipeline_id,
+      pipeline_id: stage.pipelineId,
       stage_id: d.stageId,
       contact_id: d.contactId,
       title: d.title,
@@ -64,9 +98,7 @@ export async function createDeal(input: DealInput): Promise<ActionResult<{ id: s
     .select("id")
     .single();
   if (error) {
-    if (error.code === "23503") {
-      return { ok: false, error: "O contato ou o responsável não existe mais." };
-    }
+    if (error.code === "23503") return fkError(error);
     return dbError("create deal failed", error);
   }
   return { ok: true, data: { id: data.id } };
@@ -81,6 +113,8 @@ export async function updateDeal(id: string, input: DealInput): Promise<ActionRe
   const d = parsed.data;
 
   const supabase = await createServerClient();
+  const stage = await stagePipeline(supabase, org.id, d.stageId);
+  if (!stage.ok) return { ...stage, fieldErrors: { stageId: [stage.error] } };
   const { data, error } = await supabase
     .from("deals")
     .update({ stage_id: d.stageId, title: d.title, value: d.value, owner_id: d.ownerId })
@@ -88,7 +122,7 @@ export async function updateDeal(id: string, input: DealInput): Promise<ActionRe
     .eq("id", id)
     .select("id");
   if (error) {
-    if (error.code === "23503") return { ok: false, error: MSG_DEAL_GONE };
+    if (error.code === "23503") return fkError(error);
     return dbError("update deal failed", error);
   }
   if (data.length === 0) return { ok: false, error: MSG_DEAL_GONE };
@@ -103,6 +137,8 @@ export async function moveDeal(id: string, stageId: string): Promise<ActionResul
   }
 
   const supabase = await createServerClient();
+  const stage = await stagePipeline(supabase, org.id, stageId);
+  if (!stage.ok) return stage;
   const { data, error } = await supabase
     .from("deals")
     .update({ stage_id: stageId })
@@ -110,8 +146,7 @@ export async function moveDeal(id: string, stageId: string): Promise<ActionResul
     .eq("id", id)
     .select("id");
   if (error) {
-    // Etapa removida enquanto o quadro estava aberto.
-    if (error.code === "23503") return { ok: false, error: MSG_DEAL_GONE };
+    if (error.code === "23503") return fkError(error);
     return dbError("move deal failed", error);
   }
   if (data.length === 0) return { ok: false, error: MSG_DEAL_GONE };

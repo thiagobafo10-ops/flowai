@@ -49,13 +49,17 @@ export function DealCardBody({ deal, menu }: { deal: BoardDeal; menu?: React.Rea
 }
 
 export function DealCard({ deal, stages, canMove, onOpen, onMove }: CardProps) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: deal.id,
     disabled: !canMove,
   });
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        // O card é o ativador: teclas em botões internos não iniciam arrasto.
+        setActivatorNodeRef(node);
+      }}
       {...(canMove ? attributes : {})}
       {...(canMove ? listeners : {})}
       // Os atributos do dnd-kit trazem role="button"; o card contém botões, então é um grupo.

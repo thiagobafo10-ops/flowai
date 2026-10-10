@@ -27,6 +27,7 @@ export function KanbanColumn({ stage, stages, deals, canWrite, onNew, onOpen, on
     <section
       ref={setNodeRef}
       aria-label={stage.name}
+      data-over={isOver}
       className={cn(
         "flex min-h-[26rem] w-72 shrink-0 flex-col gap-3 rounded-xl bg-muted/50 p-3 ring-1 ring-foreground/5",
         isOver && "bg-accent ring-2 ring-ring",

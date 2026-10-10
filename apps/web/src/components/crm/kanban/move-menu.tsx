@@ -33,13 +33,14 @@ export function MoveMenu({ currentStageId, stages, onMove }: Props) {
             aria-label="Mover deal"
             onClick={stop}
             onPointerDown={stop}
+            onKeyDown={stop}
           />
         }
       >
         <ArrowRightLeftIcon />
       </DropdownMenuTrigger>
       {/* O menu é montado em portal, mas eventos React sobem até o card: não abrir o diálogo. */}
-      <DropdownMenuContent align="end" className="w-44" onClick={stop} onPointerDown={stop}>
+      <DropdownMenuContent align="end" className="w-44" onClick={stop} onPointerDown={stop} onKeyDown={stop}>
         <DropdownMenuGroup>
           <DropdownMenuLabel>Mover para…</DropdownMenuLabel>
           {stages
