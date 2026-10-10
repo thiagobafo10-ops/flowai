@@ -5,3 +5,10 @@ export type OrgRole = import("./db/database.types.ts").Database["public"]["Enums
 export * from "./dashboard/period.ts";
 export * from "./dashboard/format.ts";
 export * from "./dashboard/metrics.ts";
+export * from "./crm/phone.ts";
+export * from "./crm/labels.ts";
+export * from "./crm/contact.ts";
+export * from "./crm/filters.ts";
+export * from "./crm/tag.ts";
+export * from "./crm/deal.ts";
+export * from "./crm/kanban.ts";
