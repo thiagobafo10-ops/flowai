@@ -104,6 +104,7 @@ test("etapas: renomear, adicionar, reordenar, excluir movendo deals e marcar Gan
   await stageRow(page, "Ganho").getByRole("button", { name: "Ações da etapa Ganho" }).click();
   await expect(page.getByRole("menuitem", { name: "Excluir etapa" })).toBeDisabled();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
   // Marcar "Negociação" como Ganho.
   await stageRow(page, "Negociação").getByRole("button", { name: "Ações da etapa Negociação" }).click();
