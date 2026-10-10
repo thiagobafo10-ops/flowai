@@ -12,3 +12,5 @@ export * from "./crm/filters.ts";
 export * from "./crm/tag.ts";
 export * from "./crm/deal.ts";
 export * from "./crm/kanban.ts";
+export * from "./channels/index.ts";
+export * from "./inbox/index.ts";
