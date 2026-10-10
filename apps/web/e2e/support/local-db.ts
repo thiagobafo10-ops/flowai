@@ -139,3 +139,20 @@ export function breakDashboardRpc(): void {
 export function restoreDashboardRpc(): void {
   psql("grant execute on function public.dashboard_metrics(uuid, int) to authenticated");
 }
+
+/** Cria `n` contatos manuais "Contato 01..n" na org do usuário (somente Supabase local). */
+export function seedContacts(email: string, n: number): void {
+  assertEmail(email);
+  if (!Number.isInteger(n) || n < 1 || n > 1000) throw new Error("n inválido para helper");
+  psql(`
+do $$
+declare v_org uuid;
+begin
+  select m.organization_id into v_org
+    from public.memberships m join auth.users u on u.id = m.user_id
+    where u.email = '${email}' limit 1;
+  if v_org is null then raise exception 'org não encontrada para ${email}'; end if;
+  insert into public.contacts (organization_id, name, source)
+    select v_org, 'Contato ' || lpad(i::text, 2, '0'), 'manual' from generate_series(1, ${n}) i;
+end $$`);
+}

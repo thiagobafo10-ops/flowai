@@ -1,0 +1,113 @@
+"use server";
+
+import { contactSchema, tagSchema, type ContactInput, type TagColor } from "@flowai/core";
+import type { ActionResult } from "@/lib/action-result";
+import { getActiveOrg } from "@/lib/org/active-org";
+import { createServerClient } from "@/lib/supabase/server";
+import { toTagColor } from "@/lib/crm/queries";
+
+const MSG_FORBIDDEN = "Você não tem permissão para esta ação.";
+const MSG_UNEXPECTED = "Não foi possível concluir. Tente novamente.";
+const WRITE_ROLES = ["agent", "admin", "owner"];
+
+function dbError(context: string, error: { code?: string }): { ok: false; error: string } {
+  if (error.code === "42501") return { ok: false, error: MSG_FORBIDDEN };
+  console.error(context, error);
+  return { ok: false, error: MSG_UNEXPECTED };
+}
+
+export async function saveContact(
+  contactId: string | null,
+  input: ContactInput,
+): Promise<ActionResult<{ id: string; duplicateOf: { id: string; name: string } | null }>> {
+  const org = await getActiveOrg();
+  if (!org || !WRITE_ROLES.includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
+
+  const parsed = contactSchema.safeParse(input);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? "name");
+      (fieldErrors[key] ??= []).push(issue.message);
+    }
+    return { ok: false, error: parsed.error.issues[0]?.message ?? MSG_UNEXPECTED, fieldErrors };
+  }
+  const c = parsed.data;
+
+  const supabase = await createServerClient();
+  const { data: id, error } = await supabase.rpc("save_contact", {
+    p_org: org.id,
+    p_contact_id: contactId as string, // a função trata null (criação)
+    p_data: {
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      status: c.status,
+      assigned_to: c.assignedTo,
+      lead_score: c.leadScore,
+    },
+    p_tag_ids: c.tagIds,
+    p_custom_fields: c.customFields,
+  });
+  if (error || !id) return dbError("save_contact failed", error ?? {});
+
+  // Aviso de duplicidade (não bloqueante): outro contato com o mesmo telefone ou e-mail.
+  let duplicateOf: { id: string; name: string } | null = null;
+  for (const [column, value] of [
+    ["phone", c.phone],
+    ["email", c.email],
+  ] as const) {
+    if (!value || duplicateOf) continue;
+    const { data: dup, error: dupError } = await supabase
+      .from("contacts")
+      .select("id, name, phone, email")
+      .eq("organization_id", org.id)
+      .eq(column, value)
+      .neq("id", id)
+      .order("created_at")
+      .limit(1);
+    if (dupError) {
+      console.error("duplicate lookup failed", dupError);
+      continue;
+    }
+    const d = dup[0];
+    if (d) duplicateOf = { id: d.id, name: d.name || d.phone || d.email || "Sem nome" };
+  }
+
+  return { ok: true, data: { id, duplicateOf } };
+}
+
+export async function createTagInline(
+  name: string,
+): Promise<ActionResult<{ id: string; name: string; color: TagColor }>> {
+  const org = await getActiveOrg();
+  if (!org || !WRITE_ROLES.includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
+
+  const parsed = tagSchema.pick({ name: true }).safeParse({ name });
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? MSG_UNEXPECTED;
+    return { ok: false, error: message, fieldErrors: { name: [message] } };
+  }
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("tags")
+    .insert({ organization_id: org.id, name: parsed.data.name, color: "slate" })
+    .select("id, name, color")
+    .single();
+  if (!error) return { ok: true, data: { id: data.id, name: data.name, color: toTagColor(data.color) } };
+
+  if (error.code === "23505") {
+    // Nome repetido (sem diferenciar maiúsculas): devolve a tag existente.
+    const { data: all, error: listError } = await supabase
+      .from("tags")
+      .select("id, name, color")
+      .eq("organization_id", org.id);
+    if (listError) return dbError("tag lookup failed", listError);
+    const existing = all.find((t) => t.name.toLowerCase() === parsed.data.name.toLowerCase());
+    if (existing) {
+      return { ok: true, data: { id: existing.id, name: existing.name, color: toTagColor(existing.color) } };
+    }
+  }
+  return dbError("create tag failed", error);
+}
