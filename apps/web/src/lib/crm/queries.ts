@@ -93,3 +93,128 @@ export async function listTags(orgId: string): Promise<TagOption[]> {
     contactCount: t.contact_tags[0]?.count ?? 0,
   }));
 }
+
+export type ContactDeal = {
+  id: string;
+  title: string;
+  value: number;
+  status: "open" | "won" | "lost";
+  stageName: string;
+  ownerName: string | null;
+  updatedAt: string;
+};
+
+export type ContactEvent = {
+  id: string;
+  type: string;
+  createdAt: string;
+  fromStage: string | null;
+  toStage: string | null;
+};
+
+export type ContactDetail = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  status: ContactStatus;
+  source: ContactSource;
+  leadScore: number;
+  assignedTo: string | null;
+  assigneeName: string | null;
+  lastInteractionAt: string | null;
+  createdAt: string;
+  tags: { id: string; name: string; color: TagColor }[];
+  customFields: { key: string; value: string }[];
+  deals: ContactDeal[];
+  events: ContactEvent[];
+  timezone: string;
+};
+
+const REMOVED_STAGE = "etapa removida";
+const HISTORY_LIMIT = 50;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getContact(orgId: string, id: string): Promise<ContactDetail | null> {
+  // Id malformado nunca existe (evita o erro 22P02 do Postgres).
+  if (!UUID_RE.test(id)) return null;
+  const supabase = await createServerClient();
+
+  const { data: c, error } = await supabase
+    .from("contacts")
+    .select("*, contact_tags(tags(id, name, color)), contact_custom_fields(key, value, created_at)")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error("Falha ao carregar contato", { cause: error });
+  if (!c) return null;
+
+  const [dealsRes, eventsRes, stagesRes, orgRes, members] = await Promise.all([
+    supabase
+      .from("deals")
+      .select("id, title, value, status, stage_id, owner_id, updated_at")
+      .eq("organization_id", orgId)
+      .eq("contact_id", id)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("events")
+      .select("id, type, payload, created_at")
+      .eq("organization_id", orgId)
+      .eq("contact_id", id)
+      .in("type", ["contact_created", "deal_created", "deal_stage_changed", "deal_won", "deal_lost"])
+      .order("created_at", { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase.from("pipeline_stages").select("id, name").eq("organization_id", orgId),
+    supabase.from("organizations").select("timezone").eq("id", orgId).single(),
+    listMembers(orgId),
+  ]);
+  for (const r of [dealsRes, eventsRes, stagesRes, orgRes]) {
+    if (r.error) throw new Error("Falha ao carregar contato", { cause: r.error });
+  }
+
+  const stageName = new Map((stagesRes.data ?? []).map((s) => [s.id, s.name]));
+  const memberName = new Map(members.map((m) => [m.userId, m.name]));
+  const nameOf = (sid: unknown) =>
+    typeof sid === "string" ? (stageName.get(sid) ?? REMOVED_STAGE) : null;
+
+  return {
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    status: c.status,
+    source: c.source,
+    leadScore: c.lead_score,
+    assignedTo: c.assigned_to,
+    assigneeName: c.assigned_to ? (memberName.get(c.assigned_to) ?? null) : null,
+    lastInteractionAt: c.last_interaction_at,
+    createdAt: c.created_at,
+    tags: c.contact_tags
+      .flatMap((ct) => (ct.tags ? [ct.tags] : []))
+      .map((t) => ({ id: t.id, name: t.name, color: toTagColor(t.color) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    customFields: [...c.contact_custom_fields]
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((f) => ({ key: f.key, value: f.value ?? "" })),
+    deals: (dealsRes.data ?? []).map((d) => ({
+      id: d.id,
+      title: d.title,
+      value: Number(d.value),
+      status: d.status,
+      stageName: stageName.get(d.stage_id) ?? REMOVED_STAGE,
+      ownerName: d.owner_id ? (memberName.get(d.owner_id) ?? null) : null,
+      updatedAt: d.updated_at,
+    })),
+    events: (eventsRes.data ?? []).map((e) => {
+      const p = (e.payload ?? {}) as Record<string, unknown>;
+      return {
+        id: e.id,
+        type: e.type,
+        createdAt: e.created_at,
+        fromStage: nameOf(p.from_stage_id),
+        toStage: nameOf(p.to_stage_id),
+      };
+    }),
+    timezone: orgRes.data?.timezone ?? "America/Sao_Paulo",
+  };
+}

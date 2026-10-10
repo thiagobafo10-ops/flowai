@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { clearRateLimits, seedContacts } from "./support/local-db";
+import { addMember, clearRateLimits, seedContacts } from "./support/local-db";
 
 const PASSWORD = "senha-segura-123";
 test.beforeEach(() => clearRateLimits());
@@ -99,4 +99,103 @@ test("paginação por URL", async ({ page }) => {
   await page.goto("/contatos?pagina=99");
   await expect(page.getByText("Página 1 de 2")).toBeVisible();
   await expect(page).not.toHaveURL(/pagina=99/);
+});
+
+async function createJoao(page: Page) {
+  await page.goto("/contatos");
+  await page.getByRole("button", { name: "Novo contato" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Novo contato" });
+  await dialog.getByLabel("Nome", { exact: true }).fill("João Silva");
+  await dialog.getByLabel("Telefone").fill("(11) 99999-8888");
+  await dialog.getByLabel("Nova tag").fill("VIP");
+  await dialog.getByRole("button", { name: "Criar tag" }).click();
+  await expect(dialog.getByRole("button", { name: "VIP", pressed: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Salvar" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("row", { name: /João Silva/ })).toBeVisible();
+  // router.refresh() pós-salvar pode renderizar a linha de novo durante o clique.
+  await expect(async () => {
+    await page.getByRole("link", { name: "João Silva" }).first().click();
+    await expect(page).toHaveURL(/\/contatos\/[0-9a-f-]{36}$/, { timeout: 2000 });
+  }).toPass();
+}
+
+test("ficha: dados, campos, tags, edição e exclusão", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Ficha");
+  await createJoao(page);
+
+  await expect(page.getByRole("heading", { name: "João Silva" })).toBeVisible();
+  await expect(page.getByText("(11) 99999-8888").first()).toBeVisible();
+  await expect(page.getByText("VIP").first()).toBeVisible();
+  await expect(page.getByText("Contato criado")).toBeVisible();
+  await expect(page.getByText("Nenhuma conversa ainda.")).toBeVisible();
+
+  // Campo personalizado persiste.
+  await page.getByLabel("Nome do campo").fill("Cidade");
+  await page.getByLabel("Valor", { exact: true }).fill("Campinas");
+  await page.getByRole("button", { name: "Adicionar campo" }).click();
+  await expect(page.getByText("Campinas")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Cidade")).toBeVisible();
+  await expect(page.getByText("Campinas")).toBeVisible();
+
+  // Edição pelo diálogo.
+  await page.getByRole("button", { name: "Editar", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Editar contato" });
+  await dialog.getByLabel("Nome", { exact: true }).fill("João Souza");
+  await dialog.getByRole("button", { name: "Salvar" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: "João Souza" })).toBeVisible();
+  // A edição preserva os campos personalizados.
+  await expect(page.getByText("Campinas")).toBeVisible();
+
+  // Remover tag pelo chip.
+  await page.getByRole("button", { name: "Remover tag VIP" }).click();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "João Souza" })).toBeVisible();
+
+  // Exclusão com confirmação.
+  await page.getByRole("button", { name: "Excluir", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Excluir contato?" });
+  await expect(confirm.getByText("Esta ação não pode ser desfeita.")).toBeVisible();
+  await confirm.getByRole("button", { name: "Excluir" }).click();
+  await expect(page).toHaveURL(/\/contatos$/);
+  await expect(page.getByRole("row", { name: /João Souza/ })).toHaveCount(0);
+});
+
+test("ficha: viewer não vê ações de escrita", async ({ page, browser, baseURL }) => {
+  const ownerEmail = newEmail();
+  await signUpWithOrg(page, ownerEmail, "Org Ficha Viewer");
+  await createJoao(page);
+
+  const viewerEmail = newEmail();
+  const ctx = await browser.newContext({ baseURL });
+  try {
+    const vp = await ctx.newPage();
+    await vp.goto("/signup");
+    await vp.getByLabel("Nome completo").fill("Vera Viewer");
+    await vp.getByLabel("E-mail").fill(viewerEmail);
+    await vp.getByLabel("Senha").fill(PASSWORD);
+    await vp.getByRole("button", { name: "Criar conta" }).click();
+    await expect(vp).toHaveURL(/\/onboarding$/);
+    addMember(ownerEmail, viewerEmail, "viewer");
+    await vp.goto("/contatos");
+    await vp.getByRole("link", { name: "João Silva" }).first().click();
+    await expect(vp.getByRole("heading", { name: "João Silva" })).toBeVisible();
+    await expect(vp.getByText("VIP").first()).toBeVisible();
+    await expect(vp.getByRole("button", { name: "Editar", exact: true })).toHaveCount(0);
+    await expect(vp.getByRole("button", { name: "Excluir", exact: true })).toHaveCount(0);
+    await expect(vp.getByRole("button", { name: "Adicionar tag" })).toHaveCount(0);
+    await expect(vp.getByRole("button", { name: "Adicionar campo" })).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("ficha: contato inexistente", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Ficha 404");
+  await page.goto("/contatos/3f0c1f0e-6a52-4a4e-9a55-1d2f7a0b9c11");
+  await expect(page.getByText("Contato não encontrado")).toBeVisible();
 });

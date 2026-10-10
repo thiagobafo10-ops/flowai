@@ -1,5 +1,7 @@
 "use server";
 
+import { redirect } from "next/navigation";
+import { z } from "zod";
 import { contactSchema, tagSchema, type ContactInput, type TagColor } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
@@ -110,4 +112,106 @@ export async function createTagInline(
     }
   }
   return dbError("create tag failed", error);
+}
+
+type CurrentContact = Pick<
+  ContactInput,
+  "name" | "phone" | "email" | "status" | "assignedTo" | "leadScore" | "tagIds" | "customFields"
+>;
+
+async function loadCurrent(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  orgId: string,
+  contactId: string,
+): Promise<{ ok: true; data: CurrentContact } | { ok: false; error: string }> {
+  const { data: c, error } = await supabase
+    .from("contacts")
+    .select(
+      "name, phone, email, status, assigned_to, lead_score, contact_tags(tag_id), contact_custom_fields(key, value, created_at)",
+    )
+    .eq("organization_id", orgId)
+    .eq("id", contactId)
+    .maybeSingle();
+  if (error) return dbError("contact lookup failed", error);
+  if (!c) return { ok: false, error: MSG_UNEXPECTED };
+  return {
+    ok: true,
+    data: {
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      status: c.status,
+      assignedTo: c.assigned_to,
+      leadScore: c.lead_score,
+      tagIds: c.contact_tags.map((t) => t.tag_id),
+      customFields: [...c.contact_custom_fields]
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((f) => ({ key: f.key, value: f.value ?? "" })),
+    },
+  };
+}
+
+// Reaproveita os dados atuais do contato e troca só a parte alterada (save_contact substitui os conjuntos).
+async function updateContactParts(
+  contactId: string,
+  patch: Partial<Pick<CurrentContact, "tagIds" | "customFields">>,
+): Promise<ActionResult> {
+  const org = await getActiveOrg();
+  if (!org || !WRITE_ROLES.includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
+
+  const supabase = await createServerClient();
+  const cur = await loadCurrent(supabase, org.id, contactId);
+  if (!cur.ok) return cur;
+  const next = { ...cur.data, ...patch };
+
+  const { error } = await supabase.rpc("save_contact", {
+    p_org: org.id,
+    p_contact_id: contactId,
+    p_data: {
+      name: next.name,
+      phone: next.phone,
+      email: next.email,
+      status: next.status,
+      assigned_to: next.assignedTo,
+      lead_score: next.leadScore,
+    },
+    p_tag_ids: next.tagIds,
+    p_custom_fields: next.customFields,
+  });
+  if (error) return dbError("save_contact failed", error);
+  return { ok: true, data: undefined };
+}
+
+export async function setContactTags(contactId: string, tagIds: string[]): Promise<ActionResult> {
+  const parsed = z.array(z.uuid()).safeParse(tagIds);
+  if (!parsed.success || !z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
+  return updateContactParts(contactId, { tagIds: parsed.data });
+}
+
+export async function saveCustomFields(
+  contactId: string,
+  fields: { key: string; value: string }[],
+): Promise<ActionResult> {
+  const parsed = contactSchema.shape.customFields.safeParse(fields);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? MSG_UNEXPECTED };
+  if (!z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
+  return updateContactParts(contactId, { customFields: parsed.data });
+}
+
+export async function deleteContact(contactId: string): Promise<ActionResult> {
+  const org = await getActiveOrg();
+  if (!org || !["admin", "owner"].includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
+  if (!z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
+
+  const supabase = await createServerClient();
+  // select() distingue "RLS não apagou nada" de sucesso.
+  const { data, error } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("organization_id", org.id)
+    .eq("id", contactId)
+    .select("id");
+  if (error) return dbError("delete contact failed", error);
+  if (data.length === 0) return { ok: false, error: MSG_FORBIDDEN };
+  redirect("/contatos");
 }

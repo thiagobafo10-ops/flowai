@@ -156,3 +156,21 @@ begin
     select v_org, 'Contato ' || lpad(i::text, 2, '0'), 'manual' from generate_series(1, ${n}) i;
 end $$`);
 }
+
+/** Adiciona um usuário já cadastrado como membro da org do dono (somente Supabase local). */
+export function addMember(ownerEmail: string, memberEmail: string, role: "viewer" | "agent" | "admin"): void {
+  assertEmail(ownerEmail);
+  assertEmail(memberEmail);
+  if (!["viewer", "agent", "admin"].includes(role)) throw new Error("papel inválido para helper");
+  psql(`
+do $$
+declare v_org uuid; v_user uuid;
+begin
+  select m.organization_id into v_org
+    from public.memberships m join auth.users u on u.id = m.user_id
+    where u.email = '${ownerEmail}' limit 1;
+  select id into v_user from auth.users where email = '${memberEmail}';
+  if v_org is null or v_user is null then raise exception 'org ou usuário não encontrado'; end if;
+  insert into public.memberships (organization_id, user_id, role) values (v_org, v_user, '${role}');
+end $$`);
+}
