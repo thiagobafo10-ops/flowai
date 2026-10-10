@@ -49,6 +49,7 @@ async function drag(page: Page, card: Locator, target: Locator) {
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2 + 10, { steps: 5 });
   await page.mouse.move(to.x + to.width / 2, to.y + 120, { steps: 20 });
+  await page.mouse.move(to.x + to.width / 2 + 2, to.y + 122, { steps: 3 });
   await page.mouse.up();
 }
 
