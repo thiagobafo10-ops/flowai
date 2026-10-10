@@ -114,69 +114,22 @@ export async function createTagInline(
   return dbError("create tag failed", error);
 }
 
-type CurrentContact = Pick<
-  ContactInput,
-  "name" | "phone" | "email" | "status" | "assignedTo" | "leadScore" | "tagIds" | "customFields"
->;
-
-async function loadCurrent(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
-  orgId: string,
+// save_contact parcial: conjunto nulo = inalterado (array vazio limpa). Sem leitura prévia, sem corrida.
+async function savePart(
   contactId: string,
-): Promise<{ ok: true; data: CurrentContact } | { ok: false; error: string }> {
-  const { data: c, error } = await supabase
-    .from("contacts")
-    .select(
-      "name, phone, email, status, assigned_to, lead_score, contact_tags(tag_id), contact_custom_fields(key, value, created_at)",
-    )
-    .eq("organization_id", orgId)
-    .eq("id", contactId)
-    .maybeSingle();
-  if (error) return dbError("contact lookup failed", error);
-  if (!c) return { ok: false, error: MSG_UNEXPECTED };
-  return {
-    ok: true,
-    data: {
-      name: c.name,
-      phone: c.phone,
-      email: c.email,
-      status: c.status,
-      assignedTo: c.assigned_to,
-      leadScore: c.lead_score,
-      tagIds: c.contact_tags.map((t) => t.tag_id),
-      customFields: [...c.contact_custom_fields]
-        .sort((a, b) => a.created_at.localeCompare(b.created_at))
-        .map((f) => ({ key: f.key, value: f.value ?? "" })),
-    },
-  };
-}
-
-// Reaproveita os dados atuais do contato e troca só a parte alterada (save_contact substitui os conjuntos).
-async function updateContactParts(
-  contactId: string,
-  patch: Partial<Pick<CurrentContact, "tagIds" | "customFields">>,
+  tagIds: string[] | null,
+  customFields: { key: string; value: string }[] | null,
 ): Promise<ActionResult> {
   const org = await getActiveOrg();
   if (!org || !WRITE_ROLES.includes(org.role)) return { ok: false, error: MSG_FORBIDDEN };
 
   const supabase = await createServerClient();
-  const cur = await loadCurrent(supabase, org.id, contactId);
-  if (!cur.ok) return cur;
-  const next = { ...cur.data, ...patch };
-
   const { error } = await supabase.rpc("save_contact", {
     p_org: org.id,
     p_contact_id: contactId,
-    p_data: {
-      name: next.name,
-      phone: next.phone,
-      email: next.email,
-      status: next.status,
-      assigned_to: next.assignedTo,
-      lead_score: next.leadScore,
-    },
-    p_tag_ids: next.tagIds,
-    p_custom_fields: next.customFields,
+    p_data: {},
+    p_tag_ids: tagIds as string[],
+    p_custom_fields: customFields as { key: string; value: string }[],
   });
   if (error) return dbError("save_contact failed", error);
   return { ok: true, data: undefined };
@@ -185,7 +138,7 @@ async function updateContactParts(
 export async function setContactTags(contactId: string, tagIds: string[]): Promise<ActionResult> {
   const parsed = z.array(z.uuid()).safeParse(tagIds);
   if (!parsed.success || !z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
-  return updateContactParts(contactId, { tagIds: parsed.data });
+  return savePart(contactId, parsed.data, null);
 }
 
 export async function saveCustomFields(
@@ -195,7 +148,7 @@ export async function saveCustomFields(
   const parsed = contactSchema.shape.customFields.safeParse(fields);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? MSG_UNEXPECTED };
   if (!z.uuid().safeParse(contactId).success) return { ok: false, error: MSG_UNEXPECTED };
-  return updateContactParts(contactId, { customFields: parsed.data });
+  return savePart(contactId, null, parsed.data);
 }
 
 export async function deleteContact(contactId: string): Promise<ActionResult> {

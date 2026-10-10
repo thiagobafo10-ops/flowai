@@ -17,9 +17,10 @@ type Props = {
   onChange: (ids: string[]) => void;
   /** Chamado quando uma tag é criada na hora, para o pai incluí-la na lista. */
   onCreated: (tag: PickerTag) => void;
+  disabled?: boolean;
 };
 
-export function TagPicker({ tags, selected, onChange, onCreated }: Props) {
+export function TagPicker({ tags, selected, onChange, onCreated, disabled }: Props) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -56,6 +57,7 @@ export function TagPicker({ tags, selected, onChange, onCreated }: Props) {
               key={t.id}
               type="button"
               aria-pressed={on}
+              disabled={disabled}
               onClick={() => toggle(t.id)}
               className={cn(
                 "rounded-full px-2.5 py-0.5 text-xs font-medium outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-ring",

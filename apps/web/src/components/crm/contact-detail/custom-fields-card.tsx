@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 type Field = { key: string; value: string };
 type Props = { contactId: string; fields: Field[]; canEdit: boolean };
 
-export function CustomFieldsCard({ contactId, fields, canEdit }: Props) {
+export function CustomFieldsCard({ contactId, fields: propFields, canEdit }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -20,12 +20,24 @@ export function CustomFieldsCard({ contactId, fields, canEdit }: Props) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  // Estado local (otimista), ressincronizado quando o servidor devolve os campos.
+  const propKey = JSON.stringify(propFields);
+  const [seenKey, setSeenKey] = useState(propKey);
+  const [fields, setFields] = useState(propFields);
+  if (seenKey !== propKey) {
+    setSeenKey(propKey);
+    setFields(propFields);
+  }
 
   function persist(next: Field[], onDone?: () => void) {
+    if (pending) return;
+    const previous = fields;
     setError(null);
+    setFields(next);
     startTransition(async () => {
       const result = await saveCustomFields(contactId, next);
       if (!result.ok) {
+        setFields(previous);
         setError(result.error);
         toast.error(result.error);
         return;

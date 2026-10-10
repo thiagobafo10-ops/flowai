@@ -23,13 +23,30 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
   const [picking, setPicking] = useState(false);
   const [allTags, setAllTags] = useState(initialAll);
   const [error, setError] = useState<string | null>(null);
-  const selected = tags.map((t) => t.id);
+  // Estado local (otimista), ressincronizado quando o servidor devolve as tags.
+  const propIds = tags.map((t) => t.id);
+  const propKey = propIds.join(",");
+  const [seenKey, setSeenKey] = useState(propKey);
+  const [selected, setSelected] = useState(propIds);
+  if (seenKey !== propKey) {
+    setSeenKey(propKey);
+    setSelected(propIds);
+  }
+  const tagById = new Map(allTags.map((t) => [t.id, t]));
+  const shown = selected.flatMap((id) => {
+    const t = tagById.get(id);
+    return t ? [t] : [];
+  });
 
   function update(ids: string[]) {
+    if (pending) return;
+    const previous = selected;
     setError(null);
+    setSelected(ids);
     startTransition(async () => {
       const result = await setContactTags(contactId, ids);
       if (!result.ok) {
+        setSelected(previous);
         setError(result.error);
         toast.error(result.error);
         return;
@@ -45,8 +62,8 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
       </CardHeader>
       <CardContent className="space-y-3">
         <ul className="flex flex-wrap gap-1.5" aria-label="Tags do contato">
-          {tags.length === 0 && <li className="text-sm text-muted-foreground">Nenhuma tag.</li>}
-          {tags.map((t) => (
+          {shown.length === 0 && <li className="text-sm text-muted-foreground">Nenhuma tag.</li>}
+          {shown.map((t) => (
             <li key={t.id} className="inline-flex items-center gap-0.5">
               <TagBadge name={t.name} color={t.color} />
               {canEdit && (
@@ -72,6 +89,7 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
               <TagPicker
                 tags={allTags}
                 selected={selected}
+                disabled={pending}
                 onChange={update}
                 onCreated={(t) => setAllTags((prev) => (prev.some((p) => p.id === t.id) ? prev : [...prev, t]))}
               />

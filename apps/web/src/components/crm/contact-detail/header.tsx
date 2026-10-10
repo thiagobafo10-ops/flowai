@@ -93,7 +93,10 @@ export function ContactHeader({
           </Button>
         )}
         {canDelete && (
-          <Button type="button" variant="outline" onClick={() => setDeleteOpen(true)}>
+          <Button type="button" variant="outline" onClick={() => {
+              setError(null);
+              setDeleteOpen(true);
+            }}>
             <Trash2Icon />
             Excluir
           </Button>
@@ -110,7 +113,13 @@ export function ContactHeader({
         />
       )}
       {canDelete && (
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <Dialog
+          open={deleteOpen}
+          onOpenChange={(o) => {
+            setDeleteOpen(o);
+            if (!o) setError(null);
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Excluir contato?</DialogTitle>

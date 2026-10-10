@@ -199,3 +199,38 @@ test("ficha: contato inexistente", async ({ page }) => {
   await page.goto("/contatos/3f0c1f0e-6a52-4a4e-9a55-1d2f7a0b9c11");
   await expect(page.getByText("Contato não encontrado")).toBeVisible();
 });
+
+test("ficha: alternar tags em sequência rápida não perde atualizações", async ({ page }) => {
+  await signUpWithOrg(page, newEmail(), "Org Ficha Tags");
+  await createJoao(page);
+
+  await page.getByRole("button", { name: "Adicionar tag" }).click();
+  const picker = page.getByRole("group", { name: "Tags" });
+  for (const name of ["Alfa", "Beta"]) {
+    await page.getByLabel("Nova tag").fill(name);
+    await page.getByRole("button", { name: "Criar tag" }).click();
+    await expect(picker.getByRole("button", { name, pressed: true })).toBeVisible();
+  }
+  await page.reload();
+  await page.getByRole("button", { name: "Adicionar tag" }).click();
+  const picker2 = page.getByRole("group", { name: "Tags" });
+  await expect(picker2.getByRole("button", { name: "Alfa", pressed: true })).toBeVisible();
+
+  // Desliga as duas em sequência, sem esperar entre os cliques.
+  await picker2.getByRole("button", { name: "Alfa" }).click();
+  await picker2.getByRole("button", { name: "Beta" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remover tag Beta" })).toHaveCount(0);
+
+  // Liga as duas em sequência: ambas persistem.
+  await page.getByRole("button", { name: "Adicionar tag" }).click();
+  const picker3 = page.getByRole("group", { name: "Tags" });
+  await picker3.getByRole("button", { name: "Alfa" }).click();
+  await picker3.getByRole("button", { name: "Beta" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Remover tag Alfa" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag Beta" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remover tag VIP" })).toBeVisible();
+});
