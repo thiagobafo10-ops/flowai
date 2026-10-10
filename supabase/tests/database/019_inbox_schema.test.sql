@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(33);
 
 select tests.create_user('a19@t.test', 'Dona') as ua \gset
 select tests.create_user('b19@t.test', 'Outro') as ub \gset
@@ -59,7 +59,7 @@ select tests.clear_authentication();
 select is((select count(*)::int from public.messages where conversation_id = '00000000-0000-0000-0000-000000001921' and sender_type = 'system'), 1, 'uma mensagem de sistema');
 select is((select content from public.messages where conversation_id = '00000000-0000-0000-0000-000000001921' and sender_type = 'system'),
   'Ana transferiu para Bruno', 'texto de transferência');
-select is((select direction::text || '/' || status::text || '/' || sender_user_id::text from public.messages where sender_type = 'system'),
+select is((select direction::text || '/' || status::text || '/' || sender_user_id::text from public.messages where sender_type = 'system' and conversation_id = '00000000-0000-0000-0000-000000001921' and content like '%transferiu%'),
   'outbound/delivered/' || :'uana', 'campos da mensagem de sistema');
 select is((select last_message_at from public.conversations where id = '00000000-0000-0000-0000-000000001921'),
   '2026-01-01 10:00:00+00'::timestamptz, 'mensagem de sistema não altera last_message_at');
@@ -90,6 +90,48 @@ insert into public.messages (organization_id, conversation_id, channel_id, direc
   values (:'org_a', '00000000-0000-0000-0000-000000001921', '00000000-0000-0000-0000-000000001911', 'outbound', 'human', :'uana', 'nota', true, '2026-03-01 10:00:00+00');
 select is((select last_message_at from public.conversations where id = '00000000-0000-0000-0000-000000001921'),
   '2026-02-01 10:00:00+00'::timestamptz, 'nota interna não altera last_message_at');
+-- last_message_at só avança; ai e contato também atualizam
+insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, created_at)
+  values (:'org_a', '00000000-0000-0000-0000-000000001921', '00000000-0000-0000-0000-000000001911', 'inbound', 'contact', 'c1', '2026-05-01 10:00:00+00');
+select is((select last_message_at from public.conversations where id = '00000000-0000-0000-0000-000000001921'),
+  '2026-05-01 10:00:00+00'::timestamptz, 'mensagem do contato atualiza last_message_at');
+insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, created_at)
+  values (:'org_a', '00000000-0000-0000-0000-000000001921', '00000000-0000-0000-0000-000000001911', 'inbound', 'contact', 'c0', '2026-04-01 10:00:00+00');
+select is((select last_message_at from public.conversations where id = '00000000-0000-0000-0000-000000001921'),
+  '2026-05-01 10:00:00+00'::timestamptz, 'mensagem mais antiga não recua last_message_at');
+insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, created_at)
+  values (:'org_a', '00000000-0000-0000-0000-000000001921', '00000000-0000-0000-0000-000000001911', 'outbound', 'ai', 'ia', '2026-06-01 10:00:00+00');
+select is((select last_message_at from public.conversations where id = '00000000-0000-0000-0000-000000001921'),
+  '2026-06-01 10:00:00+00'::timestamptz, 'mensagem da IA atualiza last_message_at');
+
+-- closed_at também no INSERT
+insert into public.conversations (id, organization_id, contact_id, channel_id, status) values
+  ('00000000-0000-0000-0000-000000001922', :'org_a', '00000000-0000-0000-0000-000000001901',
+   '00000000-0000-0000-0000-000000001911', 'closed');
+select isnt((select closed_at from public.conversations where id = '00000000-0000-0000-0000-000000001922'), null, 'inserir fechada define closed_at');
+
+-- textos exatos e fallback
+select tests.authenticate_as(:'uana');
+select public.log_conversation_system_message('00000000-0000-0000-0000-000000001921', 'assumed');
+select public.log_conversation_system_message('00000000-0000-0000-0000-000000001921', 'unassigned');
+select public.log_conversation_system_message('00000000-0000-0000-0000-000000001921', 'reopened');
+select throws_ok($$select public.log_conversation_system_message('00000000-0000-0000-0000-000000001921', 'assigned', null)$$, '22023', null, 'assigned sem alvo');
+select throws_ok($$select public.mark_conversation_read('00000000-0000-0000-0000-0000000019ff')$$, '42501', null, 'mark_conversation_read de id inexistente');
+select tests.clear_authentication();
+select is((select count(*)::int from public.messages where sender_type = 'system' and content = 'Ana assumiu a conversa'), 1, 'texto assumed');
+select is((select count(*)::int from public.messages where sender_type = 'system' and content = 'Ana removeu o responsável'), 1, 'texto unassigned');
+select is((select count(*)::int from public.messages where sender_type = 'system' and content = 'Conversa reaberta por Ana'), 1, 'texto reopened');
+
+select tests.create_user('vazio19@t.test', 'x') as uvazio \gset
+select tests.add_member(:'org_a', :'uvazio', 'agent');
+update public.profiles set full_name = '' where id = :'uvazio';
+select tests.authenticate_as(:'uvazio');
+select public.log_conversation_system_message('00000000-0000-0000-0000-000000001921', 'closed');
+select tests.clear_authentication();
+select is((select count(*)::int from public.messages where sender_type = 'system' and content = 'Conversa fechada por Alguém'), 1, 'fallback Alguém');
+
+select is((select count(*)::int from public.events e where e.payload ->> 'message_id' in
+  (select id::text from public.messages where sender_type = 'system')), 0, 'mensagens de sistema não emitem eventos');
 
 select * from finish();
 rollback;

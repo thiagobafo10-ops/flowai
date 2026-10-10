@@ -14,7 +14,9 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.status = 'closed' and old.status is distinct from 'closed' then
+  if tg_op = 'INSERT' then
+    new.closed_at := case when new.status = 'closed' then now() else null end;
+  elsif new.status = 'closed' and old.status is distinct from 'closed' then
     new.closed_at := now();
   elsif new.status <> 'closed' and old.status = 'closed' then
     new.closed_at := null;
@@ -23,7 +25,7 @@ begin
 end $$;
 
 create trigger conversations_closed_at
-  before update of status on public.conversations
+  before insert or update of status on public.conversations
   for each row execute function public.conversations_set_closed_at();
 
 revoke update (closed_at) on public.conversations from authenticated;
@@ -110,7 +112,8 @@ set search_path = ''
 as $$
 begin
   if new.is_internal_note = false and new.sender_type in ('contact', 'human', 'ai', 'automation') then
-    update public.conversations set last_message_at = new.created_at where id = new.conversation_id;
+    update public.conversations set last_message_at = new.created_at
+    where id = new.conversation_id and (last_message_at is null or last_message_at < new.created_at);
   end if;
   return null;
 end $$;
@@ -123,7 +126,7 @@ create trigger messages_touch_conversation
 create function public.log_conversation_system_message(
   p_conversation uuid,
   p_kind text,
-  p_target_user uuid default null
+  p_target_user uuid default null -- usado apenas por 'assigned'
 ) returns void
 language plpgsql
 security definer
