@@ -21,7 +21,8 @@ select (:'saved'::jsonb->>'channelId') as chan \gset
 select is((select status::text from public.channels where id=:'chan'), 'needs_setup', 'save does not activate');
 select ok(not (:'saved'::jsonb ? 'appSecret') and not (:'saved'::jsonb ? 'accessToken'), 'save result contains no secrets');
 select is(public.read_meta_connection_secrets(:'conn')->>'appSecret', 'app-secret', 'service can read correct secret');
-select throws_ok(format($$select public.save_instagram_connection(%L,%L,'{"appId":"123","appSecret":"other","accessToken":"other","accountId":"790","apiVersion":"v26.0"}')$$, :'ub', :'ob'), '23505', null, 'app cannot be shared across organizations');
+-- Unverified claims across organizations: see 031. Same organization never duplicates an app.
+select throws_ok(format($$select public.save_instagram_connection(%L,%L,'{"appId":"123","appSecret":"other","accessToken":"other","accountId":"790","apiVersion":"v26.0"}')$$, :'ua', :'oa'), '23505', null, 'app cannot be duplicated in the same organization');
 select is((select count(*)::int from vault.secrets where name like 'flowai-meta-%'), 3, 'failed save leaves no orphan secrets');
 select tests.authenticate_as(:'ua');
 select throws_ok(format($$update public.channels set status='active' where id=%L$$, :'chan'), '42501', null, 'owner cannot activate Instagram by direct UPDATE');

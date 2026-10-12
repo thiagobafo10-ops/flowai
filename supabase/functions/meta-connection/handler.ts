@@ -1,5 +1,6 @@
 import type { Authorize } from "../_shared/auth.ts";
 import { RepositoryError, type MetaConnectionRepository } from "../_shared/meta-repository.ts";
+import { BodyTooLarge, readLimitedBody } from "../_shared/http.ts";
 
 export type MetaConnectionDeps = { authorize: Authorize; repository: MetaConnectionRepository; fetch: typeof fetch };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,10 +9,9 @@ function json(data: unknown, status = 200): Response { return Response.json(data
 export async function handleMetaConnection(request: Request, deps: MetaConnectionDeps): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   try {
-    const text = await request.text();
-    if (new TextEncoder().encode(text).length > 32768) return json({ error: "body_too_large" }, 413);
     let input: Record<string, unknown>;
-    try { input = JSON.parse(text); } catch { return json({ error: "invalid_input" }, 400); }
+    try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(request, 32768))); }
+    catch (error) { return error instanceof BodyTooLarge ? json({ error: "body_too_large" }, 413) : json({ error: "invalid_input" }, 400); }
     if (!input || typeof input !== "object" || typeof input.organizationId !== "string" || !uuid.test(input.organizationId)) return json({ error: "invalid_input" }, 400);
     const actor = await deps.authorize(request, input.organizationId, "admin");
     if (!actor) return json({ error: "forbidden" }, 403);
@@ -21,6 +21,12 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       return json({ connectionId: result.connectionId, channelId: result.channelId });
     }
     if (typeof input.connectionId !== "string" || !uuid.test(input.connectionId)) return json({ error: "invalid_input" }, 400);
+    // Ownership and role are enforced by the service RPC itself; a removed
+    // connection may no longer have readable secrets.
+    if (input.action === "remove") {
+      const removed = await deps.repository.removeConnection(actor.userId, input.organizationId, input.connectionId);
+      return json({ removed: removed.removed === true, disconnected: removed.disconnected === true });
+    }
     const secrets = await deps.repository.readConnectionSecrets(input.connectionId);
     if (!secrets || secrets.organizationId !== input.organizationId) return json({ error: "forbidden" }, 403);
     if (input.action === "disconnect") {
@@ -60,7 +66,12 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
     await deps.repository.verifyConnection(secrets.connectionId, "token", errorCode === null, errorCode, secrets.generation);
     return errorCode ? json({ error: errorCode }, 422) : json({ verified: true, accountId: channel.accountId, username });
   } catch (error) {
-    if (error instanceof RepositoryError) return json({ error: error.code === "23505" ? "already_connected" : error.code === "40001" ? "credentials_changed" : "operation_failed" }, error.code === "40001" || error.code === "23505" ? 409 : 422);
+    if (error instanceof RepositoryError) {
+      if (error.code === "23505") return json({ error: error.hint === "same_organization" ? "app_already_connected" : "already_connected" }, 409);
+      if (error.code === "40001") return json({ error: "credentials_changed" }, 409);
+      if (error.code === "42501") return json({ error: "forbidden" }, 403);
+      return json({ error: "operation_failed" }, 422);
+    }
     return json({ error: "operation_failed" }, 503);
   }
 }

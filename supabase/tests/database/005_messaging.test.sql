@@ -40,7 +40,7 @@ select is((select count(*)::int from public.channels), 2, 'A vê só canais de A
 select throws_ok(format($$update public.channels set app_secret_secret_id = gen_random_uuid() where organization_id = %L$$, :'org_a'), '42501', null, 'owner não atualiza secret id');
 
 -- canais: admin+ escreve
-select lives_ok(format($$insert into public.channels(organization_id, type, name) values (%L, 'instagram', 'IG A')$$, :'org_a'), 'owner insere canal');
+select lives_ok(format($$insert into public.channels(organization_id, type, name) values (%L, 'whatsapp', 'WA nova')$$, :'org_a'), 'owner insere canal (Instagram só por serviço: ver 032)');
 select tests.authenticate_as(:'uadmin');
 select lives_ok($$update public.channels set name = 'WA A2' where id = '00000000-0000-0000-0000-0000000000d1'$$, 'admin renomeia canal');
 select tests.authenticate_as(:'uagent');

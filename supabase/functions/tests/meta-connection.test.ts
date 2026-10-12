@@ -1,5 +1,6 @@
 import { handleMetaConnection } from "../meta-connection/handler.ts";
 import type { MetaConnectionDeps } from "../meta-connection/handler.ts";
+import { RepositoryError } from "../_shared/meta-repository.ts";
 
 const org = "00000000-0000-4000-8000-000000000001";
 const conn = "00000000-0000-4000-8000-000000000002";
@@ -15,6 +16,7 @@ function fixture() {
       verifyConnection: async (...args) => { writes.push(args); },
       disconnectConnection: async (...args) => { writes.push(args); },
       verifyMedia: async (...args) => { writes.push(args); },
+      removeConnection: async (...args) => { writes.push(["remove", ...args]); return { removed: true, disconnected: false }; },
     },
     fetch: async (input) => String(input).includes("/me?") ? Response.json({ user_id: "789", username: "empresa" }) : Response.json({ success: true }),
   };
@@ -78,4 +80,27 @@ Deno.test("owned media receives a server-only validation seal for current creden
   const f = fixture(); f.deps.fetch = async () => Response.json({ id: "80001", owner: { id: "789" } });
   const response = await handleMetaConnection(f.request("validate_media", { channelId: "channel", mediaId: "80001" }), f.deps);
   assert(response.status === 200); assert(JSON.stringify(f.writes) === JSON.stringify([[conn,"channel","80001",1]]));
+});
+Deno.test("remove is authorized by the service RPC and never reads secrets", async () => {
+  const f = fixture(); let reads = 0; f.deps.repository.readConnectionSecrets = async () => { reads++; return f.secrets; };
+  const response = await handleMetaConnection(f.request("remove"), f.deps);
+  assert(response.status === 200); assert(reads === 0);
+  assert(JSON.stringify(f.writes) === JSON.stringify([["remove", "user", org, conn]]));
+  assert(JSON.stringify(await response.json()) === '{"removed":true,"disconnected":false}');
+});
+Deno.test("account claimed by another organization maps to a dedicated error", async () => {
+  const f = fixture(); f.deps.repository.saveConnection = async () => { throw new RepositoryError("23505"); };
+  const response = await handleMetaConnection(f.request("save", { input: { appId: "123" } }), f.deps);
+  assert(response.status === 409); assert((await response.json()).error === "already_connected");
+});
+Deno.test("duplicate app in the same organization keeps its own error", async () => {
+  const f = fixture(); f.deps.repository.saveConnection = async () => { throw new RepositoryError("23505", "same_organization"); };
+  const response = await handleMetaConnection(f.request("save", { input: { appId: "123" } }), f.deps);
+  assert(response.status === 409); assert((await response.json()).error === "app_already_connected");
+});
+Deno.test("streamed body without Content-Length is cut at 32 KiB", async () => {
+  const f = fixture(); const chunk = new TextEncoder().encode("x".repeat(16384)); let sent = 0;
+  const body = new ReadableStream<Uint8Array>({ pull(controller) { if (sent++ < 4) controller.enqueue(chunk); else controller.close(); } });
+  const request = new Request("http://local/meta-connection", { method: "POST", headers: { Authorization: "Bearer user-jwt" }, body });
+  assert((await handleMetaConnection(request, f.deps)).status === 413); assert(sent < 5, "reader stopped before draining the stream");
 });
