@@ -730,6 +730,12 @@ isOneToOne: false
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
                            },
+"inbox_counts":
+{ Args: { "p_org": string }; Returns: Json
+                           },
+"inbox_unread_count":
+{ Args: { "p_org": string }; Returns: number
+                           },
 "ingest_inbound_message":
 { Args: { "p_channel": string,"p_external_id": string,"p_sender_external_id": string,"p_sender_name": string,"p_sent_at": string,"p_text": string }; Returns: string
                            },
@@ -738,6 +744,11 @@ isOneToOne: false
                            },
 "is_valid_timezone":
 { Args: { "p": string }; Returns: boolean
+                           },
+"list_inbox":
+{ Args: { "p_channel": string,"p_cursor_at": string,"p_cursor_id": string,"p_limit": number,"p_org": string,"p_q": string,"p_tab": string }; Returns: {
+              "assigned_to": string,"assignee_name": string,"channel_id": string,"channel_type": Database["public"]['Enums']["channel_type"],"contact_email": string,"contact_id": string,"contact_name": string,"contact_phone": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"last_inbound_at": string,"last_message_at": string,"last_read_at": string,"preview": string,"preview_from_team": boolean,"status": Database["public"]['Enums']["conversation_status"]
+            }[]
                            },
 "log_auth_event":
 { Args: { "p_action": string,"p_ip"?: unknown }; Returns: undefined

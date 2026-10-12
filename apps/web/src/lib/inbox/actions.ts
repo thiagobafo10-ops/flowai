@@ -43,6 +43,8 @@ type ConversationInfo = {
   id: string;
   status: "open" | "pending_human" | "closed";
   channel_id: string;
+  assigned_to: string | null;
+  handled_by: "ai" | "human";
   channels: { type: ChannelType } | null;
   contacts: { phone: string | null; whatsapp_id: string | null; instagram_id: string | null } | null;
 };
@@ -51,7 +53,7 @@ async function loadConversation(c: Ctx, id: string): Promise<ConversationInfo | 
   if (!z.uuid().safeParse(id).success) return { ok: false, error: MSG_GONE };
   const { data, error } = await c.supabase
     .from("conversations")
-    .select("id, status, channel_id, channels(type), contacts(phone, whatsapp_id, instagram_id)")
+    .select("id, status, channel_id, assigned_to, handled_by, channels(type), contacts(phone, whatsapp_id, instagram_id)")
     .eq("organization_id", c.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -84,7 +86,8 @@ async function deliver(
     // O external_id devolvido não é gravável pelo app (sem grant): só o status.
     await providerFor(type).sendMessage({ externalId: to }, { text });
   } catch (err) {
-    failure = err instanceof Error ? err.message : "Falha no envio.";
+    console.error("channel provider send failed", err);
+    failure = "Falha ao enviar pelo canal.";
   }
   const { data, error } = await c.supabase
     .from("messages")
@@ -121,11 +124,16 @@ async function insertMessage(
       content: text,
       content_type: "text",
       is_internal_note: internal,
-      ...(internal ? { status: "delivered" as const } : {}),
     })
     .select("id")
     .single();
   if (error) return dbError("insert message failed", error);
+  if (internal) {
+    const { data: updated, error: updateError } = await c.supabase.from("messages")
+      .update({ status: "delivered" }).eq("organization_id", c.orgId).eq("id", data.id).select("id");
+    if (updateError) return dbError("deliver internal note failed", updateError);
+    if (updated.length === 0) return { ok: false, error: MSG_MESSAGE_GONE };
+  }
   return { ok: true, data: { messageId: data.id } };
 }
 
@@ -221,6 +229,9 @@ export async function takeOver(conversationId: string): Promise<ActionResult> {
   const conv = await loadConversation(c, conversationId);
   if (isFailInfo(conv)) return conv;
   if (conv.status === "closed") return { ok: false, error: MSG_CLOSED };
+  if (conv.assigned_to === c.userId && conv.handled_by === "human" && conv.status === "open") {
+    return { ok: true, data: undefined };
+  }
   const updated = await updateConversation(c, conv.id, {
     assigned_to: c.userId,
     handled_by: "human",
@@ -285,6 +296,9 @@ async function setClosed(conversationId: string, close: boolean): Promise<Action
   if (isFail(c)) return c;
   const conv = await loadConversation(c, conversationId);
   if (isFailInfo(conv)) return conv;
+  if ((close && conv.status === "closed") || (!close && conv.status !== "closed")) {
+    return { ok: true, data: undefined };
+  }
   const updated = await updateConversation(c, conv.id, { status: close ? "closed" : "open" });
   if (!updated.ok) return updated;
   await logSystem(c, conv.id, close ? "closed" : "reopened");
@@ -302,8 +316,9 @@ export async function reopenConversation(id: string): Promise<ActionResult> {
 export async function markRead(id: string): Promise<ActionResult> {
   const c = await context(false);
   if (isFail(c)) return c;
-  if (!z.uuid().safeParse(id).success) return { ok: false, error: MSG_GONE };
-  const { error } = await c.supabase.rpc("mark_conversation_read", { p_conversation: id });
+  const conv = await loadConversation(c, id);
+  if (isFailInfo(conv)) return conv;
+  const { error } = await c.supabase.rpc("mark_conversation_read", { p_conversation: conv.id });
   if (error) {
     // A função devolve 42501 tanto para conversa inexistente quanto de outra org.
     if (error.code === "42501") return { ok: false, error: MSG_GONE };

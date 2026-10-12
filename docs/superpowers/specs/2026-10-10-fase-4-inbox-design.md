@@ -1,7 +1,7 @@
 # FlowAI — Fase 4: Inbox + Conversas + Mensagens — Design
 
 - **Data:** 2026-10-10
-- **Status:** aguardando revisão
+- **Status:** implementada e verificada em 2026-10-12
 - **Base:** spec do MVP (`2026-10-07-flowai-mvp-design.md` §4, §9, §10), specs das Fases 2–3, pendências (`docs/superpowers/fase-*-pendencias.md`)
 - **Branch:** `feat/fase-4-inbox` (a partir de `master`)
 

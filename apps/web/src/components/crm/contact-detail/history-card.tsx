@@ -40,10 +40,6 @@ export function HistoryCard({ events, timezone }: { events: ContactEvent[]; time
             ))}
           </ol>
         )}
-        <section className="border-t pt-3">
-          <h3 className="text-xs font-medium text-muted-foreground">Conversas</h3>
-          <p className="mt-1 text-muted-foreground">Nenhuma conversa ainda.</p>
-        </section>
       </CardContent>
     </Card>
   );

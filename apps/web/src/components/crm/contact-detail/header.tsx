@@ -124,7 +124,7 @@ export function ContactHeader({
             <DialogHeader>
               <DialogTitle>Excluir contato?</DialogTitle>
               <DialogDescription>
-                Esta ação não pode ser desfeita. Tags, campos e deals do contato também serão removidos.
+                Esta ação não pode ser desfeita. As tags, os campos, os deals, as conversas e as mensagens deste contato também serão excluídos.
               </DialogDescription>
             </DialogHeader>
             {error && (

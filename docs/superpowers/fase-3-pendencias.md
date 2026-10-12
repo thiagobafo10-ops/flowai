@@ -18,14 +18,14 @@ Registro gerado ao final da execução da Fase 3 (branch `feat/fase-3-crm`). Com
 ## Pendências por fase
 
 **Início da Fase 5 (prioridade alta — antes de existir canal real)**
-- A **criação** de contato pela API ainda aceita `source`, `whatsapp_id`, `instagram_id` e `last_interaction_at` (só a edição foi bloqueada). Revogar o insert dessas colunas para `authenticated` antes de receber mensagens de WhatsApp/Instagram, senão alguém poderia criar um contato com o ID de WhatsApp de outra pessoa.
+- **Resolvido na Fase 4:** a criação de contato pela API não aceita `source`, `whatsapp_id`, `instagram_id` e `last_interaction_at`; essas colunas são mantidas pela entrada de mensagens.
 - Busca de contatos e do kanban: hoje varre todos os contatos da organização e filtra o kanban em JavaScript sem limite de linhas; criar índices (`pg_trgm`/unaccent) e limitar antes do volume de canais.
 - Telefones com zero ou prefixo de operadora ("011 …") são recusados.
 
 **Fase 4 (Inbox)**
-- Texto da exclusão de contato precisa mencionar conversas e mensagens (que também serão apagadas).
-- "Última interação" depende do Inbox preencher `last_interaction_at`.
-- Ficha do contato: bloco "Conversas" ainda vazio.
+- **Resolvido:** o texto da exclusão menciona conversas e mensagens.
+- **Resolvido:** o Inbox preenche `last_interaction_at` na entrada de mensagens.
+- **Resolvido:** a ficha lista conversas com links para o Inbox.
 
 **Antes da Fase 9 (Analytics)**
 - Criar `closed_at` nos deals: hoje a data de "ganho/perdido" e o filtro de 30 dias usam `updated_at`, que muda ao editar título/valor.

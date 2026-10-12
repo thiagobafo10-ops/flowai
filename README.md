@@ -32,7 +32,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 
 | Comando | O que faz |
 |---|---|
-| `npm test` | Testes unitários (Vitest) de `packages/core` |
+| `npm test` | Testes unitários (Vitest) do domínio e das ações/consultas do app web |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
@@ -53,6 +53,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Plano da Fase 1 (fundação): [`docs/superpowers/plans/2026-10-07-fase-1-fundacao.md`](docs/superpowers/plans/2026-10-07-fase-1-fundacao.md)
 - Fase 2 (layout e dashboard): spec [`docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md`](docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md), plano [`docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md`](docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md)
 - Fase 3 (CRM: contatos, tags, pipeline): spec [`docs/superpowers/specs/2026-10-09-fase-3-crm-design.md`](docs/superpowers/specs/2026-10-09-fase-3-crm-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-3-crm.md`](docs/superpowers/plans/2026-10-10-fase-3-crm.md)
+- Fase 4 (Inbox, conversas e Simulador): spec [`docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md`](docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-4-inbox.md`](docs/superpowers/plans/2026-10-10-fase-4-inbox.md)
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança

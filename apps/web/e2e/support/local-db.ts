@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { normalizeBrazilianPhone } from "@flowai/core";
 
 // Apenas para e2e: acessa o Postgres do Supabase LOCAL via docker exec.
 const DB_CONTAINER = "supabase_db_flowai";
@@ -257,7 +258,8 @@ export function simulateInboundSql(
   input: { name: string | null; phone: string; text: string; externalId?: string },
 ): void {
   assertEmail(email);
-  if (!/^\d{10,15}$/.test(input.phone)) throw new Error("telefone inválido para helper");
+  const phone = normalizeBrazilianPhone(input.phone);
+  if (!phone) throw new Error("telefone inválido para helper");
   const tag = `t${Math.random().toString(36).slice(2, 10)}`;
   const dq = (v: string) => {
     if (v.includes(`$${tag}$`) || v.endsWith("$")) throw new Error("texto inválido para helper");
@@ -276,7 +278,7 @@ begin
   else
     update public.channels set status = 'active' where id = v_ch;
   end if;
-  perform public.ingest_inbound_message(v_ch, ${dq(externalId)}, ${dq(input.phone)},
+  perform public.ingest_inbound_message(v_ch, ${dq(externalId)}, ${dq(phone)},
     ${input.name === null ? "null" : dq(input.name)}, ${dq(input.text)}, now());
 end $body$`);
 }

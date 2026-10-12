@@ -15,9 +15,11 @@ type Props = {
   tags: PickerTag[];
   allTags: PickerTag[];
   canEdit: boolean;
+  /** Atualiza caches de clientes que também leem este contato (ex.: Inbox). */
+  onChanged?: () => void;
 };
 
-export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Props) {
+export function TagsCard({ contactId, tags, allTags: initialAll, canEdit, onChanged }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [refreshing, startRefresh] = useTransition();
@@ -77,6 +79,7 @@ export function TagsCard({ contactId, tags, allTags: initialAll, canEdit }: Prop
       }
       q.running = false;
       setSaving(false);
+      onChanged?.();
       startRefresh(() => router.refresh());
     })();
   }

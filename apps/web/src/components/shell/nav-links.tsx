@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { findNavItem, NAV_ITEMS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { useInboxRealtime } from "@/components/inbox/realtime-provider";
 
 export function NavLinks({
   collapsed = false,
@@ -13,6 +14,7 @@ export function NavLinks({
   onNavigate?: () => void;
 }) {
   const activeHref = findNavItem(usePathname())?.href;
+  const { unread } = useInboxRealtime();
   return (
     <ul className="flex flex-col gap-1">
       {NAV_ITEMS.map((item) => {
@@ -32,6 +34,11 @@ export function NavLinks({
             >
               <Icon className="size-4 shrink-0" aria-hidden="true" />
               <span className={cn(collapsed && "sr-only")}>{item.label}</span>
+              {item.href === "/inbox" && unread > 0 && (
+                <span aria-label={`${unread} conversas não lidas`} className={cn("ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground", collapsed && "sr-only")}>
+                  {unread}
+                </span>
+              )}
             </Link>
           </li>
         );

@@ -55,7 +55,7 @@ test("no celular a gaveta abre e fecha ao navegar", async ({ page }) => {
 test("módulos não construídos mostram Em construção", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Placeholder");
   for (const [href, title, text] of [
-    ["/inbox", "Inbox", "Todas as conversas de WhatsApp e Instagram em um só lugar."],
+    ["/automacoes", "Automações", "Crie fluxos automáticos de atendimento e vendas."],
   ]) {
     await gotoReady(page, href);
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();

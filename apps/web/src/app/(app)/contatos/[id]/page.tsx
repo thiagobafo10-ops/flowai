@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { contactDisplayName } from "@flowai/core";
 import { ContactHeader } from "@/components/crm/contact-detail/header";
+import { ConversationsCard } from "@/components/crm/contact-detail/conversations-card";
 import { CustomFieldsCard } from "@/components/crm/contact-detail/custom-fields-card";
 import { DataCard } from "@/components/crm/contact-detail/data-card";
 import { DealCard } from "@/components/crm/contact-detail/deal-card";
@@ -11,6 +12,7 @@ import { TagsCard } from "@/components/crm/contact-detail/tags-card";
 import { RequireOrg } from "@/components/require-org";
 import { getContact, listMembers, listTags } from "@/lib/crm/queries";
 import { getActiveOrg } from "@/lib/org/active-org";
+import { listContactConversations } from "@/lib/inbox/contact-queries";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -28,10 +30,11 @@ async function ContactDetailContent({ params }: Props) {
   const org = await getActiveOrg();
   if (!org) return null;
 
-  const [contact, allTags, members] = await Promise.all([
+  const [contact, allTags, members, conversations] = await Promise.all([
     getContact(org.id, id),
     listTags(org.id),
     listMembers(org.id),
+    listContactConversations(org.id, id),
   ]);
   if (!contact) notFound();
 
@@ -80,6 +83,7 @@ async function ContactDetailContent({ params }: Props) {
         </div>
         <div className="space-y-4">
           <DealCard contactId={contact.id} deals={contact.deals} canCreate={canEdit} timezone={contact.timezone} />
+          <ConversationsCard conversations={conversations} timezone={contact.timezone} />
           <HistoryCard events={contact.events} timezone={contact.timezone} />
         </div>
       </div>
