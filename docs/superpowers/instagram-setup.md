@@ -17,13 +17,15 @@ Confira os requisitos de acesso e revisão no painel Meta. A documentação de w
 5. Assine `messages`, `comments` e `messaging_seen`. A URL deve ser pública e HTTPS para receber eventos da Meta; localhost só atende os testes locais.
 6. Após verificar token e callback, o canal fica ativo. A confirmação GET sozinha não ativa o canal.
 
-Para trocar credenciais, use **Atualizar credenciais**, mantendo os IDs. A alteração invalida as verificações anteriores. Para outra conta, cadastre uma conexão com outro app. **Desconectar Instagram** bloqueia novos eventos/envios e preserva o histórico.
+Para trocar credenciais, use **Atualizar credenciais**, mantendo os IDs. A alteração invalida as verificações anteriores. Para outra conta, cadastre uma conexão com outro app. **Desconectar Instagram** bloqueia novos eventos/envios e preserva o histórico. Depois de desconectar, **Remover conexão** apaga as credenciais do Vault; sem histórico, a conexão e o canal somem, com histórico ficam desconectados até novas credenciais.
+
+Uma conta ou app só pertence a uma organização depois que o teste do token passa. Cadastros não verificados expiram em 24 horas e cedem lugar à organização que verificar primeiro; se a conta já estiver verificada em outra organização, o FlowAI mostra "Esta conta do Instagram já está conectada a outra organização."
 
 ## Atender e criar regras
 
-Mensagens do Direct entram no Inbox e criam/atualizam o contato no CRM. Respostas e menções em stories mostram sua origem. A equipe pode responder com texto de até 1.000 bytes UTF-8 dentro da janela comum de 24 horas após uma mensagem recebida elegível. Comentários não abrem essa janela. Conteúdo sem texto aparece como indicação de mídia; anexos não são baixados.
+Mensagens do Direct entram no Inbox e criam/atualizam o contato no CRM. Respostas e menções em stories mostram sua origem. A equipe pode responder com texto de até 1.000 bytes UTF-8 dentro da janela comum de 24 horas após uma mensagem recebida elegível. Fora dela, a conversa mostra que a janela expirou e só aceita notas internas. Comentários não abrem essa janela. Se o contato ainda não tem nome, o worker busca o nome do perfil do Instagram (sem bloquear nada se falhar). Excluir o contato no CRM apaga os dados brutos guardados dos eventos dele. Conteúdo sem texto aparece como indicação de mídia; anexos não são baixados.
 
-Em **Comentários → Direct**, escreva uma palavra ou frase completa e a resposta. Escolha todos os posts/Reels ou um ID específico; o FlowAI confere a propriedade do post antes de salvar. A regra começa desativada. Quando ativada, comentários novos correspondentes recebem uma resposta privada, respeitando a janela de até sete dias e uma resposta por comentário. Se várias regras corresponderem, a mais antiga ativa tem prioridade. Letras maiúsculas, acentos e espaços repetidos não alteram a correspondência.
+Em **Comentários → Direct**, escreva uma palavra ou frase completa e a resposta. Escolha todos os posts/Reels ou um ID específico; o FlowAI confere a propriedade do post antes de salvar. A regra começa desativada. Quando ativada, comentários novos correspondentes recebem uma resposta privada, respeitando a janela de até sete dias e uma resposta por comentário. Se várias regras corresponderem, a mais antiga já ativa quando o comentário foi feito tem prioridade. Letras maiúsculas, acentos e espaços repetidos não alteram a correspondência.
 
 Editar ou desativar uma regra descarta seu trabalho anterior pendente. Uma regra pode ser desligada mesmo com token inválido. Acompanhamentos exigem que o destinatário responda e abra a janela normal de mensagens.
 
@@ -37,7 +39,9 @@ Para habilitar o agendamento, o operador configura `public.configure_instagram_w
 
 No ambiente local, a URL usada pelo banco é `http://supabase_kong_flowai:8000`; em hospedagem, use a URL HTTPS do projeto. `flowai-instagram-worker` executa a cada minuto e `flowai-instagram-cleanup` diariamente. A configuração global fica no schema privado. Sem provisionamento, o cron não faz chamadas externas.
 
-Eventos operacionais concluídos são limpos após 30 dias, preservando itens pendentes e histórico. A fila tem até cinco tentativas com espera crescente para falhas anteriores à aceitação. Um envio incerto não entra nesse retry.
+Eventos operacionais concluídos são limpos após 30 dias, preservando itens pendentes e histórico. A fila tem até cinco tentativas com espera crescente para falhas anteriores à aceitação. Um envio incerto não entra nesse retry. Cada execução do worker esvazia a fila em lotes de 3 itens simultâneos por até ~100 s; sem itens visíveis o cron nem chama a função. O mesmo cron, a cada minuto, marca como sem confirmação respostas do Direct presas em envio por mais de 1 minuto e como falha (com nova tentativa permitida) as que nunca saíram após 10 minutos.
+
+`channels.app_secret_secret_id`, `channels.verify_token_secret_id` e `channels.waba_id` são colunas reservadas da Fase 2 e não são usadas pelo Instagram (os segredos ficam em `meta_connections`).
 
 ## Verificar sem conta real
 

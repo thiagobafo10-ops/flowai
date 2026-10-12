@@ -68,6 +68,13 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - **`events` e `audit_logs` são escritos apenas por código definer do banco** (triggers/funções `SECURITY DEFINER`). A API não insere eventos nem chama `write_audit_log`; login é auditado via `log_auth_event` (allowlist). Alterações em `memberships`, `organizations`, `channels`, `ai_agents` e `automations` são auditadas por trigger (em updates, só os nomes das colunas alteradas).
 - **Rate limits do app são defesa em profundidade.** Os controles reais contra abuso de cadastro/login são os limites do Supabase Auth e captcha, configurados no projeto em produção.
 - **`x-forwarded-for` precisa vir da plataforma de hospedagem** (proxy confiável que sobrescreve o cabeçalho); caso contrário o IP usado em rate limit e auditoria pode ser forjado pelo cliente.
+- **Rate limit só no servidor.** `check_rate_limit` não é executável por `anon`/`authenticated`; cadastro e login usam `check_auth_rate_limit` (tipos `signup`/`login`, chave sempre com namespace), para que a API pública não esgote buckets de outros fluxos.
+- **Instagram (Fase 5):**
+  - App Secret, verify token e access tokens ficam no **Supabase Vault**, referenciados por id em `meta_connections`/`channels`; só funções `SECURITY DEFINER` de serviço os leem, e removê-la apaga os segredos. `channels.app_secret_secret_id`, `verify_token_secret_id` e `waba_id` são reservadas e não usadas.
+  - **Webhook** (`meta-webhook`): verifica `X-Hub-Signature-256` (HMAC-SHA256 do corpo bruto com o App Secret) antes de qualquer parse; corpo ≤ 1 MiB; GET de verificação compara o verify token em tempo constante, limita `hub.challenge` a 256 caracteres e responde `nosniff`.
+  - **Rate limits do webhook:** limite grosso por IP (último hop de `X-Forwarded-For` ou `cf-connecting-ip`, nunca o primeiro hop, que o cliente controla) antes da verificação; limite por conexão (3000/min) contado só depois de assinatura válida.
+  - **Worker** (`instagram-worker`): chamado pelo `pg_cron` via `pg_net` com segredo próprio (`X-FlowAI-Worker`, comparado em tempo constante) guardado no Vault; configuração em schema `private`.
+  - Posse de app/conta vale só para conexões **verificadas**; claims não verificados expiram em 24h e cedem a um dono verificado. Canais Instagram só são criados/apagados por funções de serviço.
 
 ## Convenções do app
 
