@@ -8,6 +8,7 @@ export interface MetaConnectionRepository {
   readConnectionSecrets(connectionId: string): Promise<MetaSecrets | null>;
   verifyConnection(connectionId: string, kind: string, success: boolean, errorCode: string | null, generation: number): Promise<void>;
   disconnectConnection(actorId: string, organizationId: string, connectionId: string): Promise<void>;
+  verifyMedia(connectionId: string, channelId: string, mediaId: string, generation: number): Promise<void>;
 }
 export class RepositoryError extends Error {
   constructor(public code: string) { super("Database operation failed"); }
@@ -27,5 +28,6 @@ export function createMetaRepository(url: string, serviceKey: string, fetcher: t
     readConnectionSecrets: (id) => rpc("read_meta_connection_secrets", { p_connection_id: id }),
     verifyConnection: (id, kind, success, errorCode, generation) => rpc("set_meta_connection_verification", { p_connection_id: id, p_kind: kind, p_success: success, p_error_code: errorCode, p_generation: generation }),
     disconnectConnection: (actorId, orgId, id) => rpc("disconnect_instagram_connection", { p_actor_id: actorId, p_org_id: orgId, p_connection_id: id }),
+    verifyMedia: (connectionId, channelId, mediaId, generation) => rpc("verify_instagram_media", { p_connection_id: connectionId, p_channel_id: channelId, p_media_id: mediaId, p_generation: generation }),
   };
 }

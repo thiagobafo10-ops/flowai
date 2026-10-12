@@ -587,6 +587,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"instagram_verified_media": {
+                  Row: {
+                    "channel_id": string,"credential_generation": number,"media_id": string,"organization_id": string,"verified_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel_id": string,"credential_generation": number,"media_id": string,"organization_id": string,"verified_at"?: string
+                  }
+                  Update: {
+                    "channel_id"?: string,"credential_generation"?: number,"media_id"?: string,"organization_id"?: string,"verified_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_verified_media_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_verified_media_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"knowledge_chunks": {
                   Row: {
                     "chunk_index": number,"content": string,"created_at": string,"document_id": string,"embedding": string,"id": string,"organization_id": string,"token_count": number
@@ -957,6 +983,9 @@ isOneToOne: false
                            },
 "slugify":
 { Args: { "p": string }; Returns: string
+                           },
+"verify_instagram_media":
+{ Args: { "p_channel_id": string,"p_connection_id": string,"p_generation": number,"p_media_id": string }; Returns: undefined
                            },
 "write_audit_log":
 { Args: { "p_action": string,"p_entity_id": string,"p_entity_type": string,"p_ip"?: unknown,"p_metadata"?: Json,"p_org": string }; Returns: undefined

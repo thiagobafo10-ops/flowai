@@ -29,6 +29,16 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
     }
     if (secrets.disconnected) return json({ error: "connection_disconnected" }, 409);
     if (input.action === "reveal_verify_token") return json({ verifyToken: secrets.verifyToken });
+    if (input.action === "validate_media") {
+      if (typeof input.mediaId !== "string" || !/^\d{1,100}$/.test(input.mediaId)) return json({ error: "invalid_input" }, 400);
+      const channel = secrets.channels.find((item) => item.channelId === input.channelId);
+      if (!channel) return json({ error: "forbidden" }, 403);
+      const response = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${input.mediaId}?fields=id%2Cowner`, { headers: { Authorization: `Bearer ${channel.accessToken}` }, signal: AbortSignal.timeout(15000) });
+      const media = await response.json();
+      if (!response.ok || String(media.id) !== input.mediaId || String(media.owner?.id ?? media.owner ?? "") !== channel.accountId) return json({ error: "media_not_owned" }, 422);
+      await deps.repository.verifyMedia(secrets.connectionId, channel.channelId, input.mediaId, secrets.generation);
+      return json({ verified: true, mediaId: input.mediaId });
+    }
     if (input.action !== "test") return json({ error: "invalid_action" }, 400);
     const channel = secrets.channels[0];
     if (!channel) return json({ error: "invalid_account" }, 422);

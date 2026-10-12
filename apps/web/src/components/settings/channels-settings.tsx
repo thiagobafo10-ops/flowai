@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { SimulateForm } from "@/components/inbox/simulate-dialog";
 import { createSimulatorChannel, setSimulatorActive } from "@/lib/inbox/channel-actions";
 import type { ChannelRow } from "@/lib/inbox/queries";
+import type { InstagramConnectionView, InstagramRuleView } from "@/lib/instagram/queries";
+import { InstagramSettings } from "./instagram/instagram-settings";
 
-export function ChannelsSettings({ channels }: { channels: ChannelRow[] }) {
+export function ChannelsSettings({ channels, instagram }: { channels: ChannelRow[]; instagram: { connections: InstagramConnectionView[]; rules: InstagramRuleView[] } }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -72,9 +74,10 @@ export function ChannelsSettings({ channels }: { channels: ChannelRow[] }) {
         )}
       </section>
 
+      <InstagramSettings connections={instagram.connections} rules={instagram.rules} />
       <section aria-labelledby="social-heading" className="space-y-2 rounded-lg border p-4">
         <h2 id="social-heading" className="text-lg font-medium">
-          WhatsApp e Instagram
+          WhatsApp
         </h2>
         <p className="text-sm text-muted-foreground">Disponível em breve</p>
       </section>

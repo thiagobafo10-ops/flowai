@@ -14,6 +14,7 @@ function fixture() {
       readConnectionSecrets: async () => secrets,
       verifyConnection: async (...args) => { writes.push(args); },
       disconnectConnection: async (...args) => { writes.push(args); },
+      verifyMedia: async (...args) => { writes.push(args); },
     },
     fetch: async (input) => String(input).includes("/me?") ? Response.json({ user_id: "789", username: "empresa" }) : Response.json({ success: true }),
   };
@@ -67,4 +68,14 @@ Deno.test("save never exposes the secrets returned accidentally by a repository"
   const f = fixture(); f.deps.repository.saveConnection = async () => ({ connectionId: conn, channelId: "channel", appSecret: "secret-leak" } as { connectionId: string; channelId: string });
   const response = await handleMetaConnection(f.request("save", { input: { appId: "123", accountId: "789", appSecret: "app-secret", accessToken: "access-secret", apiVersion: "v26.0" } }), f.deps);
   assert(response.status === 200); assert(!(await response.text()).includes("secret"));
+});
+Deno.test("specific post validation rejects media owned by another account", async () => {
+  const f = fixture(); f.deps.fetch = async () => Response.json({ id: "80001", owner: { id: "foreign" } });
+  assert((await handleMetaConnection(f.request("validate_media", { channelId: "channel", mediaId: "80001" }), f.deps)).status === 422);
+  assert(f.writes.length === 0);
+});
+Deno.test("owned media receives a server-only validation seal for current credentials", async () => {
+  const f = fixture(); f.deps.fetch = async () => Response.json({ id: "80001", owner: { id: "789" } });
+  const response = await handleMetaConnection(f.request("validate_media", { channelId: "channel", mediaId: "80001" }), f.deps);
+  assert(response.status === 200); assert(JSON.stringify(f.writes) === JSON.stringify([[conn,"channel","80001",1]]));
 });

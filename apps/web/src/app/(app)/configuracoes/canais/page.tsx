@@ -3,6 +3,7 @@ import { RequireOrg } from "@/components/require-org";
 import { ChannelsSettings } from "@/components/settings/channels-settings";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { listChannels } from "@/lib/inbox/queries";
+import { listInstagramSettings } from "@/lib/instagram/queries";
 
 async function CanaisContent() {
   const org = await getActiveOrg();
@@ -14,8 +15,8 @@ async function CanaisContent() {
       </p>
     );
   }
-  const channels = await listChannels(org.id);
-  return <ChannelsSettings channels={channels} />;
+  const [channels, instagram] = await Promise.all([listChannels(org.id), listInstagramSettings(org.id)]);
+  return <ChannelsSettings channels={channels} instagram={instagram} />;
 }
 
 export default function CanaisSettingsPage() {
