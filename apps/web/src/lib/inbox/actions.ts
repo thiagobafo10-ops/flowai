@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { providerFor, replySchema, type ChannelType } from "@flowai/core";
+import { providerFor, replySchema, instagramTextSchema, type ChannelType } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
@@ -82,7 +82,7 @@ async function deliver(
   let failure: string | null = null;
   try {
     if (!type) throw new Error("Canal não encontrado.");
-    const to = conv.contacts?.whatsapp_id ?? conv.contacts?.phone ?? conv.contacts?.instagram_id ?? "";
+    const to = type === "instagram" ? conv.contacts?.instagram_id ?? "" : type === "whatsapp" ? conv.contacts?.whatsapp_id ?? conv.contacts?.phone ?? "" : conv.contacts?.phone ?? "";
     // O external_id devolvido não é gravável pelo app (sem grant): só o status.
     await providerFor(type).sendMessage({ externalId: to }, { text });
   } catch (err) {
@@ -137,7 +137,23 @@ async function insertMessage(
   return { ok: true, data: { messageId: data.id } };
 }
 
-export async function sendReply(conversationId: string, text: string): Promise<ActionResult<{ messageId: string }>> {
+type ReplyResult = { messageId: string; deliveryState?: "sent" | "failed" | "uncertain" };
+async function invokeInstagram(c: Ctx, intentId: string): Promise<ActionResult<ReplyResult>> {
+  const { data: { session } } = await c.supabase.auth.getSession();
+  if (!session) return { ok: false, error: MSG_FORBIDDEN };
+  const { data, error } = await c.supabase.functions.invoke("send-message", { body: { intentId }, headers: { Authorization: `Bearer ${session.access_token}` } });
+  if (error || !data?.messageId) {
+    // If the HTTP response was lost after sending, use the persisted result.
+    const { data: intent } = await c.supabase.from("instagram_send_intents").select("message_id,state").eq("organization_id", c.orgId).eq("id", intentId).maybeSingle();
+    if (intent?.message_id && ["sending", "sent", "uncertain"].includes(intent.state)) return { ok: true, data: { messageId: intent.message_id, deliveryState: intent.state === "sent" ? "sent" : "uncertain" } };
+    return { ok: false, error: "Não foi possível concluir o envio pelo Instagram." };
+  }
+  // A failed send is already represented in history with an explicit retry;
+  // clear the composer rather than creating a second intent for the same draft.
+  return { ok: true, data: { messageId: data.messageId, deliveryState: data.state } };
+}
+
+export async function sendReply(conversationId: string, text: string, requestId?: string): Promise<ActionResult<ReplyResult>> {
   const c = await context(true);
   if (isFail(c)) return c;
   const parsed = parseText(text);
@@ -145,6 +161,14 @@ export async function sendReply(conversationId: string, text: string): Promise<A
   const conv = await loadConversation(c, conversationId);
   if (isFailInfo(conv)) return conv;
   if (conv.status === "closed") return { ok: false, error: MSG_CLOSED };
+  if (conv.channels?.type === "instagram") {
+    const igText = instagramTextSchema.safeParse(parsed.data);
+    if (!igText.success) return { ok: false, error: "O Instagram permite até 1.000 bytes por mensagem.", fieldErrors: { text: ["Reduza o texto para enviar pelo Instagram."] } };
+    if (requestId && !z.uuid().safeParse(requestId).success) return { ok: false, error: MSG_UNEXPECTED };
+    const { data: intentId, error } = await c.supabase.rpc("create_instagram_send_intent", { p_conversation_id: conv.id, p_text: parsed.data, p_request_id: requestId ?? crypto.randomUUID() });
+    if (error) return error.code === "22023" ? { ok: false, error: "Confira se o canal está ativo e se a última mensagem recebida foi há menos de 24 horas." } : dbError("create Instagram intent failed", { code: error.code });
+    return invokeInstagram(c, intentId);
+  }
   const inserted = await insertMessage(c, conv, parsed.data, false);
   if (!inserted.ok) return inserted;
   return deliver(c, conv, inserted.data.messageId, parsed.data);
@@ -170,6 +194,11 @@ export async function retryMessage(messageId: string): Promise<ActionResult<{ me
   const conv = await loadConversation(c, msg.conversation_id);
   if (isFailInfo(conv)) return conv;
   if (conv.status === "closed") return { ok: false, error: MSG_CLOSED };
+  if (conv.channels?.type === "instagram") {
+    const { data: intentId, error: retryError } = await c.supabase.rpc("retry_instagram_send_intent", { p_message_id: messageId });
+    if (retryError) return dbError("retry Instagram intent failed", { code: retryError.code });
+    return invokeInstagram(c, intentId);
+  }
   const { data: reset, error: resetError } = await c.supabase
     .from("messages")
     .update({ status: "pending", error: null })

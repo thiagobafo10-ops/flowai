@@ -50,6 +50,7 @@ export type MessageItem = {
   status: "pending" | "sent" | "delivered" | "read" | "failed";
   error: string | null;
   createdAt: string;
+  context?: { origin?: string; storyId?: string; commentId?: string };
 };
 
 export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInboundAt" | "channel"> & {
@@ -142,7 +143,7 @@ export async function getConversation(
 
   let query = supabase
     .from("messages")
-    .select("id, direction, sender_type, sender_user_id, content, is_internal_note, status, error, created_at")
+    .select("id, direction, sender_type, sender_user_id, content, is_internal_note, status, error, created_at, context")
     .eq("organization_id", orgId)
     .eq("conversation_id", id);
   const cursor = parseCursor(before);
@@ -172,6 +173,7 @@ export async function getConversation(
       status: m.status,
       error: m.error,
       createdAt: m.created_at,
+      context: m.context as MessageItem["context"],
     }));
 
   return {

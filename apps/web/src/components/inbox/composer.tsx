@@ -1,20 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MAX_MESSAGE_LENGTH, replySchema } from "@flowai/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
-export function Composer({ closed, busy, onSend }: { closed: boolean; busy: boolean; onSend: (text: string, note: boolean) => Promise<boolean> }) {
+export function Composer({ closed, busy, onSend }: { closed: boolean; busy: boolean; onSend: (text: string, note: boolean, requestId: string) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [note, setNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sending = useRef(false);
+  const draftRequest = useRef<{ id: string; text: string; note: boolean } | null>(null);
   async function send() {
-    if (closed || busy) return;
+    if (closed || busy || sending.current) return;
     const result = replySchema.safeParse({ text });
     if (!result.success) { setError(result.error.issues[0]?.message ?? "Escreva uma mensagem."); return; }
     setError(null);
-    if (await onSend(result.data.text, note)) setText("");
+    if (!draftRequest.current || draftRequest.current.text !== result.data.text || draftRequest.current.note !== note) draftRequest.current = { id: crypto.randomUUID(), text: result.data.text, note };
+    sending.current = true;
+    try { if (await onSend(result.data.text, note, draftRequest.current.id)) { setText(""); draftRequest.current = null; } }
+    finally { sending.current = false; }
   }
   return (
     <form className="space-y-2 border-t p-4" onSubmit={(event) => { event.preventDefault(); void send(); }}>

@@ -905,6 +905,9 @@ isOneToOne: false
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
                            },
+"retry_instagram_send_intent":
+{ Args: { "p_message_id": string }; Returns: string
+                           },
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
                            },

@@ -20,7 +20,10 @@ const state = vi.hoisted(() => ({
   logs: [] as unknown[],
   failSend: false,
   foreignConversation: false,
-  role: "agent"
+  role: "agent",
+  channelType: "simulator",
+  invocations: [] as unknown[],
+  deliveryState: "sent"
 }));
 vi.mock("@/lib/org/active-org", () => ({
   getActiveOrg: async () => ({
@@ -40,6 +43,7 @@ vi.mock("@flowai/core", async (load) => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
+      getSession: async () => ({ data: { session: { access_token: "user-jwt" } } }),
       getUser: async () => ({
         data: {
           user: {
@@ -51,9 +55,11 @@ vi.mock("@/lib/supabase/server", () => ({
     rpc: async (...args: unknown[]) => {
       state.logs.push(args);
       return {
+        data: args[0] === "create_instagram_send_intent" ? "00000000-0000-4000-8000-000000000003" : null,
         error: null
       };
     },
+    functions: { invoke: async (...args: unknown[]) => { state.invocations.push(args); return { data: { state: state.deliveryState, messageId: "message" }, error: null }; } },
     from: () => {
       const filters = new Map<string, unknown>();
       const q: QueryChain = {
@@ -77,10 +83,11 @@ vi.mock("@/lib/supabase/server", () => ({
             assigned_to: state.assigned_to,
             handled_by: "human",
             channels: {
-              type: "simulator"
+              type: state.channelType
             },
             contacts: {
-              phone: "phone"
+              phone: "phone",
+              instagram_id: "instagram-user"
             }
           },
           error: null
@@ -113,6 +120,9 @@ beforeEach(() => {
   state.failSend = false;
   state.foreignConversation = false;
   state.role = "agent";
+  state.channelType = "simulator";
+  state.invocations = [];
+  state.deliveryState = "sent";
 });
 test("assuming an already owned human conversation produces no duplicate event", async () => {
   expect((await takeOver("00000000-0000-4000-8000-000000000002")).ok).toBe(true);
@@ -159,4 +169,22 @@ test("viewers can mark a conversation in the active organization as read", async
   expect(state.logs).toContainEqual(["mark_conversation_read", {
       p_conversation: "00000000-0000-4000-8000-000000000002"
     }]);
+});
+test("Instagram replies create an intent and invoke Edge with user JWT instead of writing generic pending messages", async () => {
+  state.channelType = "instagram";
+  expect((await sendReply("00000000-0000-4000-8000-000000000002", "Oi")).ok).toBe(true);
+  expect(state.writes).toEqual([]);
+  expect(state.logs[0]).toEqual(["create_instagram_send_intent", expect.objectContaining({ p_text: "Oi" })]);
+  expect(state.invocations).toEqual([["send-message", { body: { intentId: "00000000-0000-4000-8000-000000000003" }, headers: { Authorization: "Bearer user-jwt" } }]]);
+});
+test("Instagram validates UTF-8 bytes before creating an intent", async () => {
+  state.channelType = "instagram";
+  expect((await sendReply("00000000-0000-4000-8000-000000000002", "á".repeat(501))).ok).toBe(false);
+  expect(state.logs).toEqual([]);
+  expect(state.invocations).toEqual([]);
+});
+test("uncertain Instagram send is returned as accepted with warning so the composer does not keep a resend draft", async () => {
+  state.channelType = "instagram";
+  state.deliveryState = "uncertain";
+  expect(await sendReply("00000000-0000-4000-8000-000000000002", "Oi")).toMatchObject({ ok: true, data: { messageId: "message", deliveryState: "uncertain" } });
 });

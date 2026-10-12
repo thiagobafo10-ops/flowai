@@ -12,6 +12,10 @@ import_map = "./functions/deno.json"
 verify_jwt = false
 import_map = "./functions/deno.json"
 
+[functions.send-message]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
 [api]
 enabled = true
 # Port to use for the API URL.
