@@ -491,6 +491,102 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"instagram_comment_rules": {
+                  Row: {
+                    "active": boolean,"channel_id": string,"created_at": string,"id": string,"keyword": string,"media_id": string | null,"organization_id": string,"reply_text": string,"updated_at": string,"version": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"channel_id": string,"created_at"?: string,"id"?: string,"keyword": string,"media_id"?: string | null,"organization_id": string,"reply_text": string,"updated_at"?: string,"version"?: number
+                  }
+                  Update: {
+                    "active"?: boolean,"channel_id"?: string,"created_at"?: string,"id"?: string,"keyword"?: string,"media_id"?: string | null,"organization_id"?: string,"reply_text"?: string,"updated_at"?: string,"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_comment_rules_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_comment_rules_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"instagram_events": {
+                  Row: {
+                    "attempts": number,"channel_id": string,"created_at": string,"external_id": string,"id": string,"kind": string,"last_error": string | null,"message_id": string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id": string | null,"rule_version": number | null,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"channel_id": string,"created_at"?: string,"external_id": string,"id"?: string,"kind": string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
+                  }
+                  Update: {
+                    "attempts"?: number,"channel_id"?: string,"created_at"?: string,"external_id"?: string,"id"?: string,"kind"?: string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at"?: string,"organization_id"?: string,"payload"?: NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_events_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_events_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "instagram_events_organization_id_rule_id_fkey"
+      columns: ["organization_id","rule_id"]
+isOneToOne: false
+      referencedRelation: "instagram_comment_rules"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"instagram_send_intents": {
+                  Row: {
+                    "actor_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"comment_id": string | null,"conversation_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"message_id": string | null,"organization_id": string,"recipient_external_id": string | null,"request_id": string | null,"state": string,"text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id": string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text": string
+                  }
+                  Update: {
+                    "actor_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_send_intents_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: true
+      referencedRelation: "instagram_events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "instagram_send_intents_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_send_intents_organization_id_conversation_id_cha_fkey"
+      columns: ["organization_id","conversation_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id","channel_id"]
+    },{
+      foreignKeyName: "instagram_send_intents_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"knowledge_chunks": {
                   Row: {
                     "chunk_index": number,"content": string,"created_at": string,"document_id": string,"embedding": string,"id": string,"organization_id": string,"token_count": number
@@ -565,14 +661,14 @@ isOneToOne: false
                   ]
                 },"messages": {
                   Row: {
-                    "channel_id": string,"content": string,"content_type": string,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
+                    "channel_id": string,"content": string,"content_type": string,"context": NonNullable<Json>,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "channel_id": string,"content": string,"content_type"?: string,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "channel_id": string,"content": string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Update: {
-                    "channel_id"?: string,"content"?: string,"content_type"?: string,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "channel_id"?: string,"content"?: string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -738,6 +834,15 @@ isOneToOne: false
             "check_rate_limit":
 { Args: { "p_key": string,"p_limit": number,"p_window_seconds": number }; Returns: boolean
                            },
+"claim_instagram_send":
+{ Args: { "p_intent_id": string }; Returns: Json
+                           },
+"complete_instagram_send":
+{ Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
+                           },
+"create_instagram_send_intent":
+{ Args: { "p_conversation_id": string,"p_request_id": string,"p_text": string }; Returns: string
+                           },
 "create_organization_with_owner":
 { Args: { "p_name": string }; Returns: string
                            },
@@ -764,6 +869,12 @@ isOneToOne: false
                            },
 "ingest_inbound_message":
 { Args: { "p_channel": string,"p_external_id": string,"p_sender_external_id": string,"p_sender_name": string,"p_sent_at": string,"p_text": string }; Returns: string
+                           },
+"ingest_instagram_event":
+{ Args: { "p_connection_id": string,"p_event": Json }; Returns: Json
+                           },
+"instagram_keyword_matches":
+{ Args: { "p_keyword": string,"p_text": string }; Returns: boolean
                            },
 "is_member":
 { Args: { "p_org": string }; Returns: boolean
@@ -796,6 +907,9 @@ isOneToOne: false
                            },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
+                           },
+"save_instagram_comment_rule":
+{ Args: { "p_input": Json }; Returns: string
                            },
 "save_instagram_connection":
 { Args: { "p_actor_id": string,"p_input": Json,"p_org_id": string }; Returns: Json
