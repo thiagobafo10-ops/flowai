@@ -1,12 +1,14 @@
 import { handleInstagramWorker, processInstagramWork, type InstagramWorkerDeps } from "../instagram-worker/handler.ts";
 function assert(value: unknown, message = "assertion failed"): void { if (!value) throw new Error(message); }
 function fixture() {
-  let sends = 0; const finished: unknown[] = [];
+  let sends = 0; const finished: unknown[] = []; const names: unknown[] = [];
   const work = { queueId: 1, eventId: "event" };
   const deps: InstagramWorkerDeps = {
     readWorkerSecret: async () => "worker-secret", readWork: async () => [work],
     prepare: async () => ({ eventId: "event", organizationId: "org", channelId: "channel", connectionId: "conn", intentId: "intent", commentId: "123", mediaId: "456", senderExternalId: "900", ruleEffectiveAt: "2026-10-10T00:00:00Z", state: "pending" }),
     reselect: async () => null,
+    prepareProfile: async () => ({ eventId: "dm", organizationId: "org", channelId: "channel", connectionId: "conn", contactId: "contact", senderExternalId: "900" }),
+    saveContactName: async (...args) => { names.push(args); },
     claim: async () => ({ intentId: "intent", connectionId: "conn", channelId: "channel", kind: "private_reply", text: "Seu guia", recipientExternalId: null, commentId: "123", claimToken: "claim" }),
     complete: async () => {},
     finishWork: async (...args) => { finished.push(args); },
@@ -20,7 +22,7 @@ function fixture() {
     },
     now: () => new Date("2026-10-12T12:00:00Z"),
   };
-  return { deps, work, finished, sends: () => sends };
+  return { deps, work, finished, names, sends: () => sends };
 }
 Deno.test("keyword work sends one private reply and acknowledges completion", async () => {
   const f = fixture(); assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1); assert(JSON.stringify(f.finished) === '[[1,"done",null]]');
@@ -98,4 +100,23 @@ Deno.test("fallback rule that is also newer than the comment is not answered", a
   f.deps.prepare = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-12T00:00:00Z" } : null; };
   f.deps.reselect = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-11T18:00:00Z" } : null; };
   assert(await processInstagramWork(f.work, f.deps) === "ignored"); assert(f.sends() === 0);
+});
+Deno.test("Direct profile task saves the contact name from the Instagram profile", async () => {
+  const f = fixture(); const urls: string[] = []; let prepared = 0;
+  f.deps.prepare = async () => { prepared++; return null; };
+  f.deps.fetch = async (input) => { urls.push(String(input)); return Response.json({ name: "Maria Cliente", username: "maria" }); };
+  assert(await processInstagramWork({ queueId: 9, eventId: "dm", task: "profile" }, f.deps) === "done");
+  assert(prepared === 0); assert(urls.length === 1 && urls[0] === "https://graph.instagram.com/v26.0/900?fields=name%2Cusername");
+  assert(JSON.stringify(f.names) === '[["dm","Maria Cliente"]]'); assert(JSON.stringify(f.finished) === '[[9,"done",null]]');
+});
+Deno.test("profile errors never fail the event", async () => {
+  const f = fixture(); f.deps.fetch = async () => Response.json({ error: { code: 100 } }, { status: 400 });
+  assert(await processInstagramWork({ queueId: 9, eventId: "dm", task: "profile" }, f.deps) === "ignored");
+  assert(f.names.length === 0); assert(JSON.stringify(f.finished) === '[[9,"ignored","profile_unavailable"]]');
+  const g = fixture(); g.deps.fetch = async () => { throw new Error("network"); };
+  assert(await processInstagramWork({ queueId: 9, eventId: "dm", task: "profile" }, g.deps) === "ignored");
+});
+Deno.test("contact that already has a name is not looked up", async () => {
+  const f = fixture(); let calls = 0; f.deps.prepareProfile = async () => null; f.deps.fetch = async () => { calls++; return Response.json({}); };
+  assert(await processInstagramWork({ queueId: 9, eventId: "dm", task: "profile" }, f.deps) === "ignored"); assert(calls === 0);
 });

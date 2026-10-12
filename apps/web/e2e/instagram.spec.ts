@@ -48,6 +48,8 @@ test("Instagram: webhook assinado chega ao Inbox com story e permite responder",
   await expect(page.getByTestId("message-bubble").filter({ hasText: "Olá, posso ajudar" })).toContainText("Enviada");
   const c = connectionFor(email);
   expect(Number(psql(`select count(*) from public.contacts where instagram_id='90001' and organization_id=(select organization_id from public.channels where id='${c.channelId}')`))).toBe(1);
+  await runInstagramWorker();
+  expect(psql(`select name from public.contacts where instagram_id='90001' and organization_id=(select organization_id from public.channels where id='${c.channelId}')`)).toBe("Cliente Instagram");
 });
 test("Instagram: palavra-chave acentuada gera uma resposta privada única", async ({ page }) => {
   const email = newEmail(); await connect(page, email); await confirmWebhook(email); await page.reload();

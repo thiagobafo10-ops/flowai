@@ -1,5 +1,5 @@
 import { createMetaRepository } from "../_shared/meta-repository.ts";
-import { handleInstagramWorker, type PreparedComment, type InstagramWork } from "./handler.ts";
+import { handleInstagramWorker, type PreparedComment, type PreparedProfile, type InstagramWork } from "./handler.ts";
 import type { SendClaim } from "../send-message/handler.ts";
 const url = Deno.env.get("SUPABASE_URL")!;
 const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -14,6 +14,8 @@ Deno.serve((request) => handleInstagramWorker(request, {
   readWork: (limit) => rpc<InstagramWork[]>("read_instagram_work", { p_limit: limit }),
   prepare: (id) => rpc<PreparedComment | null>("prepare_instagram_comment_send", { p_event_id: id }),
   reselect: (id, at) => rpc<PreparedComment | null>("reselect_instagram_comment_rule", { p_event_id: id, p_comment_at: at }),
+  prepareProfile: (id) => rpc<PreparedProfile | null>("prepare_instagram_profile", { p_event_id: id }),
+  saveContactName: (id, name) => rpc<void>("save_instagram_contact_name", { p_event_id: id, p_name: name }),
   claim: (id) => rpc<SendClaim | null>("claim_instagram_send", { p_intent_id: id }),
   complete: (id, result) => rpc<void>("complete_instagram_send", { p_intent_id: id, p_result: result }),
   finishWork: (id, state, error) => rpc<void>("finish_instagram_work", { p_queue_id: id, p_state: state, p_error_code: error }),

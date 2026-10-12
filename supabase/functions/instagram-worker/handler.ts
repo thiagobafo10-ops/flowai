@@ -1,7 +1,9 @@
 import { sendClaimedInstagram, type SendClaim, type SendDeps } from "../send-message/handler.ts";
 import { constantTimeTextEqual } from "../_shared/http.ts";
+import { InstagramProvider } from "../../../packages/core/src/channels/instagram/provider.ts";
 export type WorkResult = "done" | "ignored" | "retry" | "failed" | "uncertain";
-export type InstagramWork = { queueId: number; eventId: string };
+export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" };
+export type PreparedProfile = { eventId: string; organizationId: string; channelId: string; connectionId: string; contactId: string; senderExternalId: string };
 export type PreparedComment = { eventId: string; organizationId: string; channelId: string; connectionId: string; intentId: string; commentId: string; mediaId: string; senderExternalId: string; ruleEffectiveAt: string; state: string };
 export type InstagramWorkerDeps = SendDeps & {
   readWorkerSecret(): Promise<string | null>;
@@ -10,9 +12,31 @@ export type InstagramWorkerDeps = SendDeps & {
   /** Picks the oldest active matching rule already effective at the comment's real time. */
   reselect(eventId: string, commentAt: string): Promise<PreparedComment | null>;
   claim(intentId: string): Promise<SendClaim | null>;
+  prepareProfile(eventId: string): Promise<PreparedProfile | null>;
+  saveContactName(eventId: string, name: string): Promise<void>;
   finishWork(queueId: number, state: WorkResult, errorCode: string | null): Promise<void>;
 };
+/** Best-effort profile lookup after a Direct: any failure only skips the name. */
+async function processInstagramProfile(item: InstagramWork, deps: InstagramWorkerDeps): Promise<WorkResult> {
+  let state: WorkResult = "ignored"; let errorCode: string | null = null;
+  try {
+    const prepared = await deps.prepareProfile(item.eventId);
+    if (prepared) {
+      const secrets = await deps.readConnectionSecrets(prepared.connectionId);
+      const channel = secrets?.channels.find((channel) => channel.channelId === prepared.channelId && channel.status === "active");
+      if (!secrets || !channel || secrets.disconnected || secrets.organizationId !== prepared.organizationId) errorCode = "channel_inactive";
+      else {
+        const provider = new InstagramProvider({ accountId: channel.accountId, accessToken: channel.accessToken, apiVersion: secrets.apiVersion, fetch: deps.fetch, now: deps.now });
+        const profile = await provider.getContact(prepared.senderExternalId);
+        if (profile.name) { await deps.saveContactName(item.eventId, profile.name); state = "done"; }
+      }
+    }
+  } catch { state = "ignored"; errorCode = "profile_unavailable"; }
+  await deps.finishWork(item.queueId, state, errorCode);
+  return state;
+}
 export async function processInstagramWork(item: InstagramWork, deps: InstagramWorkerDeps): Promise<WorkResult> {
+  if (item.task === "profile") return await processInstagramProfile(item, deps);
   let state: WorkResult = "ignored"; let errorCode: string | null = null;
   let claimed = false;
   try {

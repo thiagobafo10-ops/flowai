@@ -47,6 +47,7 @@ select is((select state from public.instagram_send_intents where id=:'live'), 'u
 
 -- Fila vazia não gera chamada HTTP ao worker; com trabalho visível, gera.
 select public.configure_instagram_worker('http://kong:8000', repeat('k',40), repeat('w',40));
+delete from pgmq.q_instagram_work;
 select count(*)::int as before_http from net.http_request_queue \gset
 select public.dispatch_instagram_worker();
 select is((select count(*)::int from net.http_request_queue), :before_http, 'fila vazia não chama o worker');

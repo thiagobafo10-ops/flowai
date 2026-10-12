@@ -4,7 +4,7 @@ import { createMetaRepository } from "../_shared/meta-repository.ts";
 import { handleMetaConnection } from "../meta-connection/handler.ts";
 import { handleMetaWebhook } from "../meta-webhook/handler.ts";
 import { handleSendMessage, type SendClaim } from "../send-message/handler.ts";
-import { handleInstagramWorker, type InstagramWork, type PreparedComment } from "../instagram-worker/handler.ts";
+import { handleInstagramWorker, type InstagramWork, type PreparedComment, type PreparedProfile } from "../instagram-worker/handler.ts";
 
 const url = "http://127.0.0.1:54321";
 const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -36,6 +36,7 @@ const graphFetch: typeof fetch = async (input, init) => {
     }
     return Response.json({ message_id: `e2e-out-${crypto.randomUUID()}`, recipient_id: recipientId });
   }
+  if (endpoint.searchParams.get("fields") === "name,username") return Response.json({ name: "Cliente Instagram", username: "cliente_ig" });
   if (endpoint.searchParams.get("fields") === "id,owner") return Response.json({ id: resource, owner: { id: token } });
   const response = await fetch(`${url}/rest/v1/instagram_events?kind=eq.comment&external_id=eq.${encodeURIComponent(resource)}&select=payload,created_at`, { headers });
   const [event] = await response.json();
@@ -52,6 +53,8 @@ const workerDeps = {
   readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_instagram_worker_config", {}))?.workerSecret ?? null,
   readWork: (limit: number) => rpc<InstagramWork[]>("read_instagram_work", { p_limit: limit }),
   prepare: (id: string) => rpc<PreparedComment | null>("prepare_instagram_comment_send", { p_event_id: id }),
+  prepareProfile: (id: string) => rpc<PreparedProfile | null>("prepare_instagram_profile", { p_event_id: id }),
+  saveContactName: (id: string, name: string) => rpc<void>("save_instagram_contact_name", { p_event_id: id, p_name: name }),
   reselect: (id: string, at: string) => rpc<PreparedComment | null>("reselect_instagram_comment_rule", { p_event_id: id, p_comment_at: at }),
   finishWork: (id: number, state: string, error: string | null) => rpc<void>("finish_instagram_work", { p_queue_id: id, p_state: state, p_error_code: error }),
 };
