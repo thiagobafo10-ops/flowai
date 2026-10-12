@@ -1,5 +1,9 @@
 # FlowAI — Roadmap e decisões de produto
 
+## Prioridade de canais (decidido em 2026-10-12)
+
+Começar a Fase 5 **somente com Instagram**: Direct, comentário em post/Reels com palavra-chave → Direct e respostas/menções em stories. WhatsApp fica para uma etapa posterior, sem data definida; não implementar seu provider ou configuração agora. O desenho específico está em `specs/2026-10-12-fase-5-meta-design.md`.
+
 ## Objetivo: igual ou melhor que o ManyChat (decidido em 2026-10-10)
 
 O MVP original é "ManyChat + CRM de vendas". Para alcançar paridade com o ManyChat, **antes de iniciar a Fase 5** a spec do MVP (`specs/2026-10-07-flowai-mvp-design.md`) deve ser revisada com o usuário para incluir:

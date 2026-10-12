@@ -1,30 +1,30 @@
-# Fase 5 — WhatsApp e Instagram
+# Fase 5 — Instagram primeiro
 
 - Data: 2026-10-12.
 - Status: proposta para aprovação; builder check concluído sem lacunas importantes; implementação ainda não autorizada por este documento.
 - Base: Fase 4 concluída em `c935b4b`, roadmap de 2026-10-10 e design geral do MVP.
+- Decisão do usuário em 2026-10-12: começar somente com Instagram; WhatsApp fica para uma etapa posterior, sem data definida.
 - Premissa existente: ainda sem app Meta; validar contratos e payloads assinados localmente, com validação ao vivo quando houver app e contas de teste.
 
 ## Resultado esperado
 
-A empresa conecta seus canais e recebe mensagens reais no mesmo Inbox já implementado. A equipe responde pelo Inbox, acompanha os estados de entrega e identifica mensagens originadas de stories. No Instagram, pode ativar uma regra simples que responde no Direct a comentários de posts/Reels contendo uma palavra-chave.
+A empresa conecta sua conta profissional do Instagram e recebe mensagens reais no mesmo Inbox já implementado. A equipe responde pelo Inbox, acompanha os estados disponíveis e identifica mensagens originadas de stories. Pode ativar uma regra simples que responde no Direct a comentários de posts/Reels contendo uma palavra-chave.
 
 O objetivo decidido no roadmap é alcançar paridade com o ManyChat, preservando CRM, atendimento em equipe e isolamento entre empresas. Esta fase entrega os canais e uma automação específica de comentários; o editor genérico de automações continua na Fase 7.
 
 ## Escopo e escolhas propostas
 
-1. WhatsApp Cloud API: entrada de texto, saída de texto, leitura e eventos de entrega.
-2. Instagram API com Instagram Login: contas profissionais, entrada/saída de Direct e reconhecimento de respostas e menções em stories.
-3. Comentários: cadastrar palavra-chave, selecionar um post/Reel ou todos os posts da conta, escrever a resposta privada e ativar/desativar. Uma resposta inicial por comentário, sujeita às regras oficiais da Meta. Não enviar uma resposta pública adicional.
-4. Configuração manual na página existente de canais, com teste de credenciais e instruções de webhook. OAuth/Embedded Signup fica para uma fase posterior.
-5. Conteúdo recebido sem texto aparece como indicação do tipo de mídia e contexto quando disponível. Esta fase não baixa anexos nem envia mídia.
-6. Nada de IA, campanhas em massa, modelos do WhatsApp ou editor de fluxos nesta fase. As filas e eventos deixam o caminho preparado para as Fases 6 e 7.
+1. Instagram API com Instagram Login: contas profissionais, entrada/saída de Direct e reconhecimento de respostas e menções em stories.
+2. Comentários: cadastrar palavra-chave, selecionar um post/Reel ou todos os posts da conta, escrever a resposta privada e ativar/desativar. Uma resposta inicial por comentário, sujeita às regras oficiais da Meta. Não enviar uma resposta pública adicional.
+3. Configuração manual na página existente de canais, com teste de credenciais e instruções de webhook. OAuth fica para uma fase posterior.
+4. Conteúdo recebido sem texto aparece como indicação do tipo de mídia e contexto quando disponível. Esta fase não baixa anexos nem envia mídia.
+5. WhatsApp, IA, campanhas em massa e editor de fluxos ficam fora desta fase. As filas e eventos deixam o caminho preparado para as Fases 6 e 7; WhatsApp será planejado separadamente.
 
-As escolhas 2–5 são propostas do implementador, não decisões já aprovadas pelo usuário. A opção Instagram Login permite contas profissionais sem exigir vínculo com uma Página do Facebook, conforme a coleção oficial da Meta. Não haverá suporte simultâneo ao antigo Facebook Login nesta fase.
+O foco exclusivo no Instagram foi decidido pelo usuário. As escolhas de API, configuração manual e apresentação de mídia são propostas do implementador, não decisões já aprovadas pelo usuário. A opção Instagram Login permite contas profissionais sem exigir vínculo com uma Página do Facebook, conforme a coleção oficial da Meta. Não haverá suporte simultâneo ao antigo Facebook Login nesta fase.
 
 ## Conexão e isolamento
 
-Para o piloto, cada organização configura um app Meta próprio. Uma conexão de app guarda app ID, app secret, verify token e versão da Graph API; os canais associados guardam o ID da conta profissional do Instagram ou o phone number ID/WABA ID do WhatsApp e seu access token. O mesmo app pode atender ambos os canais da organização.
+Para o piloto, cada organização configura um app Meta próprio. Uma conexão de app guarda app ID, app secret, verify token e versão da Graph API; os canais associados guardam o ID da conta profissional do Instagram e seu access token. Não criar campos, validações ou fluxos de conexão do WhatsApp nesta implementação.
 
 Escolha do implementador: app ID único na instalação e vínculo imutável a uma organização. O produto mostra erro explicativo se outro cadastro tentar usar o mesmo app. Um app compartilhado entre empresas com onboarding OAuth fica fora desta fase. Isso evita prometer múltiplas URLs de callback para um único app.
 
@@ -40,7 +40,7 @@ Salvar credenciais deixa o canal em configuração. O teste verifica identidade 
 
 Os providers permanecem em `packages/core`, com `fetch` e relógio injetados e apenas Web APIs, para execução em Node e Deno. O simulador continua funcionando. O parser passa a produzir eventos tipados: mensagem, comentário, estado de entrega e evento ignorado. O contrato de envio distingue mensagem normal e resposta privada a comentário.
 
-WA usa phone number ID para enviar e identifica contatos por `wa_id`; telefone internacional não passa pela normalização brasileira do simulador. Instagram usa ID da conta profissional e ID do usuário no escopo apropriado. A escolha do destinatário é específica do canal, corrigindo a prioridade atual que poderia selecionar telefone para um contato do Instagram.
+Instagram usa ID da conta profissional e ID do usuário no escopo apropriado. A escolha do destinatário é específica do canal, corrigindo a prioridade atual que poderia selecionar telefone para um contato do Instagram. O provider do WhatsApp não será implementado nesta etapa; o tipo já existente no modelo de dados permanece reservado.
 
 A versão da Graph API é configuração obrigatória da conexão e é validada sintaticamente. Não assumir uma versão "mais recente" fixa a partir da data. Os exemplos e fixtures identificam sua versão e fonte.
 
@@ -96,13 +96,12 @@ O transporte de teste só existe na infraestrutura de teste com fetch injetado/s
 
 ## Atualização proposta do MVP
 
-Esta proposta amplia a Fase 5 com comentários por palavra-chave e contexto de stories. Para a Fase 7, o escopo passa a incluir gatilhos de comentário/story, links/QR de entrada, botões/respostas rápidas, sequências com espera de dias e campanhas segmentadas sujeitas às permissões de cada canal. Após a Fase 10: anexos/mídia, modelos aprovados do WhatsApp, Google Sheets/Shopify, galeria de fluxos e avaliação de Messenger. Esses itens não fazem parte da implementação da Fase 5.
+Esta proposta inicia a Fase 5 somente com Instagram, incluindo comentários por palavra-chave e contexto de stories. A integração com WhatsApp fica adiada por decisão do usuário e exige plano próprio antes de começar. Para a Fase 7, o escopo passa a incluir gatilhos de comentário/story, links/QR de entrada, botões/respostas rápidas, sequências com espera de dias e campanhas segmentadas sujeitas às permissões de cada canal. Após a Fase 10: anexos/mídia, modelos aprovados do WhatsApp (dependentes da conexão futura), Google Sheets/Shopify, galeria de fluxos e avaliação de Messenger. Esses itens não fazem parte da implementação da Fase 5.
 
 Depois da aprovação, incorporar essa atualização ao design geral e criar o plano detalhado. Onde divergir, a proposta específica aprovada substitui Page ID/Facebook Login por Instagram Login e agrupa o app secret/verify token na conexão de app, mantendo access tokens por canal.
 
 ## Fontes e verificação
 
 - [Coleção oficial Meta — Instagram API](https://www.postman.com/meta/workspace/instagram/documentation/23987686-9386f468-7714-490f-9bfc-9442db5c8f00): Instagram Login, contas profissionais, permissões e Send API.
-- [Coleção oficial Meta — WhatsApp webhook payloads](https://www.postman.com/meta/whatsapp-business-platform/folder/tduohwq/webhook-payload-reference): envelope, metadata e estados.
 - [Supabase Vault](https://supabase.com/docs/guides/database/vault): armazenamento e proteção de acesso à view de segredos decifrados.
 - Consulta em 2026-10-12. As páginas diretas de developers.facebook.com retornaram limitação de acesso nesta sessão. A regra de comentários/stories exige conferência adicional do contrato durante o planejamento; não registrar janela/endpoint não verificado como fato.
