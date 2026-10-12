@@ -57,3 +57,13 @@ A revisão independente (1 crítico, 5 importantes, 9 menores) foi tratada na on
 - Callback HTTP local: challenge 200, payload assinado 200, duplicado 200 e uma mensagem gravada.
 - pg_net: worker autenticado respondeu 200 com fila vazia; cron por minuto e limpeza diária verificados.
 - Desktop/celular inspecionados, sem cortes ou sobreposições. Screenshots preservadas no diretório de visualizações desta conversa.
+
+## Pendências após a revisão das correções (2026-10-12)
+
+Revisão independente das correções: todos os itens resolvidos. Ficam como pendências:
+
+- **Segurança (antes de produção):** `check_auth_rate_limit` aceita o limite escolhido por quem chama; fixar limite e janela por tipo no servidor. O app web ainda usa o **primeiro** hop do `X-Forwarded-For` para o IP do login/cadastro (o webhook já usa o hop da plataforma); trocar pelo IP fornecido pela hospedagem. E-mails muito longos (≈135+ caracteres) não entram no rate limit de login (falha aberta); limitar o tamanho do e-mail no schema.
+- **Texto:** a mensagem "Esse app Meta já possui uma conexão nesta organização." também aparece quando o conflito é a conta (mesma org, outro app); uma corrida que atinge o índice direto mostra o texto de "outra organização".
+- **Limpeza:** claims não verificados que já têm histórico nunca são removidos (não bloqueiam ninguém); eventos de comentário em estado "incerto" mantêm o estado após a exclusão do contato (sem envio).
+- **Ambiente local:** o analytics/vector local foi desligado em `supabase/config.toml` para caber em máquinas de 8 GB; a fragilidade de memória do host não é resolvida pelo repositório.
+- **Validação ao vivo com a Meta** continua pendente (app e conta profissional reais), incluindo contrato de `subscribed_apps`, `messaging_seen`, `media_product_type` e o bundle de `packages/core` no deploy das Edge Functions.
