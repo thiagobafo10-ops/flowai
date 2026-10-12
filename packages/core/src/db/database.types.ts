@@ -263,17 +263,23 @@ isOneToOne: false
                   ]
                 },"channels": {
                   Row: {
-                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"last_error": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Update: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "channels_meta_connection_fk"
+      columns: ["organization_id","meta_connection_id"]
+isOneToOne: false
+      referencedRelation: "meta_connections"
+      referencedColumns: ["organization_id","id"]
+    },{
       foreignKeyName: "channels_organization_id_fkey"
       columns: ["organization_id"]
 isOneToOne: false
@@ -595,6 +601,26 @@ isOneToOne: false
       referencedColumns: ["organization_id","user_id"]
     }
                   ]
+                },"meta_connections": {
+                  Row: {
+                    "api_version": string,"app_id": string,"app_secret_id": string,"created_at": string,"credential_generation": number,"disconnected_at": string | null,"id": string,"last_error": string | null,"organization_id": string,"token_verified_at": string | null,"updated_at": string,"verify_token_secret_id": string,"webhook_verified_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "api_version": string,"app_id": string,"app_secret_id": string,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id": string,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id": string,"webhook_verified_at"?: string | null
+                  }
+                  Update: {
+                    "api_version"?: string,"app_id"?: string,"app_secret_id"?: string,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id"?: string,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id"?: string,"webhook_verified_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "meta_connections_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"organizations": {
                   Row: {
                     "company_info": NonNullable<Json>,"created_at": string,"id": string,"name": string,"slug": string,"timezone": string,"updated_at": string
@@ -759,6 +785,9 @@ isOneToOne: false
 "mark_conversation_read":
 { Args: { "p_conversation": string }; Returns: undefined
                            },
+"read_meta_connection_secrets":
+{ Args: { "p_connection_id": string }; Returns: Json
+                           },
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
                            },
@@ -768,10 +797,16 @@ isOneToOne: false
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
                            },
+"save_instagram_connection":
+{ Args: { "p_actor_id": string,"p_input": Json,"p_org_id": string }; Returns: Json
+                           },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
               "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
             }[]
+                           },
+"set_meta_connection_verification":
+{ Args: { "p_connection_id": string,"p_error_code": string,"p_generation": number,"p_kind": string,"p_success": boolean }; Returns: undefined
                            },
 "set_stage_outcome":
 { Args: { "p_outcome": string,"p_stage": string }; Returns: undefined
