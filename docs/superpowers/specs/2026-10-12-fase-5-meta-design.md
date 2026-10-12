@@ -1,7 +1,7 @@
 # Fase 5 — Instagram primeiro
 
 - Data: 2026-10-12.
-- Status: proposta para aprovação; builder check concluído sem lacunas importantes; implementação ainda não autorizada por este documento.
+- Status: aprovado pelo usuário em 2026-10-12, com foco exclusivo no Instagram; builder check concluído sem lacunas importantes.
 - Base: Fase 4 concluída em `c935b4b`, roadmap de 2026-10-10 e design geral do MVP.
 - Decisão do usuário em 2026-10-12: começar somente com Instagram; WhatsApp fica para uma etapa posterior, sem data definida.
 - Premissa existente: ainda sem app Meta; validar contratos e payloads assinados localmente, com validação ao vivo quando houver app e contas de teste.

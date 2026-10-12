@@ -4,7 +4,7 @@
 - **Status:** aguardando revisão
 - **Escopo:** spec de arquitetura geral, válida para as 10 fases. Cada fase terá seu próprio plano de implementação (`docs/superpowers/plans/`).
 
-> Revisão proposta em 2026-10-12: o [desenho da Fase 5](2026-10-12-fase-5-meta-design.md) consolida a ampliação registrada no roadmap (comentários por palavra-chave, stories e etapas posteriores de paridade com ManyChat). A proposta aguarda aprovação antes de substituir os contratos de conexão Meta descritos abaixo.
+> Revisão aprovada em 2026-10-12: o [desenho da Fase 5](2026-10-12-fase-5-meta-design.md) começa somente com Instagram (Direct, comentários por palavra-chave e stories); WhatsApp fica adiado. Para essa fase, Instagram Login substitui Page ID/Facebook Login; app secret e verify token pertencem à conexão de app por organização, access token pertence ao canal. A versão da Graph API é obrigatória. Essa spec específica prevalece sobre os contratos Meta originais abaixo. A Fase 7 inclui gatilhos de comentário/story, links/QR, botões/respostas rápidas, sequências com dias de espera e campanhas segmentadas sujeitas às regras do canal; após a Fase 10, mídia/anexos, templates WhatsApp dependentes da integração futura, Sheets/Shopify, galeria de fluxos e avaliação de Messenger.
 
 ---
 
