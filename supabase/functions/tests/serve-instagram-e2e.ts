@@ -52,6 +52,7 @@ const workerDeps = {
   readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_instagram_worker_config", {}))?.workerSecret ?? null,
   readWork: (limit: number) => rpc<InstagramWork[]>("read_instagram_work", { p_limit: limit }),
   prepare: (id: string) => rpc<PreparedComment | null>("prepare_instagram_comment_send", { p_event_id: id }),
+  reselect: (id: string, at: string) => rpc<PreparedComment | null>("reselect_instagram_comment_rule", { p_event_id: id, p_comment_at: at }),
   finishWork: (id: number, state: string, error: string | null) => rpc<void>("finish_instagram_work", { p_queue_id: id, p_state: state, p_error_code: error }),
 };
 

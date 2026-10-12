@@ -7,6 +7,8 @@ export type InstagramWorkerDeps = SendDeps & {
   readWorkerSecret(): Promise<string | null>;
   readWork(limit: number): Promise<InstagramWork[]>;
   prepare(eventId: string): Promise<PreparedComment | null>;
+  /** Picks the oldest active matching rule already effective at the comment's real time. */
+  reselect(eventId: string, commentAt: string): Promise<PreparedComment | null>;
   claim(intentId: string): Promise<SendClaim | null>;
   finishWork(queueId: number, state: WorkResult, errorCode: string | null): Promise<void>;
 };
@@ -34,9 +36,17 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
         } else {
           const createdAt = Date.parse(comment.timestamp);
           const now = deps.now().getTime();
-          if (!Number.isFinite(createdAt) || createdAt > now || now - createdAt >= 7 * 86400000 || createdAt < Date.parse(prepared.ruleEffectiveAt)
-            || String(comment.id) !== prepared.commentId || String(comment.from?.id) !== prepared.senderExternalId
-            || String(comment.media?.id) !== prepared.mediaId || !["FEED", "REELS"].includes(comment.media?.media_product_type)) {
+          const eligible = Number.isFinite(createdAt) && createdAt <= now && now - createdAt < 7 * 86400000
+            && String(comment.id) === prepared.commentId && String(comment.from?.id) === prepared.senderExternalId
+            && String(comment.media?.id) === prepared.mediaId && ["FEED", "REELS"].includes(comment.media?.media_product_type);
+          // The first rule may have been (re)activated after the comment was posted:
+          // fall back to the next rule that was already effective at that time.
+          let target: PreparedComment | null = prepared;
+          if (eligible && createdAt < Date.parse(prepared.ruleEffectiveAt)) {
+            const fallback = await deps.reselect(prepared.eventId, String(comment.timestamp));
+            target = fallback && fallback.state === "pending" && createdAt >= Date.parse(fallback.ruleEffectiveAt) ? fallback : null;
+          }
+          if (!eligible || !target) {
             state = "ignored"; errorCode = "comment_not_eligible";
           } else {
             const mediaResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.mediaId)}?fields=id%2Cowner`, { headers, signal: AbortSignal.timeout(15000) });
@@ -44,11 +54,11 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
             if (mediaResponse.status >= 500 || mediaResponse.status === 429) { state = "retry"; errorCode = "provider_unavailable"; }
             else if (!mediaResponse.ok || String(media.id) !== prepared.mediaId || String(media.owner?.id ?? media.owner ?? "") !== channel.accountId) { state = "ignored"; errorCode = "media_not_owned"; }
             else {
-              const claim = await deps.claim(prepared.intentId);
+              const claim = await deps.claim(target.intentId);
               if (!claim) state = "retry";
               else {
                 claimed = true;
-                const result = await sendClaimedInstagram(claim, prepared.organizationId, deps);
+                const result = await sendClaimedInstagram(claim, target.organizationId, deps);
                 state = result.state === "sent" ? "done" : result.state === "uncertain" ? "uncertain" : result.errorCode === "rate_limited" ? "retry" : "failed";
                 errorCode = result.errorCode ?? null;
               }

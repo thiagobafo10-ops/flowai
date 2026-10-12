@@ -6,6 +6,7 @@ function fixture() {
   const deps: InstagramWorkerDeps = {
     readWorkerSecret: async () => "worker-secret", readWork: async () => [work],
     prepare: async () => ({ eventId: "event", organizationId: "org", channelId: "channel", connectionId: "conn", intentId: "intent", commentId: "123", mediaId: "456", senderExternalId: "900", ruleEffectiveAt: "2026-10-10T00:00:00Z", state: "pending" }),
+    reselect: async () => null,
     claim: async () => ({ intentId: "intent", connectionId: "conn", channelId: "channel", kind: "private_reply", text: "Seu guia", recipientExternalId: null, commentId: "123", claimToken: "claim" }),
     complete: async () => {},
     finishWork: async (...args) => { finished.push(args); },
@@ -84,4 +85,17 @@ Deno.test("worker stops reading new work once the time budget is spent", async (
   f.deps.prepare = async () => null;
   const body = await (await handleInstagramWorker(request(), f.deps)).json();
   assert(reads === 2, `reads ${reads}`); assert(body.processed === 2);
+});
+Deno.test("comment older than the first rule's activation falls back to the next eligible rule", async () => {
+  const f = fixture(); const prepare = f.deps.prepare; const reselected: unknown[] = [];
+  f.deps.prepare = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-12T00:00:00Z" } : null; };
+  f.deps.reselect = async (id, at) => { reselected.push([id, at]); const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-11T00:00:00Z" } : null; };
+  assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1);
+  assert(JSON.stringify(reselected) === JSON.stringify([["event", "2026-10-11T12:00:00+0000"]]));
+});
+Deno.test("fallback rule that is also newer than the comment is not answered", async () => {
+  const f = fixture(); const prepare = f.deps.prepare;
+  f.deps.prepare = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-12T00:00:00Z" } : null; };
+  f.deps.reselect = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-11T18:00:00Z" } : null; };
+  assert(await processInstagramWork(f.work, f.deps) === "ignored"); assert(f.sends() === 0);
 });

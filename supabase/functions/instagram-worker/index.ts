@@ -13,6 +13,7 @@ Deno.serve((request) => handleInstagramWorker(request, {
   readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_instagram_worker_config", {}))?.workerSecret ?? null,
   readWork: (limit) => rpc<InstagramWork[]>("read_instagram_work", { p_limit: limit }),
   prepare: (id) => rpc<PreparedComment | null>("prepare_instagram_comment_send", { p_event_id: id }),
+  reselect: (id, at) => rpc<PreparedComment | null>("reselect_instagram_comment_rule", { p_event_id: id, p_comment_at: at }),
   claim: (id) => rpc<SendClaim | null>("claim_instagram_send", { p_intent_id: id }),
   complete: (id, result) => rpc<void>("complete_instagram_send", { p_intent_id: id, p_result: result }),
   finishWork: (id, state, error) => rpc<void>("finish_instagram_work", { p_queue_id: id, p_state: state, p_error_code: error }),
