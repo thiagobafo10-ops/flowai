@@ -837,8 +837,14 @@ isOneToOne: false
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
                            },
+"cleanup_instagram_events":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
+                           },
+"configure_instagram_worker":
+{ Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
                            },
 "create_instagram_send_intent":
 { Args: { "p_conversation_id": string,"p_request_id": string,"p_text": string }; Returns: string
@@ -858,8 +864,14 @@ isOneToOne: false
 "disconnect_instagram_connection":
 { Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: undefined
                            },
+"dispatch_instagram_worker":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
+                           },
+"finish_instagram_work":
+{ Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
                            },
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
@@ -898,6 +910,15 @@ isOneToOne: false
                            },
 "mark_conversation_read":
 { Args: { "p_conversation": string }; Returns: undefined
+                           },
+"prepare_instagram_comment_send":
+{ Args: { "p_event_id": string }; Returns: Json
+                           },
+"read_instagram_work":
+{ Args: { "p_limit": number }; Returns: Json
+                           },
+"read_instagram_worker_config":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "read_meta_connection_secrets":
 { Args: { "p_connection_id": string }; Returns: Json
