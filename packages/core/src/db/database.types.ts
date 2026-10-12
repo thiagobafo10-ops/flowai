@@ -855,6 +855,9 @@ isOneToOne: false
 "delete_stage_moving_deals":
 { Args: { "p_stage": string,"p_target_stage": string }; Returns: undefined
                            },
+"disconnect_instagram_connection":
+{ Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: undefined
+                           },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
                            },

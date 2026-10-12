@@ -1,0 +1,56 @@
+import type { Authorize } from "../_shared/auth.ts";
+import { RepositoryError, type MetaConnectionRepository } from "../_shared/meta-repository.ts";
+
+export type MetaConnectionDeps = { authorize: Authorize; repository: MetaConnectionRepository; fetch: typeof fetch };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function json(data: unknown, status = 200): Response { return Response.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
+
+export async function handleMetaConnection(request: Request, deps: MetaConnectionDeps): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  try {
+    const text = await request.text();
+    if (new TextEncoder().encode(text).length > 32768) return json({ error: "body_too_large" }, 413);
+    let input: Record<string, unknown>;
+    try { input = JSON.parse(text); } catch { return json({ error: "invalid_input" }, 400); }
+    if (!input || typeof input !== "object" || typeof input.organizationId !== "string" || !uuid.test(input.organizationId)) return json({ error: "invalid_input" }, 400);
+    const actor = await deps.authorize(request, input.organizationId, "admin");
+    if (!actor) return json({ error: "forbidden" }, 403);
+    if (input.action === "save") {
+      if (!input.input || typeof input.input !== "object" || Array.isArray(input.input)) return json({ error: "invalid_input" }, 400);
+      const result = await deps.repository.saveConnection(actor.userId, input.organizationId, input.input as Record<string, unknown>);
+      return json({ connectionId: result.connectionId, channelId: result.channelId });
+    }
+    if (typeof input.connectionId !== "string" || !uuid.test(input.connectionId)) return json({ error: "invalid_input" }, 400);
+    const secrets = await deps.repository.readConnectionSecrets(input.connectionId);
+    if (!secrets || secrets.organizationId !== input.organizationId) return json({ error: "forbidden" }, 403);
+    if (input.action === "disconnect") {
+      await deps.repository.disconnectConnection(actor.userId, input.organizationId, input.connectionId);
+      return json({ disconnected: true });
+    }
+    if (secrets.disconnected) return json({ error: "connection_disconnected" }, 409);
+    if (input.action === "reveal_verify_token") return json({ verifyToken: secrets.verifyToken });
+    if (input.action !== "test") return json({ error: "invalid_action" }, 400);
+    const channel = secrets.channels[0];
+    if (!channel) return json({ error: "invalid_account" }, 422);
+    let errorCode: string | null = null;
+    let username: string | null = null;
+    try {
+      const headers = { Authorization: `Bearer ${channel.accessToken}`, "Content-Type": "application/json" };
+      const profileResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/me?fields=user_id%2Cusername`, { headers, signal: AbortSignal.timeout(15000) });
+      const profile = await profileResponse.json();
+      if (!profileResponse.ok || profile.error) errorCode = profile.error?.code === 190 ? "invalid_token" : "permission_denied";
+      else if (String(profile.user_id ?? "") !== channel.accountId) errorCode = "invalid_account";
+      else {
+        username = typeof profile.username === "string" ? profile.username : null;
+        const subscriptionResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${channel.accountId}/subscribed_apps`, { method: "POST", headers, body: JSON.stringify({ subscribed_fields: ["messages", "comments", "messaging_seen"] }), signal: AbortSignal.timeout(15000) });
+        const subscription = await subscriptionResponse.json();
+        if (!subscriptionResponse.ok || subscription.success !== true) errorCode = subscription.error?.code === 190 ? "invalid_token" : "permission_denied";
+      }
+    } catch { errorCode = "provider_unavailable"; }
+    await deps.repository.verifyConnection(secrets.connectionId, "token", errorCode === null, errorCode, secrets.generation);
+    return errorCode ? json({ error: errorCode }, 422) : json({ verified: true, accountId: channel.accountId, username });
+  } catch (error) {
+    if (error instanceof RepositoryError) return json({ error: error.code === "23505" ? "already_connected" : error.code === "40001" ? "credentials_changed" : "operation_failed" }, error.code === "40001" || error.code === "23505" ? 409 : 422);
+    return json({ error: "operation_failed" }, 503);
+  }
+}
