@@ -6,10 +6,19 @@ import { BodyTooLarge, constantTimeTextEqual, readLimitedBody } from "../_shared
 
 export type MetaWebhookDeps = {
   readConnectionSecrets(id: string): Promise<MetaSecrets | null>;
-  allowRequest(connectionId: string, ip: string): Promise<boolean>;
+  /** Coarse per-IP limit, applied before any credential read or signature check. */
+  allowIp(ip: string): Promise<boolean>;
+  /** Per-connection limit, counted only for requests with a valid signature. */
+  allowConnection(connectionId: string): Promise<boolean>;
   ingestEvent(connectionId: string, event: InstagramEvent): Promise<unknown>;
   verifyConnection(id: string, kind: string, success: boolean, error: string | null, generation: number): Promise<void>;
 };
+/** The platform appends the real peer as the LAST X-Forwarded-For hop; earlier hops are client-controlled. */
+export function clientIp(headers: Headers): string {
+  const cf = headers.get("cf-connecting-ip")?.trim();
+  const hop = cf || headers.get("x-forwarded-for")?.split(",").at(-1)?.trim();
+  return (hop || "unknown").slice(0, 100);
+}
 function result(error: string, status: number) { return Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } }); }
 export async function handleMetaWebhook(request: Request, deps: MetaWebhookDeps): Promise<Response> {
   const url = new URL(request.url);
@@ -18,19 +27,19 @@ export async function handleMetaWebhook(request: Request, deps: MetaWebhookDeps)
   if (request.method !== "GET" && request.method !== "POST") return result("method_not_allowed", 405);
   const id = match[1];
   try {
-    const ip = (request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown").slice(0, 100);
-    if (!await deps.allowRequest(id, ip)) return result("rate_limited", 429);
+    if (!await deps.allowIp(clientIp(request.headers))) return result("rate_limited", 429);
     const secrets = await deps.readConnectionSecrets(id);
     if (!secrets || secrets.disconnected) return result("not_found", 404);
     if (request.method === "GET") {
       const token = url.searchParams.get("hub.verify_token") ?? "";
       const challenge = url.searchParams.get("hub.challenge");
-      if (url.searchParams.get("hub.mode") !== "subscribe" || !challenge || token.length > 8192 || !await constantTimeTextEqual(token, secrets.verifyToken)) return result("forbidden", 403);
+      if (url.searchParams.get("hub.mode") !== "subscribe" || !challenge || challenge.length > 256 || token.length > 8192 || !await constantTimeTextEqual(token, secrets.verifyToken)) return result("forbidden", 403);
       await deps.verifyConnection(id, "webhook", true, null, secrets.generation);
-      return new Response(challenge, { headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" } });
+      return new Response(challenge, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     }
     const body = await readLimitedBody(request, 1048576);
     if (!await verifyMetaSignature(body, request.headers.get("x-hub-signature-256"), secrets.appSecret)) return result("invalid_signature", 401);
+    if (!await deps.allowConnection(id)) return result("rate_limited", 429);
     let events: InstagramEvent[];
     try { events = parseInstagramEvents(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body))); }
     catch { return result("invalid_payload", 400); }

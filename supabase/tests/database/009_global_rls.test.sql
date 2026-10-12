@@ -22,8 +22,8 @@ select is((select array_agg(p.oid::regprocedure::text order by p.proname) from p
     and not coalesce((select bool_or(c like 'search_path=%') from unnest(p.proconfig) c), false)), null, 'SECURITY DEFINER com search_path fixo');
 
 select is((select array_agg(p.oid::regprocedure::text order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.prosecdef and p.proname <> 'check_rate_limit'
-    and has_function_privilege('anon', p.oid, 'execute')), null, 'anon não executa SECURITY DEFINER (exceto check_rate_limit)');
+  where n.nspname = 'public' and p.prosecdef and p.proname <> 'check_auth_rate_limit'
+    and has_function_privilege('anon', p.oid, 'execute')), null, 'anon não executa SECURITY DEFINER (exceto check_auth_rate_limit)');
 
 select * from finish();
 rollback;

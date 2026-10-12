@@ -75,7 +75,7 @@ Deno.serve({ hostname: "127.0.0.1", port: 54326 }, async (request) => {
   }
   if (parsed.pathname.startsWith("/functions/v1/meta-webhook/")) return handleMetaWebhook(request, {
     readConnectionSecrets: repo.readConnectionSecrets, verifyConnection: repo.verifyConnection,
-    allowRequest: async () => true, ingestEvent: (id, event) => rpc("ingest_instagram_event", { p_connection_id: id, p_event: event }),
+    allowIp: async () => true, allowConnection: async () => true, ingestEvent: (id, event) => rpc("ingest_instagram_event", { p_connection_id: id, p_event: event }),
   });
   if (parsed.pathname === "/functions/v1/meta-connection") return handleMetaConnection(request, { authorize, repository: repo, fetch: graphFetch });
   if (parsed.pathname === "/functions/v1/send-message") return handleSendMessage(request, {

@@ -857,7 +857,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "check_rate_limit":
+            "check_auth_rate_limit":
+{ Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
+                           },
+"check_rate_limit":
 { Args: { "p_key": string,"p_limit": number,"p_window_seconds": number }; Returns: boolean
                            },
 "claim_instagram_send":

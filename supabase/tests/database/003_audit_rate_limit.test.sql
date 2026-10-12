@@ -56,7 +56,9 @@ select tests.clear_authentication();
 set local role anon;
 select throws_ok($$select public.write_audit_log(null, 'auth.login', 'user', null)$$, '42501', null, 'anon não executa write_audit_log');
 
--- rate limit (anon)
+-- rate limit (servidor; a API pública usa check_auth_rate_limit, ver 030)
+reset role;
+set local role service_role;
 select ok(public.check_rate_limit('k', 3, 60), 'chamada 1 permitida');
 select ok(public.check_rate_limit('k', 3, 60), 'chamada 2 permitida');
 select ok(public.check_rate_limit('k', 3, 60), 'chamada 3 permitida');
@@ -70,10 +72,12 @@ select throws_ok('select count(*) from public.rate_limits', '42501', null, 'auth
 
 -- validação de check_rate_limit
 select tests.clear_authentication();
+set local role service_role;
 select throws_ok($$select public.check_rate_limit(null, 3, 60)$$, '22023', null, 'chave nula rejeitada');
 select throws_ok(format($$select public.check_rate_limit(%L, 3, 60)$$, repeat('x', 201)), '22023', null, 'chave > 200 rejeitada');
 select throws_ok($$select public.check_rate_limit('k2', 0, 60)$$, '22023', null, 'limite 0 rejeitado');
 select throws_ok($$select public.check_rate_limit('k2', 3, 0)$$, '22023', null, 'janela 0 rejeitada');
+reset role;
 
 -- trilha de auditoria sobrevive à exclusão de org e usuário
 select tests.create_user('c@t.test') as uc \gset

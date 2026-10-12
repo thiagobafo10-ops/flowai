@@ -11,6 +11,8 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 Deno.serve((request) => handleMetaWebhook(request, {
   readConnectionSecrets: repository.readConnectionSecrets,
   verifyConnection: repository.verifyConnection,
-  allowRequest: async (id, ip) => await rpc<boolean>("check_rate_limit", { p_key: `meta:${id}`, p_limit: 300, p_window_seconds: 60 }) && await rpc<boolean>("check_rate_limit", { p_key: `meta-ip:${ip}`, p_limit: 120, p_window_seconds: 60 }),
+  // Meta delivers every tenant from a shared IP pool: keep the IP limit coarse.
+  allowIp: (ip) => rpc<boolean>("check_rate_limit", { p_key: `meta-ip:${ip}`, p_limit: 6000, p_window_seconds: 60 }),
+  allowConnection: (id) => rpc<boolean>("check_rate_limit", { p_key: `meta:${id}`, p_limit: 3000, p_window_seconds: 60 }),
   ingestEvent: (id, event) => rpc("ingest_instagram_event", { p_connection_id: id, p_event: event }),
 }));

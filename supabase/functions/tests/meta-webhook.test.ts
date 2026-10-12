@@ -8,7 +8,8 @@ function fixture() {
   const events: unknown[] = []; const verifications: unknown[] = [];
   const deps: MetaWebhookDeps = {
     readConnectionSecrets: async () => ({ connectionId: conn, organizationId: org, appId: "123", apiVersion: "v26.0", generation: 1, disconnected: false, appSecret: "secret", verifyToken: "verify", channels: [{ channelId: "channel", accountId: "789", accessToken: "token", status: "active" }] }),
-    allowRequest: async () => true,
+    allowIp: async () => true,
+    allowConnection: async () => true,
     ingestEvent: async (_connectionId, event) => { events.push(event); return { state: "done" }; },
     verifyConnection: async (...args) => { verifications.push(args); },
   };
@@ -54,8 +55,32 @@ Deno.test("failed second persistence returns 503 and retry leaves one event per 
 Deno.test("body larger than 1 MiB is rejected before ingestion", async () => {
   const f = fixture(); assert((await handleMetaWebhook(await post("x".repeat(1048577)), f.deps)).status === 413); assert(f.events.length === 0);
 });
-Deno.test("rate limit rejects request before reading credentials", async () => {
-  const f = fixture(); f.deps.allowRequest = async () => false;
+Deno.test("coarse IP limit rejects request before reading credentials", async () => {
+  const f = fixture(); f.deps.allowIp = async () => false;
   let reads = 0; f.deps.readConnectionSecrets = async () => { reads++; return null; };
   assert((await handleMetaWebhook(await post(), f.deps)).status === 429); assert(reads === 0);
+});
+Deno.test("IP bucket uses the platform-appended hop, not a spoofed first X-Forwarded-For entry", async () => {
+  const f = fixture(); const ips: string[] = []; f.deps.allowIp = async (ip) => { ips.push(ip); return true; };
+  await handleMetaWebhook(await post(undefined, "secret", { "X-Forwarded-For": "6.6.6.6, 203.0.113.9" }), f.deps);
+  await handleMetaWebhook(await post(undefined, "secret", { "X-Forwarded-For": "7.7.7.7, 203.0.113.9" }), f.deps);
+  await handleMetaWebhook(await post(undefined, "secret", { "X-Forwarded-For": "6.6.6.6, 203.0.113.9", "cf-connecting-ip": "198.51.100.4" }), f.deps);
+  assert(JSON.stringify(ips) === JSON.stringify(["203.0.113.9", "203.0.113.9", "198.51.100.4"]));
+});
+Deno.test("unsigned requests never consume the per-connection bucket", async () => {
+  const f = fixture(); let counted = 0; f.deps.allowConnection = async () => { counted++; return true; };
+  assert((await handleMetaWebhook(await post(JSON.stringify(payload), "wrong"), f.deps)).status === 401); assert(counted === 0);
+  assert((await handleMetaWebhook(await post(), f.deps)).status === 200); assert(counted === 1);
+});
+Deno.test("per-connection limit applies after a valid signature and blocks ingestion", async () => {
+  const f = fixture(); f.deps.allowConnection = async () => false;
+  assert((await handleMetaWebhook(await post(), f.deps)).status === 429); assert(f.events.length === 0);
+});
+Deno.test("GET rejects oversized challenges and never lets the echo be sniffed", async () => {
+  const f = fixture();
+  const verify = (challenge: string) => new Request(`http://local/meta-webhook/${conn}?hub.mode=subscribe&hub.verify_token=verify&hub.challenge=${challenge}`);
+  const long = await handleMetaWebhook(verify("1".repeat(257)), f.deps);
+  assert(long.status === 403 && f.verifications.length === 0);
+  const ok = await handleMetaWebhook(verify("1".repeat(256)), f.deps);
+  assert(ok.status === 200 && ok.headers.get("x-content-type-options") === "nosniff");
 });

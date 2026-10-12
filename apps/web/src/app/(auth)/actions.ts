@@ -19,18 +19,21 @@ const MSG_INVALID_FIELDS = "Verifique os campos informados.";
 
 async function isAllowed(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
-  key: string,
+  kind: "signup" | "login",
+  subject: string,
   limit: number,
   windowSeconds: number,
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc("check_rate_limit", {
-    p_key: key,
+  // check_rate_limit é só de servidor; o wrapper público fixa o namespace da chave.
+  const { data, error } = await supabase.rpc("check_auth_rate_limit", {
+    p_kind: kind,
+    p_subject: subject,
     p_limit: limit,
     p_window_seconds: windowSeconds,
   });
   if (error) {
     // Fail-open: falha na infraestrutura de rate limit não bloqueia o usuário.
-    console.error("check_rate_limit failed", error);
+    console.error("check_auth_rate_limit failed", error);
     return true;
   }
   return data !== false;
@@ -53,7 +56,7 @@ export async function signUp(
 
   const supabase = await createServerClient();
   const ip = await getRequestIp();
-  if (!(await isAllowed(supabase, `signup:${ip}`, 5, 3600))) {
+  if (!(await isAllowed(supabase, "signup", ip, 5, 3600))) {
     return { ok: false, error: MSG_RATE_LIMIT };
   }
 
@@ -92,7 +95,7 @@ export async function signIn(input: SignInInput): Promise<ActionResult> {
 
   const supabase = await createServerClient();
   const ip = await getRequestIp();
-  if (!(await isAllowed(supabase, `login:${ip}:${email}`, 10, 900))) {
+  if (!(await isAllowed(supabase, "login", `${ip}:${email}`, 10, 900))) {
     return { ok: false, error: MSG_RATE_LIMIT };
   }
 
