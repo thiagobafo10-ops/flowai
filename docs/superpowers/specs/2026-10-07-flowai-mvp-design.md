@@ -4,6 +4,8 @@
 - **Status:** aguardando revisão
 - **Escopo:** spec de arquitetura geral, válida para as 10 fases. Cada fase terá seu próprio plano de implementação (`docs/superpowers/plans/`).
 
+> Revisão proposta em 2026-10-12: o [desenho da Fase 5](2026-10-12-fase-5-meta-design.md) consolida a ampliação registrada no roadmap (comentários por palavra-chave, stories e etapas posteriores de paridade com ManyChat). A proposta aguarda aprovação antes de substituir os contratos de conexão Meta descritos abaixo.
+
 ---
 
 ## 1. Objetivo e entendimento
