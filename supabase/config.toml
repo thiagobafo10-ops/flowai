@@ -403,7 +403,11 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Desligado no ambiente local: no Docker Desktop para Windows o coletor (vector)
+# precisa do daemon exposto em tcp://localhost:2375; sem isso entra em loop de
+# reinício e, junto com o Logflare (~600 MB), esgota a VM e o e2e cai em
+# statement timeouts. Logs dos serviços continuam em `docker logs`.
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
