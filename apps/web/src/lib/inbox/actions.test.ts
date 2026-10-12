@@ -23,7 +23,8 @@ const state = vi.hoisted(() => ({
   role: "agent",
   channelType: "simulator",
   invocations: [] as unknown[],
-  deliveryState: "sent"
+  deliveryState: "sent",
+  intentError: null as null | { code: string; message: string }
 }));
 vi.mock("@/lib/org/active-org", () => ({
   getActiveOrg: async () => ({
@@ -54,6 +55,7 @@ vi.mock("@/lib/supabase/server", () => ({
     },
     rpc: async (...args: unknown[]) => {
       state.logs.push(args);
+      if (args[0] === "create_instagram_send_intent" && state.intentError) return { data: null, error: state.intentError };
       return {
         data: args[0] === "create_instagram_send_intent" ? "00000000-0000-4000-8000-000000000003" : null,
         error: null
@@ -123,6 +125,7 @@ beforeEach(() => {
   state.channelType = "simulator";
   state.invocations = [];
   state.deliveryState = "sent";
+  state.intentError = null;
 });
 test("assuming an already owned human conversation produces no duplicate event", async () => {
   expect((await takeOver("00000000-0000-4000-8000-000000000002")).ok).toBe(true);
@@ -187,4 +190,15 @@ test("uncertain Instagram send is returned as accepted with warning so the compo
   state.channelType = "instagram";
   state.deliveryState = "uncertain";
   expect(await sendReply("00000000-0000-4000-8000-000000000002", "Oi")).toMatchObject({ ok: true, data: { messageId: "message", deliveryState: "uncertain" } });
+});
+test("closed Instagram 24h window has its own message", async () => {
+  state.channelType = "instagram"; state.intentError = { code: "22023", message: "messaging window closed" };
+  expect(await sendReply("00000000-0000-4000-8000-000000000002", "Olá")).toEqual({ ok: false, error: "A janela de 24 horas do Instagram expirou. Aguarde uma nova mensagem do contato para responder." });
+  expect(state.invocations).toEqual([]);
+});
+test("other Instagram validation errors are not reported as the 24h window", async () => {
+  state.channelType = "instagram"; state.intentError = { code: "22023", message: "conversation unavailable" };
+  const result = await sendReply("00000000-0000-4000-8000-000000000002", "Olá");
+  expect(result.ok).toBe(false);
+  expect(result.ok ? "" : result.error).toBe("Confira se o canal do Instagram está ativo e tente novamente.");
 });

@@ -51,6 +51,19 @@ test("Instagram: webhook assinado chega ao Inbox com story e permite responder",
   await runInstagramWorker();
   expect(psql(`select name from public.contacts where instagram_id='90001' and organization_id=(select organization_id from public.channels where id='${c.channelId}')`)).toBe("Cliente Instagram");
 });
+test("Instagram: fora da janela de 24h o composer só permite nota interna", async ({ page }) => {
+  const email = newEmail(); await connect(page, email); await confirmWebhook(email);
+  await sendInstagramEvent(email, { mid: "old-" + Date.now(), text: "Mensagem de ontem" }, "90003", Date.now() - 25 * 60 * 60 * 1000);
+  await gotoReady(page, "/inbox"); await page.getByText("Mensagem de ontem", { exact: true }).first().click();
+  await expect(page.getByText("A janela de 24 horas do Instagram expirou. Aguarde uma nova mensagem do contato para responder.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Responder" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Nota interna" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Escreva sua mensagem").fill("Cliente pediu retorno amanhã");
+  await page.getByRole("button", { name: "Enviar", exact: true }).click();
+  await expect(page.getByTestId("message-bubble").filter({ hasText: "Cliente pediu retorno amanhã" })).toContainText("Nota interna");
+  const c = connectionFor(email);
+  expect(Number(psql(`select count(*) from public.instagram_send_intents where channel_id='${c.channelId}'`))).toBe(0);
+});
 test("Instagram: palavra-chave acentuada gera uma resposta privada única", async ({ page }) => {
   const email = newEmail(); await connect(page, email); await confirmWebhook(email); await page.reload();
   await page.getByLabel("Palavra-chave", { exact: true }).fill("preço");

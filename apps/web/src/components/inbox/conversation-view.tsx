@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConversationHeader } from "./conversation-header";
 import { MessageBubble } from "./message-bubble";
 import { Composer } from "./composer";
+import { INSTAGRAM_WINDOW_CLOSED, isInstagramWindowOpen } from "@/lib/inbox/instagram-window";
 import { TransferDialog } from "./transfer-dialog";
 
 export type ConversationPage = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
@@ -75,7 +76,8 @@ export function ConversationView({ data, userId, members, canWrite, busy, now, t
       })}</div>
     </div>
     {!atBottom && lastId !== seenId && <div className="flex justify-center pb-2"><Button size="sm" variant="secondary" onClick={() => { setAtBottom(true); if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; setSeenId(lastId); }}>Novas mensagens ↓</Button></div>}
-    {canWrite && <Composer closed={conversation.status === "closed"} busy={busy} onSend={(text, note, requestId) => onAction(() => note ? addInternalNote(conversation.id, text) : sendReply(conversation.id, text, requestId))} />}
+    {canWrite && <Composer closed={conversation.status === "closed"} busy={busy}
+      replyBlocked={conversation.channel.type === "instagram" && !isInstagramWindowOpen(conversation.lastInboundAt, new Date(now)) ? INSTAGRAM_WINDOW_CLOSED : null} onSend={(text, note, requestId) => onAction(() => note ? addInternalNote(conversation.id, text) : sendReply(conversation.id, text, requestId))} />}
     {transfer && <TransferDialog open={transfer} onOpenChange={setTransfer} members={members} assignedTo={conversation.assignedTo?.userId ?? null} busy={busy} onTransfer={(id, note) => onAction(() => assignConversation(conversation.id, id, note))} />}
   </section>;
 }

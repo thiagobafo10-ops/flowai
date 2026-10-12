@@ -5,9 +5,11 @@ import { MAX_MESSAGE_LENGTH, replySchema } from "@flowai/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
-export function Composer({ closed, busy, onSend }: { closed: boolean; busy: boolean; onSend: (text: string, note: boolean, requestId: string) => Promise<boolean> }) {
+/** `replyBlocked`: motivo pelo qual respostas ao contato estão bloqueadas (notas internas continuam). */
+export function Composer({ closed, busy, replyBlocked = null, onSend }: { closed: boolean; busy: boolean; replyBlocked?: string | null; onSend: (text: string, note: boolean, requestId: string) => Promise<boolean> }) {
   const [text, setText] = useState("");
-  const [note, setNote] = useState(false);
+  const [noteChosen, setNote] = useState(false);
+  const note = noteChosen || replyBlocked !== null;
   const [error, setError] = useState<string | null>(null);
   const sending = useRef(false);
   const draftRequest = useRef<{ id: string; text: string; note: boolean } | null>(null);
@@ -23,8 +25,9 @@ export function Composer({ closed, busy, onSend }: { closed: boolean; busy: bool
   }
   return (
     <form className="space-y-2 border-t p-4" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-      <div className="flex gap-1"><Button type="button" size="sm" variant={note ? "ghost" : "secondary"} aria-pressed={!note} disabled={closed || busy} onClick={() => setNote(false)}>Responder</Button><Button type="button" size="sm" variant={note ? "secondary" : "ghost"} aria-pressed={note} disabled={closed || busy} onClick={() => setNote(true)}>Nota interna</Button></div>
+      <div className="flex gap-1"><Button type="button" size="sm" variant={note ? "ghost" : "secondary"} aria-pressed={!note} disabled={closed || busy || replyBlocked !== null} onClick={() => setNote(false)}>Responder</Button><Button type="button" size="sm" variant={note ? "secondary" : "ghost"} aria-pressed={note} disabled={closed || busy} onClick={() => setNote(true)}>Nota interna</Button></div>
       {closed && <p className="text-sm text-muted-foreground">Reabra a conversa para responder.</p>}
+      {!closed && replyBlocked && <p role="status" className="text-sm text-muted-foreground">{replyBlocked}</p>}
       <Label htmlFor="inbox-message" className="sr-only">Escreva sua mensagem</Label>
       <textarea id="inbox-message" rows={3} value={text} disabled={closed || busy} aria-invalid={!!error}
         aria-describedby={error ? "inbox-message-error" : undefined} placeholder={note ? "Escreva uma nota interna…" : "Escreva sua mensagem…"}

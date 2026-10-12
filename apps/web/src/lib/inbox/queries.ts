@@ -55,6 +55,8 @@ export type MessageItem = {
 
 export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInboundAt" | "channel"> & {
   channel: { id: string; type: ChannelType; name: string };
+  /** Última mensagem recebida do contato (abre a janela de 24h do Instagram). */
+  lastInboundAt: string | null;
   closedAt: string | null;
   intent: string | null;
   sentiment: string | null;
@@ -153,11 +155,14 @@ export async function getConversation(
   } else if (cursor) {
     query = query.lt("created_at", cursor.at);
   }
-  const [{ data: msgs, error: msgError }, members] = await Promise.all([
+  const [{ data: msgs, error: msgError }, members, { data: inbound, error: inboundError }] = await Promise.all([
     query.order("created_at", { ascending: false }).order("id", { ascending: false }).limit(PAGE_SIZE + 1),
     memberNames(orgId),
+    supabase.from("messages").select("created_at").eq("organization_id", orgId).eq("conversation_id", id)
+      .eq("direction", "inbound").eq("sender_type", "contact").order("created_at", { ascending: false }).limit(1),
   ]);
   if (msgError) throw msgError;
+  if (inboundError) throw inboundError;
 
   const messages: MessageItem[] = msgs
     .slice(0, PAGE_SIZE)
@@ -187,6 +192,7 @@ export async function getConversation(
       lastMessageAt: r.last_message_at,
       lastReadAt: r.last_read_at,
       closedAt: r.closed_at,
+      lastInboundAt: inbound[0]?.created_at ?? null,
       intent: r.intent,
       sentiment: r.sentiment,
       summary: r.summary,

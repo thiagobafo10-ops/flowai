@@ -11,9 +11,9 @@ export async function confirmWebhook(email: string) {
   const url = `${INSTAGRAM_TEST_URL}/functions/v1/meta-webhook/${c.id}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(c.verifyToken)}&hub.challenge=test`;
   const response = await fetch(url); if (response.status !== 200) throw new Error("Webhook confirmation failed");
 }
-export async function sendInstagramEvent(email: string, message: Record<string, unknown>, sender = "90001") {
+export async function sendInstagramEvent(email: string, message: Record<string, unknown>, sender = "90001", sentAt = Date.now()) {
   const c = connectionFor(email);
-  const body = JSON.stringify({ object: "instagram", entry: [{ id: c.accountId, time: Math.floor(Date.now() / 1000), messaging: [{ sender: { id: sender }, recipient: { id: c.accountId }, timestamp: Date.now(), message }] }] });
+  const body = JSON.stringify({ object: "instagram", entry: [{ id: c.accountId, time: Math.floor(sentAt / 1000), messaging: [{ sender: { id: sender }, recipient: { id: c.accountId }, timestamp: sentAt, message }] }] });
   return postSigned(c.id, body);
 }
 export async function sendInstagramComment(email: string, commentId: string, text: string) {

@@ -263,14 +263,14 @@ isOneToOne: false
                   ]
                 },"channels": {
                   Row: {
-                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Update: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -551,14 +551,14 @@ isOneToOne: false
                   ]
                 },"instagram_send_intents": {
                   Row: {
-                    "actor_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"comment_id": string | null,"conversation_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"message_id": string | null,"organization_id": string,"recipient_external_id": string | null,"request_id": string | null,"state": string,"text": string
+                    "actor_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"comment_id": string | null,"conversation_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"message_id": string | null,"organization_id": string,"pending_since": string,"recipient_external_id": string | null,"request_id": string | null,"state": string,"text": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "actor_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id": string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text": string
+                    "actor_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id": string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text": string
                   }
                   Update: {
-                    "actor_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text"?: string
+                    "actor_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id"?: string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text"?: string
                   }
                   Relationships: [
                     {
@@ -725,14 +725,14 @@ isOneToOne: false
                   ]
                 },"meta_connections": {
                   Row: {
-                    "api_version": string,"app_id": string,"app_secret_id": string,"created_at": string,"credential_generation": number,"disconnected_at": string | null,"id": string,"last_error": string | null,"organization_id": string,"token_verified_at": string | null,"updated_at": string,"verify_token_secret_id": string,"webhook_verified_at": string | null
+                    "api_version": string,"app_id": string,"app_secret_id": string | null,"created_at": string,"credential_generation": number,"disconnected_at": string | null,"id": string,"last_error": string | null,"organization_id": string,"owner_verified_at": string | null,"token_verified_at": string | null,"updated_at": string,"verify_token_secret_id": string | null,"webhook_verified_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "api_version": string,"app_id": string,"app_secret_id": string,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id": string,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id": string,"webhook_verified_at"?: string | null
+                    "api_version": string,"app_id": string,"app_secret_id"?: string | null,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id": string,"owner_verified_at"?: string | null,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id"?: string | null,"webhook_verified_at"?: string | null
                   }
                   Update: {
-                    "api_version"?: string,"app_id"?: string,"app_secret_id"?: string,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id"?: string,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id"?: string,"webhook_verified_at"?: string | null
+                    "api_version"?: string,"app_id"?: string,"app_secret_id"?: string | null,"created_at"?: string,"credential_generation"?: number,"disconnected_at"?: string | null,"id"?: string,"last_error"?: string | null,"organization_id"?: string,"owner_verified_at"?: string | null,"token_verified_at"?: string | null,"updated_at"?: string,"verify_token_secret_id"?: string | null,"webhook_verified_at"?: string | null
                   }
                   Relationships: [
                     {
@@ -943,6 +943,9 @@ isOneToOne: false
 "prepare_instagram_comment_send":
 { Args: { "p_event_id": string }; Returns: Json
                            },
+"prepare_instagram_profile":
+{ Args: { "p_event_id": string }; Returns: Json
+                           },
 "read_instagram_work":
 { Args: { "p_limit": number }; Returns: Json
                            },
@@ -952,8 +955,14 @@ isOneToOne: false
 "read_meta_connection_secrets":
 { Args: { "p_connection_id": string }; Returns: Json
                            },
+"remove_instagram_connection":
+{ Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: Json
+                           },
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
+                           },
+"reselect_instagram_comment_rule":
+{ Args: { "p_comment_at": string,"p_event_id": string }; Returns: Json
                            },
 "retry_instagram_send_intent":
 { Args: { "p_message_id": string }; Returns: string
@@ -969,6 +978,9 @@ isOneToOne: false
                            },
 "save_instagram_connection":
 { Args: { "p_actor_id": string,"p_input": Json,"p_org_id": string }; Returns: Json
+                           },
+"save_instagram_contact_name":
+{ Args: { "p_event_id": string,"p_name": string }; Returns: undefined
                            },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
@@ -986,6 +998,9 @@ isOneToOne: false
                            },
 "slugify":
 { Args: { "p": string }; Returns: string
+                           },
+"sweep_instagram_send_intents":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "verify_instagram_media":
 { Args: { "p_channel_id": string,"p_connection_id": string,"p_generation": number,"p_media_id": string }; Returns: undefined

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { providerFor, replySchema, instagramTextSchema, type ChannelType } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
+import { INSTAGRAM_WINDOW_CLOSED } from "@/lib/inbox/instagram-window";
 import { createServerClient } from "@/lib/supabase/server";
 
 const MSG_FORBIDDEN = "Você não tem permissão para esta ação.";
@@ -13,6 +14,7 @@ const MSG_CLOSED = "Reabra a conversa para responder.";
 const MSG_MESSAGE_GONE = "Esta mensagem não existe mais.";
 const MSG_SEND_FAILED = "Não foi possível enviar a mensagem.";
 const MSG_ASSIGNEE_GONE = "O responsável não existe mais.";
+const MSG_INSTAGRAM_WINDOW = INSTAGRAM_WINDOW_CLOSED;
 const WRITE_ROLES = ["agent", "admin", "owner"];
 
 type Supabase = Awaited<ReturnType<typeof createServerClient>>;
@@ -166,7 +168,12 @@ export async function sendReply(conversationId: string, text: string, requestId?
     if (!igText.success) return { ok: false, error: "O Instagram permite até 1.000 bytes por mensagem.", fieldErrors: { text: ["Reduza o texto para enviar pelo Instagram."] } };
     if (requestId && !z.uuid().safeParse(requestId).success) return { ok: false, error: MSG_UNEXPECTED };
     const { data: intentId, error } = await c.supabase.rpc("create_instagram_send_intent", { p_conversation_id: conv.id, p_text: parsed.data, p_request_id: requestId ?? crypto.randomUUID() });
-    if (error) return error.code === "22023" ? { ok: false, error: "Confira se o canal está ativo e se a última mensagem recebida foi há menos de 24 horas." } : dbError("create Instagram intent failed", { code: error.code });
+    if (error) {
+      // 22023 cobre várias validações; a janela de 24h é identificada pela mensagem fixa do servidor.
+      if (error.code === "22023" && error.message === "messaging window closed") return { ok: false, error: MSG_INSTAGRAM_WINDOW };
+      if (error.code === "22023") return { ok: false, error: "Confira se o canal do Instagram está ativo e tente novamente." };
+      return dbError("create Instagram intent failed", { code: error.code });
+    }
     return invokeInstagram(c, intentId);
   }
   const inserted = await insertMessage(c, conv, parsed.data, false);
