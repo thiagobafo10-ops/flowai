@@ -3,7 +3,6 @@ export * from "./schemas.ts";
 export * from "./simulator.ts";
 export * from "./provider-for.ts";
 export * from "./meta-signature.ts";
-export * from "./comment-keyword.ts";
 export * from "./instagram/types.ts";
 export * from "./instagram/errors.ts";
 export * from "./instagram/schemas.ts";
