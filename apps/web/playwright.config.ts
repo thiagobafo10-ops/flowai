@@ -4,6 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // sem compilação sob demanda nem recarga do dev server no meio dos testes.
 export default defineConfig({
   testDir: "e2e",
+  testIgnore: "instagram.spec.ts",
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,

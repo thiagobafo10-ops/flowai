@@ -6,6 +6,7 @@ FlowAI é uma plataforma SaaS multi-tenant de atendimento, CRM conversacional e 
 
 - **Node.js 24** (npm workspaces; não usamos pnpm/yarn).
 - **Docker Desktop** rodando — no Windows, com o backend **WSL2**. O Supabase local (Postgres, Auth, API) roda em containers.
+- **Deno 2** para os testes das Edge Functions; `DENO_BIN` pode apontar para o executável.
 
 ## Configuração
 
@@ -33,6 +34,8 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | Comando | O que faz |
 |---|---|
 | `npm test` | Testes unitários (Vitest) do domínio e das ações/consultas do app web |
+| `npm run test:edge` | Testes das Edge Functions com contratos/transportes injetados |
+| `npm run test:instagram:e2e` | Suíte completa de navegador com Graph injetada somente no proxy local de testes |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
@@ -54,6 +57,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Fase 2 (layout e dashboard): spec [`docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md`](docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md), plano [`docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md`](docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md)
 - Fase 3 (CRM: contatos, tags, pipeline): spec [`docs/superpowers/specs/2026-10-09-fase-3-crm-design.md`](docs/superpowers/specs/2026-10-09-fase-3-crm-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-3-crm.md`](docs/superpowers/plans/2026-10-10-fase-3-crm.md)
 - Fase 4 (Inbox, conversas e Simulador): spec [`docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md`](docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-4-inbox.md`](docs/superpowers/plans/2026-10-10-fase-4-inbox.md)
+- Fase 5 (Instagram primeiro): [design](docs/superpowers/specs/2026-10-12-fase-5-meta-design.md), [plano](docs/superpowers/plans/2026-10-12-fase-5-instagram.md), [configuração e testes](docs/superpowers/instagram-setup.md). WhatsApp adiado; validação ao vivo com Meta ainda pendente.
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança

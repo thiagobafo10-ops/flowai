@@ -562,6 +562,12 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
+      foreignKeyName: "instagram_intents_conversation_fk"
+      columns: ["organization_id","conversation_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id","channel_id"]
+    },{
       foreignKeyName: "instagram_send_intents_event_id_fkey"
       columns: ["event_id"]
 isOneToOne: true
@@ -573,12 +579,6 @@ isOneToOne: true
 isOneToOne: false
       referencedRelation: "channels"
       referencedColumns: ["organization_id","id"]
-    },{
-      foreignKeyName: "instagram_send_intents_organization_id_conversation_id_cha_fkey"
-      columns: ["organization_id","conversation_id","channel_id"]
-isOneToOne: false
-      referencedRelation: "conversations"
-      referencedColumns: ["organization_id","id","channel_id"]
     },{
       foreignKeyName: "instagram_send_intents_organization_id_fkey"
       columns: ["organization_id"]

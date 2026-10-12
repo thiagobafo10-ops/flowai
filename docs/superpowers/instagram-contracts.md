@@ -32,5 +32,8 @@ Instalar callback no app e habilitar notificações na conta profissional são p
 - [User profile](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api/user-profile/)
 - [Sender actions](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/messaging-api/sender-actions)
 - [/me](https://developers.facebook.com/documentation/instagram-platform/reference/me)
+- [Get started](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/get-started): `/me?fields=user_id,username` identifica a conta profissional.
+- [Comment reference](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-comment): timestamp real, remetente e mídia do comentário.
+- [Media reference](https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media): propriedade da mídia.
 
 Acesso direto HTTPS à documentação oficial funcionou; snapshots temporários ficam no workspace ignorado desta execução. Não há confirmação ao vivo com conta Meta nesta data.

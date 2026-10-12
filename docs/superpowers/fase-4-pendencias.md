@@ -17,7 +17,7 @@ Branch: `feat/fase-4-inbox`. Registro de execução em 2026-10-12.
 
 - Após “Carregar mais” na lista de conversas, uma atualização em tempo real volta à primeira página de 50 itens. O usuário pode carregar novamente; a retenção das páginas da lista fica para uma melhoria posterior.
 - A alteração de responsável/status e a mensagem de sistema ainda são duas operações. Uma RPC transacional por ação pode tornar o histórico atômico diante de falhas intermediárias.
-- Antes da Fase 5, revisar a spec do MVP conforme o [roadmap](roadmap.md): comentários com palavra-chave, respostas e menções em stories, além de Direct e WhatsApp.
+- Revisão do MVP concluída e aprovada antes da Fase 5: Instagram primeiro, incluindo comentários por palavra-chave e stories; WhatsApp adiado. Ver [registro da Fase 5](fase-5-pendencias.md).
 - Canais reais, IA, automações, mídia e anexos seguem nas fases seguintes.
 
 ## Pendências anteriores resolvidas

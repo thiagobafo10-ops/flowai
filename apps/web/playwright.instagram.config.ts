@@ -5,6 +5,7 @@ import base from "./playwright.config";
 export default defineConfig({
   ...base,
   testMatch: "instagram.spec.ts",
+  testIgnore: [],
   use: { ...base.use, baseURL: "http://localhost:3101" },
   webServer: {
     command: "npm run build && npx next start -p 3101",
