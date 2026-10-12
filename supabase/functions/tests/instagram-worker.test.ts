@@ -1,5 +1,5 @@
 import { handleInstagramWorker, processInstagramWork, type InstagramWorkerDeps } from "../instagram-worker/handler.ts";
-function assert(value: unknown): void { if (!value) throw new Error("assertion failed"); }
+function assert(value: unknown, message = "assertion failed"): void { if (!value) throw new Error(message); }
 function fixture() {
   let sends = 0; const finished: unknown[] = [];
   const work = { queueId: 1, eventId: "event" };
@@ -60,4 +60,28 @@ Deno.test("failed metadata fetch can safely retry before any send claim", async 
 Deno.test("worker endpoint refuses missing secret before reading queue", async () => {
   const f = fixture(); let reads = 0; f.deps.readWork = async () => { reads++; return []; };
   assert((await handleInstagramWorker(new Request("http://local/worker", { method: "POST" }), f.deps)).status === 401); assert(reads === 0);
+});
+function request(secret = "worker-secret") { return new Request("http://local/worker", { method: "POST", headers: { "x-flowai-worker": secret } }); }
+Deno.test("worker drains the queue in batches until it is empty", async () => {
+  const f = fixture(); let queue = Array.from({ length: 7 }, (_, i) => ({ queueId: i + 1, eventId: `event-${i}` })); const limits: number[] = [];
+  f.deps.readWork = async (limit) => { limits.push(limit); const batch = queue.slice(0, limit); queue = queue.slice(limit); return batch; };
+  f.deps.prepare = async () => null;
+  const body = await (await handleInstagramWorker(request(), f.deps)).json();
+  assert(body.processed === 7); assert(queue.length === 0); assert(JSON.stringify(limits) === "[3,3,3,3]");
+});
+Deno.test("worker processes at most three items at the same time", async () => {
+  const f = fixture(); let queue = Array.from({ length: 6 }, (_, i) => ({ queueId: i + 1, eventId: `event-${i}` }));
+  let running = 0; let peak = 0;
+  f.deps.readWork = async (limit) => { const batch = queue.slice(0, limit); queue = queue.slice(limit); return batch; };
+  f.deps.prepare = async () => { running++; peak = Math.max(peak, running); await new Promise((resolve) => setTimeout(resolve, 5)); running--; return null; };
+  await handleInstagramWorker(request(), f.deps);
+  assert(peak === 3, `peak ${peak}`);
+});
+Deno.test("worker stops reading new work once the time budget is spent", async () => {
+  const f = fixture(); let clock = Date.parse("2026-10-12T12:00:00Z"); let reads = 0;
+  f.deps.now = () => new Date(clock);
+  f.deps.readWork = async () => { reads++; clock += 60_000; return [{ queueId: reads, eventId: `event-${reads}` }]; };
+  f.deps.prepare = async () => null;
+  const body = await (await handleInstagramWorker(request(), f.deps)).json();
+  assert(reads === 2, `reads ${reads}`); assert(body.processed === 2);
 });

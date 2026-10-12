@@ -61,15 +61,30 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
   await deps.finishWork(item.queueId, state, errorCode);
   return state;
 }
+/** Items processed in parallel; also the batch size read from the queue. */
+export const WORKER_CONCURRENCY = 3;
+/** Stop claiming new work after this budget (cron fires every minute; HTTP timeout is 150 s). */
+export const WORKER_BUDGET_MS = 100_000;
+/** Reads and processes batches until the queue is empty or the time budget is spent. */
+export async function drainInstagramWork(deps: InstagramWorkerDeps, budgetMs = WORKER_BUDGET_MS): Promise<WorkResult[]> {
+  const deadline = deps.now().getTime() + budgetMs;
+  const results: WorkResult[] = [];
+  while (deps.now().getTime() < deadline) {
+    const batch = await deps.readWork(WORKER_CONCURRENCY);
+    if (batch.length === 0) break;
+    // Each item acknowledges itself; if an acknowledgement fails the batch rejects
+    // and the unacknowledged items reappear after their visibility timeout.
+    results.push(...await Promise.all(batch.map((item) => processInstagramWork(item, deps))));
+  }
+  return results;
+}
 export async function handleInstagramWorker(request: Request, deps: InstagramWorkerDeps): Promise<Response> {
   if (request.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405 });
   try {
     const secret = await deps.readWorkerSecret();
     const provided = request.headers.get("x-flowai-worker") ?? "";
     if (!secret || !provided || provided.length > 8192 || !await constantTimeTextEqual(provided, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
-    const work = await deps.readWork(5);
-    const results: WorkResult[] = [];
-    for (const item of work) results.push(await processInstagramWork(item, deps));
+    const results = await drainInstagramWork(deps);
     return Response.json({ processed: results.length, results });
   } catch { return Response.json({ error: "temporarily_unavailable" }, { status: 503 }); }
 }
