@@ -83,6 +83,7 @@ test("Instagram: regra de post próprio pode ser desligada mesmo com token expir
   const c = connectionFor(email);
   psql(`select vault.update_secret(access_token_secret_id,'expired-token') from public.channels where id='${c.channelId}'; select public.set_meta_connection_verification('${c.id}','token',false,'invalid_token',1)`);
   await page.reload();
+  await expect(page.getByTestId("instagram-connection").getByRole("alert")).toHaveText("O token do Instagram é inválido ou expirou. Atualize as credenciais.");
   await rule.getByRole("button", { name: "Desativar regra" }).click();
   await expect(rule.getByText("Desativada", { exact: true })).toBeVisible();
 });
