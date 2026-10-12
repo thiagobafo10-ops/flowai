@@ -4,6 +4,14 @@
 # working directory name when running `supabase init`.
 project_id = "flowai"
 
+[functions.meta-connection]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.meta-webhook]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
 [api]
 enabled = true
 # Port to use for the API URL.
