@@ -3,7 +3,7 @@
 import { nodeConfigSchemas } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { Input } from "@/components/ui/input";
-import { rec, str } from "../config-utils";
+import { rec, str } from "@/lib/automation/config-utils";
 import { Field, RefOptions, errorAt, invalidProps, selectClass, useLiveForm, type FormProps } from "./fields";
 import { delayToConfig, delayToValues, type DelayValues } from "./mappings";
 

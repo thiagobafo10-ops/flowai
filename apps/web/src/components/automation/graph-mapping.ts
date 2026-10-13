@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { requiredHandles, type AutomationGraph, type NodeType } from "@flowai/core";
-import { isRecord } from "./config-utils";
+import { isRecord } from "@/lib/automation/config-utils";
 
 export type FlowNodeData = { config: unknown };
 export type FlowNode = Node<FlowNodeData, NodeType>;

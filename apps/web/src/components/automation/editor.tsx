@@ -30,7 +30,7 @@ import { PALETTE_MIME, Palette } from "./palette";
 import { placeholderIssues } from "@/lib/automation/placeholders";
 import { EditorContext, type EditorContextValue } from "./nodes/context";
 import { nodeTypes } from "./nodes/automation-node";
-import { NODE_LABEL, PALETTE_TYPES, defaultNodeConfig } from "./nodes/labels";
+import { NODE_LABEL, PALETTE_TYPES, defaultNodeConfig } from "@/lib/automation/node-labels";
 import { useUnsavedGuard } from "./use-unsaved-guard";
 
 export type AutomationDetail = {

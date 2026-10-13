@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 import { nodeHandles, type FlowNode, type HandleSpec } from "../graph-mapping";
 import { PLACEHOLDER_MESSAGE } from "@/lib/automation/placeholders";
 import { useEditorContext } from "./context";
-import { NODE_LABEL } from "./labels";
-import { nodeSummary, triggerSummary } from "./summary";
+import { NODE_LABEL } from "@/lib/automation/node-labels";
+import { nodeSummary, triggerSummary } from "@/lib/automation/node-summary";
 
 const ICON: Record<NodeType, LucideIcon> = {
   trigger: ZapIcon,

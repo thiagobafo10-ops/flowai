@@ -1,14 +1,24 @@
 import { contactDisplayName, type NodeType } from "@flowai/core";
-import { createServerClient } from "@/lib/supabase/server";
-import { NODE_LABEL } from "@/components/automation/nodes/labels";
-import { nodeSummary } from "@/components/automation/nodes/summary";
+import type { createServerClient } from "@/lib/supabase/server";
+import { NODE_LABEL } from "./node-labels";
+import { nodeSummary } from "./node-summary";
 import type { EditorRefs } from "./queries";
 
 type Supabase = Awaited<ReturnType<typeof createServerClient>>;
 
 export const RUNS_LIMIT = 50;
+/** Passos carregados por execução (os mais recentes: última iteração primeiro). */
+export const STEPS_LIMIT = 200;
 const TERMINAL = ["completed", "failed", "cancelled"];
 
+export type RunView = {
+  id: string;
+  status: string;
+  contactName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  error: string | null;
+};
 export type RunStepView = {
   id: string;
   nodeId: string;
@@ -19,23 +29,18 @@ export type RunStepView = {
   /** Código de resultado do passo (output.result) ou o código de erro. */
   result: string | null;
   at: string;
+  iteration: number;
+  /** Pode reexecutar a partir deste passo (bloco existente na versão e que não é o gatilho). */
+  rerunnable: boolean;
 };
-export type RunView = {
-  id: string;
-  status: string;
-  contactName: string | null;
-  startedAt: string;
-  endedAt: string | null;
-  error: string | null;
-  steps: RunStepView[];
-};
+export type RunSteps = { steps: RunStepView[]; capped: boolean };
 
 type RunRow = {
-  id: string; status: string; version: number | null; error: string | null; created_at: string; updated_at: string;
+  id: string; status: string; error: string | null; created_at: string; updated_at: string;
   contacts: { name: string | null; phone: string | null; email: string | null } | null;
 };
 type StepRow = {
-  id: string; run_id: string; node_id: string; status: string; handle: string | null; output: unknown; error: string | null; created_at: string;
+  id: string; node_id: string; iteration: number; status: string; handle: string | null; output: unknown; error: string | null; created_at: string;
 };
 type GraphNode = { id: string; type: string; config: unknown };
 
@@ -60,65 +65,87 @@ export function handleLabel(handle: string | null, node: GraphNode | undefined):
   return Object.hasOwn(HANDLE_LABEL, handle) ? HANDLE_LABEL[handle]! : handle;
 }
 
-export function buildRunViews(runs: RunRow[], steps: StepRow[], graphs: Map<number, unknown>, refs: EditorRefs): RunView[] {
-  return runs.map((run) => {
-    const nodes = new Map(nodesOf(run.version === null ? null : graphs.get(run.version)).map((n) => [n.id, n]));
-    return {
-      id: run.id,
-      status: run.status,
-      contactName: run.contacts ? contactDisplayName(run.contacts) : null,
-      startedAt: run.created_at,
-      endedAt: TERMINAL.includes(run.status) ? run.updated_at : null,
-      error: run.error,
-      steps: steps
-        .filter((s) => s.run_id === run.id)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
-        .map((s) => {
-          const node = nodes.get(s.node_id);
-          const type = node?.type as NodeType | undefined;
-          const result = isRecord(s.output) && typeof s.output.result === "string" ? s.output.result : s.error;
-          return {
-            id: s.id,
-            nodeId: s.node_id,
-            nodeLabel: type ? (Object.hasOwn(NODE_LABEL, type) ? NODE_LABEL[type] : type) : "Bloco removido",
-            nodeSummary: type && Object.hasOwn(NODE_LABEL, type) ? nodeSummary(type, node?.config, refs) : "",
-            handle: handleLabel(s.handle, node),
-            status: s.status,
-            result: result ?? null,
-            at: s.created_at,
-          };
-        }),
-    };
-  });
+export function buildRunViews(runs: RunRow[]): RunView[] {
+  return runs.map((run) => ({
+    id: run.id,
+    status: run.status,
+    contactName: run.contacts ? contactDisplayName(run.contacts) : null,
+    startedAt: run.created_at,
+    endedAt: TERMINAL.includes(run.status) ? run.updated_at : null,
+    error: run.error,
+  }));
 }
 
-/** Últimas 50 execuções da automação com os passos e o grafo da versão de cada execução. */
-export async function listAutomationRuns(supabase: Supabase, orgId: string, automationId: string, refs: EditorRefs): Promise<RunView[]> {
+/** Passos com o resumo do bloco no grafo da versão da execução; última iteração primeiro, em ordem cronológica. */
+export function buildStepViews(steps: StepRow[], graph: unknown, refs: EditorRefs): RunStepView[] {
+  const nodes = new Map(nodesOf(graph).map((n) => [n.id, n]));
+  return [...steps]
+    .sort((a, b) => b.iteration - a.iteration || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+    .map((s) => {
+      const node = nodes.get(s.node_id);
+      const known = node !== undefined && Object.hasOwn(NODE_LABEL, node.type);
+      const type = node?.type as NodeType | undefined;
+      const result = isRecord(s.output) && typeof s.output.result === "string" ? s.output.result : s.error;
+      return {
+        id: s.id,
+        nodeId: s.node_id,
+        nodeLabel: !type ? "Bloco removido" : known ? NODE_LABEL[type] : type,
+        nodeSummary: known && type ? nodeSummary(type, node.config, refs) : "",
+        handle: handleLabel(s.handle, node),
+        status: s.status,
+        result: result ?? null,
+        at: s.created_at,
+        iteration: s.iteration,
+        rerunnable: known && type !== "trigger",
+      };
+    });
+}
+
+/** Últimas 50 execuções da automação (os passos são carregados por execução, ao expandir). */
+export async function listAutomationRuns(supabase: Supabase, orgId: string, automationId: string): Promise<RunView[]> {
   const runs = await supabase
     .from("automation_runs")
-    .select("id, status, version, error, created_at, updated_at, contacts(name, phone, email)")
+    .select("id, status, error, created_at, updated_at, contacts(name, phone, email)")
     .eq("organization_id", orgId)
     .eq("automation_id", automationId)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(RUNS_LIMIT);
   if (runs.error) throw runs.error;
-  const rows = (runs.data ?? []) as unknown as RunRow[];
-  if (rows.length === 0) return [];
-  const versions = [...new Set(rows.map((r) => r.version).filter((v): v is number => v !== null))];
-  const [steps, graphs] = await Promise.all([
+  return buildRunViews((runs.data ?? []) as unknown as RunRow[]);
+}
+
+/** Passos de uma execução (até STEPS_LIMIT, os mais recentes); null quando a execução não é desta automação. */
+export async function loadRunSteps(
+  supabase: Supabase, orgId: string, automationId: string, runId: string, refs: EditorRefs,
+): Promise<RunSteps | null> {
+  const run = await supabase
+    .from("automation_runs")
+    .select("id, version")
+    .eq("organization_id", orgId)
+    .eq("automation_id", automationId)
+    .eq("id", runId)
+    .maybeSingle();
+  if (run.error) throw run.error;
+  if (!run.data) return null;
+  const version = run.data.version;
+  const [steps, graph] = await Promise.all([
     supabase
       .from("automation_run_steps")
-      .select("id, run_id, node_id, status, handle, output, error, created_at")
+      .select("id, node_id, iteration, status, handle, output, error, created_at")
       .eq("organization_id", orgId)
-      .in("run_id", rows.map((r) => r.id))
-      .order("created_at"),
-    versions.length
-      ? supabase.from("automation_versions").select("version, graph").eq("organization_id", orgId).eq("automation_id", automationId).in("version", versions)
-      : Promise.resolve({ data: [], error: null }),
+      .eq("run_id", runId)
+      .order("iteration", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(STEPS_LIMIT + 1),
+    version === null
+      ? Promise.resolve({ data: null, error: null })
+      : supabase.from("automation_versions").select("graph").eq("organization_id", orgId).eq("automation_id", automationId)
+        .eq("version", version).maybeSingle(),
   ]);
   if (steps.error) throw steps.error;
-  if (graphs.error) throw graphs.error;
-  const graphMap = new Map<number, unknown>((graphs.data ?? []).map((g: { version: number; graph: unknown }) => [g.version, g.graph]));
-  return buildRunViews(rows, (steps.data ?? []) as StepRow[], graphMap, refs);
+  if (graph.error) throw graph.error;
+  const rows = (steps.data ?? []) as StepRow[];
+  return { steps: buildStepViews(rows.slice(0, STEPS_LIMIT), graph.data?.graph ?? null, refs), capped: rows.length > STEPS_LIMIT };
 }

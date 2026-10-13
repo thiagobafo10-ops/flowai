@@ -1,8 +1,8 @@
 import type { NodeType, TriggerType } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { AUTOMATION_TRIGGER_LABEL } from "@/lib/automation/messages";
-import { rec, str } from "../config-utils";
-import { KEYWORD_MODE_LABEL, WEEKDAY_LABEL } from "./labels";
+import { rec, str } from "./config-utils";
+import { KEYWORD_MODE_LABEL, WEEKDAY_LABEL } from "./node-labels";
 
 const nameOf = (list: { id: string; name: string }[], id: unknown, missing: string) =>
   typeof id === "string" && id ? (list.find((o) => o.id === id)?.name ?? "Item removido") : missing;

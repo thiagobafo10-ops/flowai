@@ -5,17 +5,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, ChevronRightIcon, RotateCcwIcon } from "lucide-react";
 import { toast } from "sonner";
 import { rerunFrom } from "@/lib/automation/actions";
-import { AUTOMATION_RERUN_STARTED, AUTOMATION_RUNS_LOAD_FAILED, RUN_STATUS_LABEL } from "@/lib/automation/messages";
-import type { RunView } from "@/lib/automation/runs";
+import {
+  AUTOMATION_RERUN_STARTED, AUTOMATION_RUN_STEPS_LOAD_FAILED, AUTOMATION_RUNS_LOAD_FAILED, RUN_STATUS_LABEL, runStepsCapped,
+} from "@/lib/automation/messages";
+import { STEPS_LIMIT, type RunSteps, type RunView } from "@/lib/automation/runs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type RunsResponse = { runs: RunView[]; canRerun: boolean };
 
-async function fetchRuns(id: string): Promise<RunsResponse> {
-  const response = await fetch(`/api/automacoes/${id}/runs`, { cache: "no-store" });
-  if (!response.ok) throw new Error(AUTOMATION_RUNS_LOAD_FAILED);
-  return response.json() as Promise<RunsResponse>;
+async function fetchJson<T>(url: string, failure: string): Promise<T> {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(failure);
+  return response.json() as Promise<T>;
 }
 
 const RERUNNABLE = ["failed", "completed"];
@@ -35,11 +37,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-/** Aba "Execuções": últimas 50 execuções com os passos e a reexecução a partir de um passo (admin). */
+/** Aba "Execuções": últimas 50 execuções; os passos de cada uma são carregados ao expandir. */
 export function AutomationRuns({ orgId, automationId }: { orgId: string; automationId: string }) {
   const client = useQueryClient();
   const queryKey = ["automation-runs", orgId, automationId];
-  const query = useQuery({ queryKey, queryFn: () => fetchRuns(automationId), refetchOnWindowFocus: false });
+  const query = useQuery({
+    queryKey,
+    queryFn: () => fetchJson<RunsResponse>(`/api/automacoes/${automationId}/runs`, AUTOMATION_RUNS_LOAD_FAILED),
+    refetchOnWindowFocus: false,
+  });
   const [open, setOpen] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,6 +54,7 @@ export function AutomationRuns({ orgId, automationId }: { orgId: string; automat
       const result = await rerunFrom(runId, nodeId);
       if (!result.ok) toast.error(result.error);
       else toast.success(AUTOMATION_RERUN_STARTED);
+      // a lista e os passos (chave com o mesmo prefixo) são recarregados
       await client.invalidateQueries({ queryKey });
     });
   }
@@ -69,7 +76,6 @@ export function AutomationRuns({ orgId, automationId }: { orgId: string; automat
       <ul aria-label="Execuções" className="mx-auto max-w-4xl divide-y rounded-xl border">
         {runs.map((run) => {
           const expanded = open === run.id;
-          const rerunnable = canRerun && RERUNNABLE.includes(run.status);
           return (
             <li key={run.id} data-testid="automation-run">
               <button
@@ -87,38 +93,64 @@ export function AutomationRuns({ orgId, automationId }: { orgId: string; automat
                 </span>
               </button>
               {expanded && (
-                <div className="space-y-2 border-t bg-muted/20 px-4 py-3">
-                  {run.error && <p className="text-sm text-destructive">Erro: {run.error}</p>}
-                  {run.steps.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhum passo registrado.</p>
-                  ) : (
-                    <ol aria-label="Passos" className="space-y-2">
-                      {run.steps.map((step) => (
-                        <li key={step.id} data-testid="automation-run-step" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-background px-3 py-2 text-sm">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium">{step.nodeLabel}</p>
-                            {step.nodeSummary && <p className="truncate text-xs text-muted-foreground">{step.nodeSummary}</p>}
-                          </div>
-                          <StatusBadge status={step.status} />
-                          {step.handle && <span className="text-xs">Saída: {step.handle}</span>}
-                          {step.result && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{step.result}</code>}
-                          <time dateTime={step.at} className="text-xs text-muted-foreground">{time.format(new Date(step.at))}</time>
-                          {rerunnable && (
-                            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => rerun(run.id, step.nodeId)}>
-                              <RotateCcwIcon />
-                              Reexecutar a partir deste passo
-                            </Button>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
+                <RunStepsPanel
+                  queryKey={[...queryKey, run.id]}
+                  url={`/api/automacoes/${automationId}/runs/${run.id}`}
+                  error={run.error}
+                  canRerun={canRerun && RERUNNABLE.includes(run.status)}
+                  busy={pending}
+                  onRerun={(nodeId) => rerun(run.id, nodeId)}
+                />
               )}
             </li>
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function RunStepsPanel({ queryKey, url, error, canRerun, busy, onRerun }: {
+  queryKey: string[]; url: string; error: string | null; canRerun: boolean; busy: boolean; onRerun: (nodeId: string) => void;
+}) {
+  const query = useQuery({ queryKey, queryFn: () => fetchJson<RunSteps>(url, AUTOMATION_RUN_STEPS_LOAD_FAILED), refetchOnWindowFocus: false });
+  return (
+    <div className="space-y-2 border-t bg-muted/20 px-4 py-3" aria-busy={query.isFetching}>
+      {error && <p className="text-sm text-destructive">Erro: {error}</p>}
+      {query.isPending ? (
+        <div aria-label="Carregando passos" className="h-16 animate-pulse rounded-lg bg-muted/60" />
+      ) : query.isError ? (
+        <div role="alert" className="flex items-center gap-2 text-sm">
+          <span>{AUTOMATION_RUN_STEPS_LOAD_FAILED}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>
+        </div>
+      ) : query.data.steps.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhum passo registrado.</p>
+      ) : (
+        <>
+          {query.data.capped && <p className="text-xs text-muted-foreground">{runStepsCapped(STEPS_LIMIT)}</p>}
+          <ol aria-label="Passos" className="space-y-2">
+            {query.data.steps.map((step) => (
+              <li key={step.id} data-testid="automation-run-step" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-background px-3 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{step.nodeLabel}</p>
+                  {step.nodeSummary && <p className="truncate text-xs text-muted-foreground">{step.nodeSummary}</p>}
+                </div>
+                <StatusBadge status={step.status} />
+                {step.handle && <span className="text-xs">Saída: {step.handle}</span>}
+                {step.result && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{step.result}</code>}
+                <time dateTime={step.at} className="text-xs text-muted-foreground">{time.format(new Date(step.at))}</time>
+                {canRerun && step.rerunnable && (
+                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onRerun(step.nodeId)}>
+                    <RotateCcwIcon />
+                    Reexecutar a partir deste passo
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </div>
   );
 }

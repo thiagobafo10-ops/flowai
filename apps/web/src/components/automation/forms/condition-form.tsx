@@ -4,7 +4,7 @@ import { useWatch } from "react-hook-form";
 import { nodeConfigSchemas } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { Input } from "@/components/ui/input";
-import { WEEKDAY_LABEL } from "../nodes/labels";
+import { WEEKDAY_LABEL } from "@/lib/automation/node-labels";
 import {
   Field, KeywordModeOptions, KeywordsField, RefOptions, errorAt, invalidProps, selectClass, useLiveForm, type FormProps,
 } from "./fields";

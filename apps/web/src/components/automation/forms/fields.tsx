@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Label } from "@/components/ui/label";
 import { friendlyMessage } from "../issue-copy";
-import { KEYWORD_MODE_LABEL } from "../nodes/labels";
+import { KEYWORD_MODE_LABEL } from "@/lib/automation/node-labels";
 
 export const selectClass =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive disabled:opacity-50 dark:bg-input/30";

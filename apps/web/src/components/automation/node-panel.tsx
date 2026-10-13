@@ -6,7 +6,7 @@ import type { GraphIssue, NodeType, TriggerType } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { Button } from "@/components/ui/button";
 import type { FlowNode } from "./graph-mapping";
-import { NODE_LABEL } from "./nodes/labels";
+import { NODE_LABEL } from "@/lib/automation/node-labels";
 import { DelayForm, RefForm, WebhookForm } from "./forms/action-forms";
 import { ConditionForm } from "./forms/condition-form";
 import { MessageForm } from "./forms/message-form";

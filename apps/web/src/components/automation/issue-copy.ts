@@ -1,6 +1,6 @@
 import type { AutomationGraph, GraphIssue, NodeType } from "@flowai/core";
 import { nodeHandles } from "./graph-mapping";
-import { NODE_LABEL } from "./nodes/labels";
+import { NODE_LABEL } from "@/lib/automation/node-labels";
 
 /** Mensagens padrão do Zod/core que aparecem para o usuário, reescritas em linguagem de formulário. */
 export function friendlyMessage(message: string): string {

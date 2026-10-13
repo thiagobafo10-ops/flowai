@@ -1,5 +1,5 @@
 import type { TriggerType } from "@flowai/core";
-import { numberOrNull, rec, str } from "../config-utils";
+import { numberOrNull, rec, str } from "@/lib/automation/config-utils";
 
 /** Conversões entre a config salva de cada passo e os valores dos campos do formulário (puras). */
 

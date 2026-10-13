@@ -1,7 +1,7 @@
 "use client";
 
 import type { NodeType } from "@flowai/core";
-import { NODE_LABEL, PALETTE_TYPES } from "./nodes/labels";
+import { NODE_LABEL, PALETTE_TYPES } from "@/lib/automation/node-labels";
 
 export const PALETTE_MIME = "application/x-flowai-node";
 

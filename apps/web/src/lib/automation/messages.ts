@@ -52,3 +52,5 @@ export const RUN_STATUS_LABEL: Record<string, string> = {
   failed: "Falhou",
   cancelled: "Cancelada",
 };
+export const AUTOMATION_RUN_STEPS_LOAD_FAILED = "Não foi possível carregar os passos da execução.";
+export const runStepsCapped = (count: number) => `Mostrando os últimos ${count} passos.`;

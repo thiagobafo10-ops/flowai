@@ -3,7 +3,6 @@ import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
-import { loadEditorRefs } from "@/lib/automation/queries";
 import { listAutomationRuns } from "@/lib/automation/runs";
 import { AUTOMATION_GONE, AUTOMATION_RUNS_LOAD_FAILED } from "@/lib/automation/messages";
 
@@ -20,8 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const exists = await supabase.from("automations").select("id").eq("organization_id", org.id).eq("id", id).maybeSingle();
     if (exists.error) throw exists.error;
     if (!exists.data) return NextResponse.json({ error: AUTOMATION_GONE }, { status: 404, headers });
-    const refs = await loadEditorRefs(supabase, org.id);
-    const runs = await listAutomationRuns(supabase, org.id, id, refs);
+    const runs = await listAutomationRuns(supabase, org.id, id);
     return NextResponse.json({ runs, canRerun: ["owner", "admin"].includes(org.role) }, { headers });
   } catch (error) {
     unstable_rethrow(error);

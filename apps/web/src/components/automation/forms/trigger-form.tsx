@@ -4,7 +4,7 @@ import { TRIGGER_TYPES, triggerConfigSchemas, type TriggerType } from "@flowai/c
 import type { EditorRefs } from "@/lib/automation/queries";
 import { AUTOMATION_TRIGGER_LABEL } from "@/lib/automation/messages";
 import { Input } from "@/components/ui/input";
-import { defaultTriggerConfig } from "../nodes/labels";
+import { defaultTriggerConfig } from "@/lib/automation/node-labels";
 import { Field, KeywordModeOptions, KeywordsField, RefOptions, errorAt, invalidProps, selectClass, useLiveForm } from "./fields";
 import { triggerToConfig, triggerToValues, type TriggerValues } from "./mappings";
 
