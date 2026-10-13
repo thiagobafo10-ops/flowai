@@ -20,7 +20,7 @@ export function MessageBubble({ message, userId, timezone, canWrite, busy, onRet
       {message.context?.origin === "story_mention" && <p className="text-xs text-muted-foreground">Menção em story</p>}
       {message.context?.origin === "comment" && <p className="text-xs text-muted-foreground">Resposta privada a comentário</p>}
       <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.text}</p>
-      <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><time dateTime={message.createdAt}>{new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time>
+      <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">{message.senderType === "ai" && <span data-testid="ai-badge" className="rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase">IA</span>}<time dateTime={message.createdAt}>{new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time>
         {message.direction === "outbound" && !message.isInternalNote && <span>{message.status === "pending" && message.error ? "Sem confirmação" : STATUS[message.status]}</span>}
       </div>
       {message.status === "failed" && <div className="text-xs text-destructive">{message.error && <p>{message.error}</p>}{canWrite && own && <Button variant="link" size="xs" disabled={busy} onClick={() => onRetry(message.id)}>Tentar novamente</Button>}</div>}

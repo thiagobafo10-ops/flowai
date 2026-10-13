@@ -6,7 +6,7 @@ export async function getContactPanel(orgId: string, contactId: string, conversa
   if (!z.uuid().safeParse(contactId).success || !z.uuid().safeParse(conversationId).success) return null;
   const supabase = await createServerClient();
   const { data: conversation, error } = await supabase.from("conversations")
-    .select("id, intent, sentiment, summary").eq("organization_id", orgId)
+    .select("id").eq("organization_id", orgId)
     .eq("contact_id", contactId).eq("id", conversationId).maybeSingle();
   if (error) throw new Error("Falha ao carregar contato", { cause: error });
   if (!conversation) return null;
@@ -15,10 +15,14 @@ export async function getContactPanel(orgId: string, contactId: string, conversa
     getBoard(orgId, { q: "", ownerId: null, closed: "30d" }),
   ]);
   if (!contact) return null;
+  const { data: classification, error: classificationError } = await supabase.from("ai_classifications")
+    .select("intent, sentiment, summary").eq("organization_id", orgId).eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle();
+  if (classificationError) throw new Error("Falha ao carregar classificação", { cause: classificationError });
   const openId = contact.deals.find((d) => d.status === "open")?.id;
   return { contact, tags: tags.map(({ id, name, color }) => ({ id, name, color })), members,
     stages: board.stages, deal: board.deals.find((d) => d.id === openId) ?? null,
-    intelligence: { intent: conversation.intent, sentiment: conversation.sentiment, summary: conversation.summary } };
+    intelligence: { intent: classification?.intent ?? null, sentiment: classification?.sentiment ?? null, summary: classification?.summary ?? null } };
 }
 
 export type ContactPanelData = NonNullable<Awaited<ReturnType<typeof getContactPanel>>>;

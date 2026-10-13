@@ -58,13 +58,15 @@ export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInb
   /** Última mensagem recebida do contato (abre a janela de 24h do Instagram). */
   lastInboundAt: string | null;
   closedAt: string | null;
+  /** Código da transferência feita pela IA (rótulo em HANDOFF_LABELS). */
+  handoffReason: string | null;
   intent: string | null;
   sentiment: string | null;
   summary: string | null;
 };
 
 const CONVERSATION_COLUMNS =
-  "id, status, handled_by, assigned_to, last_message_at, last_read_at, closed_at, intent, sentiment, summary, " +
+  "id, status, handled_by, assigned_to, last_message_at, last_read_at, closed_at, handoff_reason, intent, sentiment, summary, " +
   "contacts(id, name, phone, email), channels(id, type, name)";
 
 type ConversationRow = {
@@ -75,6 +77,7 @@ type ConversationRow = {
   last_message_at: string;
   last_read_at: string | null;
   closed_at: string | null;
+  handoff_reason: string | null;
   intent: string | null;
   sentiment: string | null;
   summary: string | null;
@@ -192,6 +195,7 @@ export async function getConversation(
       lastMessageAt: r.last_message_at,
       lastReadAt: r.last_read_at,
       closedAt: r.closed_at,
+      handoffReason: r.handoff_reason,
       lastInboundAt: inbound[0]?.created_at ?? null,
       intent: r.intent,
       sentiment: r.sentiment,

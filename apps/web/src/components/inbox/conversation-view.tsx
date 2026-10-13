@@ -1,10 +1,10 @@
 "use client";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { formatDaySeparator } from "@flowai/core";
+import { HANDOFF_LABELS, formatDaySeparator, type HandoffReason } from "@flowai/core";
 import type { getConversation, MessageItem } from "@/lib/inbox/queries";
 import type { MemberOption } from "@/lib/crm/queries";
 import type { ActionResult } from "@/lib/action-result";
-import { addInternalNote, assignConversation, closeConversation, reopenConversation, retryMessage, sendReply, takeOver } from "@/lib/inbox/actions";
+import { addInternalNote, assignConversation, closeConversation, reopenConversation, retryMessage, returnToAi, sendReply, takeOver } from "@/lib/inbox/actions";
 import { Button } from "@/components/ui/button";
 import { ConversationHeader } from "./conversation-header";
 import { MessageBubble } from "./message-bubble";
@@ -57,7 +57,8 @@ export function ConversationView({ data, userId, members, canWrite, busy, now, t
     finally { setLoadingOlder(false); }
   }
   return <section role="region" aria-label="Conversa" aria-busy={busy || loadingOlder} className="flex h-full min-h-0 min-w-0 flex-col">
-    <ConversationHeader conversation={conversation} userId={userId} canWrite={canWrite} busy={busy} onBack={onBack} onContact={onContact} onTakeOver={() => { void onAction(() => takeOver(conversation.id)); }} onTransfer={() => setTransfer(true)} onClose={() => { void onAction(() => closeConversation(conversation.id)); }} onReopen={() => { void onAction(() => reopenConversation(conversation.id)); }} />
+    <ConversationHeader conversation={conversation} userId={userId} canWrite={canWrite} busy={busy} onBack={onBack} onContact={onContact} onTakeOver={() => { void onAction(() => takeOver(conversation.id)); }} onReturnToAi={() => { void onAction(() => returnToAi(conversation.id)); }} onTransfer={() => setTransfer(true)} onClose={() => { void onAction(() => closeConversation(conversation.id)); }} onReopen={() => { void onAction(() => reopenConversation(conversation.id)); }} />
+    {conversation.handoffReason && <p role="status" data-testid="handoff-banner" className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Transferida pela IA: {HANDOFF_LABELS[conversation.handoffReason as HandoffReason] ?? conversation.handoffReason}</p>}
     <div ref={scroll} className="min-h-0 flex-1 overflow-y-auto p-4" onScroll={() => {
       const element = scroll.current;
       if (!element) return;

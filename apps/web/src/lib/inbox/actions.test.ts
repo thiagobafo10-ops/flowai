@@ -24,7 +24,8 @@ const state = vi.hoisted(() => ({
   channelType: "simulator",
   invocations: [] as unknown[],
   deliveryState: "sent",
-  intentError: null as null | { code: string; message: string }
+  intentError: null as null | { code: string; message: string },
+  returnError: null as null | { code: string; message: string }
 }));
 vi.mock("@/lib/org/active-org", () => ({
   getActiveOrg: async () => ({
@@ -55,6 +56,7 @@ vi.mock("@/lib/supabase/server", () => ({
     },
     rpc: async (...args: unknown[]) => {
       state.logs.push(args);
+      if (args[0] === "return_to_ai" && state.returnError) return { data: null, error: state.returnError };
       if (args[0] === "create_instagram_send_intent" && state.intentError) return { data: null, error: state.intentError };
       return {
         data: args[0] === "create_instagram_send_intent" ? "00000000-0000-4000-8000-000000000003" : null,
@@ -111,7 +113,7 @@ vi.mock("@/lib/supabase/server", () => ({
     }
   })
 }));
-import { takeOver, closeConversation, reopenConversation, sendReply, addInternalNote, markRead } from "./actions";
+import { takeOver, closeConversation, reopenConversation, sendReply, addInternalNote, markRead, returnToAi } from "./actions";
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {
@@ -126,6 +128,7 @@ beforeEach(() => {
   state.invocations = [];
   state.deliveryState = "sent";
   state.intentError = null;
+  state.returnError = null;
 });
 test("assuming an already owned human conversation produces no duplicate event", async () => {
   expect((await takeOver("00000000-0000-4000-8000-000000000002")).ok).toBe(true);
@@ -201,4 +204,32 @@ test("other Instagram validation errors are not reported as the 24h window", asy
   const result = await sendReply("00000000-0000-4000-8000-000000000002", "Olá");
   expect(result.ok).toBe(false);
   expect(result.ok ? "" : result.error).toBe("Confira se o canal do Instagram está ativo e tente novamente.");
+});
+const CONV = "00000000-0000-4000-8000-000000000002";
+test("viewers cannot return a conversation to the AI", async () => {
+  state.role = "viewer";
+  expect(await returnToAi(CONV)).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
+  expect(state.logs).toEqual([]);
+});
+test("returnToAi calls the RPC and succeeds", async () => {
+  expect(await returnToAi(CONV)).toEqual({ ok: true, data: undefined });
+  expect(state.logs).toContainEqual(["return_to_ai", { p_conversation: CONV }]);
+});
+test("returnToAi explains when the AI agent is inactive", async () => {
+  state.returnError = { code: "22023", message: "ai inactive" };
+  expect(await returnToAi(CONV)).toEqual({ ok: false, error: "Ative o agente de IA com resposta automática para devolver a conversa." });
+});
+test("returnToAi explains unsupported channels", async () => {
+  state.returnError = { code: "22023", message: "ai unsupported channel" };
+  expect(await returnToAi(CONV)).toEqual({ ok: false, error: "A IA não atende conversas deste canal." });
+});
+test("returnToAi maps 42501 and unexpected errors", async () => {
+  state.returnError = { code: "42501", message: "forbidden" };
+  expect(await returnToAi(CONV)).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
+  state.returnError = { code: "XX000", message: "boom" };
+  expect(await returnToAi(CONV)).toEqual({ ok: false, error: "Não foi possível concluir. Tente novamente." });
+});
+test("returnToAi rejects an invalid id without calling the RPC", async () => {
+  expect(await returnToAi("nope")).toEqual({ ok: false, error: "Esta conversa não existe mais." });
+  expect(state.logs).toEqual([]);
 });
