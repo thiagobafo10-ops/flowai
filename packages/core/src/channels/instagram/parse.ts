@@ -37,16 +37,16 @@ export function parseInstagramEvents(raw: unknown): InstagramEvent[] {
         else if (message.reply_to?.story) context = { origin: "story_reply", ...(message.reply_to.story.id ? { storyId: message.reply_to.story.id } : {}) };
         else if (attachment?.type === "story_mention") context = { origin: "story_mention", attachmentType: attachment.type };
         else if (attachment) context = { origin: "attachment", attachmentType: attachment.type };
-        const text = message.text?.trim() ? message.text : context.origin === "story_mention" ? "[Menção em story]" : message.is_unsupported ? "[Conteúdo não suportado]" : "[Mídia recebida]";
+        const text = message.text?.trim() ? message.text : context.origin === "story_mention" ? "[Menção em story]" : context.origin === "quick_reply" ? "[Resposta rápida]" : message.is_unsupported ? "[Conteúdo não suportado]" : "[Mídia recebida]";
         events.push({ ...base, kind: "message", externalId: message.mid, senderExternalId: event.sender.id, senderName: null, text, context });
       } else if (event.postback) {
         const postback = postbackSchema.parse(event.postback);
         const externalId = postback.mid ?? `postback:${event.timestamp}:${event.sender.id}`;
-        if (postback.is_echo || postback.is_self || event.sender.id === entry.id) {
+        if (postback.is_echo || postback.is_self) {
           events.push({ ...base, kind: "ignored", externalId, reason: "echo" });
           continue;
         }
-        if (event.recipient.id !== entry.id) throw new Error("Invalid Instagram postback recipient");
+        if (event.recipient.id !== entry.id || event.sender.id === entry.id) throw new Error("Invalid Instagram postback recipient");
         events.push({ ...base, kind: "button", externalId, senderExternalId: event.sender.id, title: postback.title, payload: postback.payload });
       } else if (event.read) {
         if (event.recipient.id !== entry.id) throw new Error("Invalid Instagram receipt recipient");

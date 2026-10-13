@@ -42,6 +42,7 @@ const commentLink: AutomationTemplate = {
         config: {
           mode: "text",
           text: "Aqui está, {primeiro_nome}! Toque no botão para acessar.",
+          // URL de exemplo: o editor/validador deve exigir que o admin a edite antes de ativar (a UI sinaliza).
           buttons: [{ id: "abrir", title: "Abrir link", kind: "url", url: "https://exemplo.com.br" }],
           replyTimeoutHours: 24,
         },

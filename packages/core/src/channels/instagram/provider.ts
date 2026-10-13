@@ -32,7 +32,8 @@ export class InstagramProvider implements ChannelProvider {
   }
 
   private async send(recipient: { id: string } | { comment_id: string }, text: string, body?: Record<string, unknown>) {
-    if (!instagramTextSchema.safeParse(text).success) throw new InstagramError("invalid_content", "rejected");
+    const sentText = body ? bodyText(body) : text;
+    if (sentText === null || !instagramTextSchema.safeParse(sentText).success) throw new InstagramError("invalid_content", "rejected");
     const id = "id" in recipient ? recipient.id : recipient.comment_id;
     if (!id || id.length > 1024) throw new InstagramError("invalid_content", "rejected");
     const result = await this.request(`${this.options.accountId}/messages`, { recipient, message: body ?? { text } });
@@ -62,4 +63,12 @@ export class InstagramProvider implements ChannelProvider {
     const result = await this.request(`${externalUserId}?fields=name%2Cusername`);
     return { name: typeof result.name === "string" ? result.name : typeof result.username === "string" ? result.username : null };
   }
+}
+
+/** Texto efetivamente enviado dentro de um corpo `message` pronto (texto simples ou template de botões). */
+function bodyText(body: Record<string, unknown>): string | null {
+  if (typeof body.text === "string") return body.text;
+  const attachment = body.attachment as { payload?: { text?: unknown } } | undefined;
+  const text = attachment?.payload?.text;
+  return typeof text === "string" ? text : null;
 }
