@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   rpcs: [] as unknown[][],
   rpcError: null as null | { code: string },
   deleted: [{ id: "x" }] as unknown[],
+  doc: { id: "d", title: "T", content: "C" } as unknown,
   invocations: [] as unknown[][],
   invokeResult: { data: { configured: true }, error: null } as { data: unknown; error: unknown },
 }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/supabase/server", () => ({
       return state.rpcError ? { data: null, error: state.rpcError } : { data: "00000000-0000-4000-8000-000000000009", error: null };
     },
     from: () => ({
+      select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.doc, error: null }) }) }) }),
       delete: () => ({
         eq: () => ({ eq: () => ({ select: async () => ({ data: state.deleted, error: null }) }) }),
       }),
@@ -27,11 +29,11 @@ vi.mock("@/lib/supabase/server", () => ({
     functions: { invoke: async (...args: unknown[]) => { state.invocations.push(args); return state.invokeResult; } },
   }),
 }));
-import { saveKnowledgeDocument, reprocessKnowledgeDocument, deleteKnowledgeDocument, getAiStatus } from "./actions";
+import { getKnowledgeDocument, saveKnowledgeDocument, reprocessKnowledgeDocument, deleteKnowledgeDocument, getAiStatus } from "./actions";
 
 const ID = "00000000-0000-4000-8000-000000000001";
 beforeEach(() => {
-  state.role = "admin"; state.rpcs = []; state.rpcError = null; state.deleted = [{ id: "x" }]; state.invocations = [];
+  state.role = "admin"; state.rpcs = []; state.rpcError = null; state.deleted = [{ id: "x" }]; state.invocations = []; state.doc = { id: "d", title: "T", content: "C" };
   state.invokeResult = { data: { configured: true }, error: null };
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -79,4 +81,17 @@ test("status da IA usa o JWT da sessão e qualquer papel", async () => {
   expect(state.invocations[0]).toEqual(["ai-playground", { body: { organizationId: "org", action: "status" }, headers: { Authorization: "Bearer jwt" } }]);
   state.invokeResult = { data: null, error: new Error("x") };
   expect((await getAiStatus()).ok).toBe(false);
+});
+
+test("criação envia p_id nulo à RPC", async () => {
+  await saveKnowledgeDocument({ title: "t", content: "c" });
+  expect(state.rpcs[0]).toEqual(["save_knowledge_document", { p_org: "org", p_id: null, p_title: "t", p_content: "c" }]);
+});
+test("getKnowledgeDocument: sucesso, inexistente e sem permissão", async () => {
+  expect(await getKnowledgeDocument(ID)).toEqual({ ok: true, data: { id: "d", title: "T", content: "C" } });
+  state.doc = null;
+  expect(await getKnowledgeDocument(ID)).toEqual({ ok: false, error: "Este documento não existe mais." });
+  expect(await getKnowledgeDocument("nope")).toEqual({ ok: false, error: "Documento inválido." });
+  state.role = "agent";
+  expect(await getKnowledgeDocument(ID)).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
 });

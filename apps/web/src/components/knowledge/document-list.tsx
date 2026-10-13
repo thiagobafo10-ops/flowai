@@ -21,10 +21,18 @@ async function fetchDocuments(): Promise<Payload> {
 
 const dateFormat = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
-export function DocumentList() {
+export function DocumentList({ orgId }: { orgId: string }) {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ["knowledge"], queryFn: fetchDocuments });
-  const status = useQuery({ queryKey: ["ai-status"], queryFn: getAiStatus, staleTime: 60_000 });
+  const query = useQuery({ queryKey: ["knowledge", orgId], queryFn: fetchDocuments });
+  const status = useQuery({
+    queryKey: ["ai-status", orgId],
+    queryFn: async () => {
+      const result = await getAiStatus();
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 60_000,
+  });
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<KnowledgeDocumentRow | null>(null);
@@ -50,7 +58,7 @@ export function DocumentList() {
   }
 
   const { documents, canWrite } = query.data;
-  const notConfigured = status.data?.ok && !status.data.data.configured;
+  const notConfigured = status.data?.configured === false;
 
   function reprocess(doc: KnowledgeDocumentRow) {
     startTransition(async () => {
@@ -87,6 +95,9 @@ export function DocumentList() {
 
   return (
     <div className="space-y-4">
+      {status.isError && (
+        <p className="text-sm text-muted-foreground">Não foi possível verificar a configuração da IA.</p>
+      )}
       {notConfigured && (
         <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           IA não configurada na plataforma. Os documentos serão indexados quando a chave for configurada.
@@ -153,12 +164,12 @@ export function DocumentList() {
 
       {canWrite && (
         <>
-          <DocumentDialog open={creating} onClose={() => setCreating(false)} />
-          <DocumentDialog open={!!editing} document={editing ?? undefined} onClose={() => setEditing(null)} />
+          <DocumentDialog orgId={orgId} open={creating} onClose={() => setCreating(false)} />
+          <DocumentDialog orgId={orgId} open={!!editing} document={editing ?? undefined} onClose={() => setEditing(null)} />
           <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Excluir documento?</DialogTitle>
+                <DialogTitle>Confirmar exclusão</DialogTitle>
                 <DialogDescription>Excluir documento? Os trechos indexados também serão removidos.</DialogDescription>
               </DialogHeader>
               {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}

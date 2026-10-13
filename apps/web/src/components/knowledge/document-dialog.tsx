@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, UploadIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 import { knowledgeDocumentSchema, type KnowledgeDocumentInput } from "@flowai/core";
 import { applyFieldErrors } from "@/lib/apply-field-errors";
-import { saveKnowledgeDocument } from "@/lib/ai/actions";
+import { getKnowledgeDocument, saveKnowledgeDocument } from "@/lib/ai/actions";
 import { readTextFile } from "@/lib/ai/file";
 import type { KnowledgeDocumentRow } from "@/lib/ai/queries";
-import { createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -20,35 +19,19 @@ import { Label } from "@/components/ui/label";
 
 type FormValues = z.input<typeof knowledgeDocumentSchema>;
 
-function DocumentForm({ document, onClose }: { document?: KnowledgeDocumentRow; onClose: () => void }) {
+type Initial = { id?: string; title: string; content: string };
+
+function DocumentForm({ initial, onClose }: { initial: Initial; onClose: () => void }) {
   const client = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
-  const [loadingContent, setLoadingContent] = useState(Boolean(document));
   const { register, handleSubmit, setError, setValue, getValues, formState: { errors } } = useForm<FormValues, unknown, KnowledgeDocumentInput>({
     resolver: zodResolver(knowledgeDocumentSchema),
-    defaultValues: { title: document?.title ?? "", content: "" },
+    defaultValues: { title: initial.title, content: initial.content },
   });
 
-  // A listagem não traz o conteúdo; na edição ele é lido sob demanda (RLS limita ao admin).
-  const documentId = document?.id;
-  useEffect(() => {
-    if (!documentId) return;
-    let cancelled = false;
-    void createBrowserClient()
-      .from("knowledge_documents")
-      .select("content")
-      .eq("id", documentId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return;
-        if (data) setValue("content", data.content);
-        else setFormError("Não foi possível carregar o conteúdo do documento.");
-        setLoadingContent(false);
-      });
-    return () => { cancelled = true; };
-  }, [documentId, setValue]);
+  const documentId = initial.id;
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -101,8 +84,6 @@ function DocumentForm({ document, onClose }: { document?: KnowledgeDocumentRow; 
           id="doc-content"
           rows={12}
           className="w-full rounded-lg border bg-transparent p-2 text-sm"
-          disabled={loadingContent}
-          placeholder={loadingContent ? "Carregando…" : undefined}
           aria-invalid={!!contentError}
           aria-describedby={contentError ? "doc-content-error" : undefined}
           {...register("content")}
@@ -112,7 +93,7 @@ function DocumentForm({ document, onClose }: { document?: KnowledgeDocumentRow; 
       {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button type="submit" disabled={pending || loadingContent}>
+        <Button type="submit" disabled={pending}>
           {pending && <Loader2Icon className="animate-spin" />}
           Salvar
         </Button>
@@ -121,8 +102,35 @@ function DocumentForm({ document, onClose }: { document?: KnowledgeDocumentRow; 
   );
 }
 
+function EditLoader({ orgId, document, onClose }: { orgId: string; document: KnowledgeDocumentRow; onClose: () => void }) {
+  const query = useQuery({
+    queryKey: ["knowledge", orgId, "document", document.id],
+    queryFn: async () => {
+      const result = await getKnowledgeDocument(document.id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  if (query.isPending) return <p aria-busy="true" className="text-sm text-muted-foreground">Carregando documento…</p>;
+  if (query.isError) {
+    return (
+      <div role="alert" className="space-y-3">
+        <p className="text-sm text-destructive">{query.error.message}</p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+        </div>
+      </div>
+    );
+  }
+  return <DocumentForm initial={query.data} onClose={onClose} />;
+}
+
 /** `document` indefinido com `open` = novo documento. */
-export function DocumentDialog({ open, document, onClose }: { open: boolean; document?: KnowledgeDocumentRow; onClose: () => void }) {
+export function DocumentDialog({ orgId, open, document, onClose }: { orgId: string; open: boolean; document?: KnowledgeDocumentRow; onClose: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -130,7 +138,9 @@ export function DocumentDialog({ open, document, onClose }: { open: boolean; doc
           <DialogTitle>{document ? "Editar documento" : "Novo documento"}</DialogTitle>
           <DialogDescription>Digite o texto ou carregue um arquivo .txt/.md de até 1 MB. O arquivo não é armazenado.</DialogDescription>
         </DialogHeader>
-        {open && <DocumentForm key={document?.id ?? "new"} document={document} onClose={onClose} />}
+        {open && (document
+          ? <EditLoader key={document.id} orgId={orgId} document={document} onClose={onClose} />
+          : <DocumentForm key="new" initial={{ title: "", content: "" }} onClose={onClose} />)}
       </DialogContent>
     </Dialog>
   );

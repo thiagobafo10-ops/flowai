@@ -83,3 +83,14 @@ export async function getAiStatus(): Promise<ActionResult<{ configured: boolean 
   if (error || typeof data?.configured !== "boolean") return { ok: false, error: AI_STATUS_FAILED };
   return { ok: true, data: { configured: data.configured } };
 }
+
+/** Conteúdo completo para edição (a listagem não o traz); somente admin/owner. */
+export async function getKnowledgeDocument(id: string): Promise<ActionResult<{ id: string; title: string; content: string }>> {
+  const c = await context(true);
+  if (!("supabase" in c)) return c;
+  if (!idSchema.safeParse(id).success) return { ok: false, error: AI_DOCUMENT_INVALID };
+  const { data, error } = await c.supabase.from("knowledge_documents").select("id, title, content").eq("organization_id", c.orgId).eq("id", id).maybeSingle();
+  if (error) return dbError("get knowledge document failed", error);
+  if (!data) return { ok: false, error: AI_DOCUMENT_GONE };
+  return { ok: true, data: { id: data.id, title: data.title, content: data.content } };
+}
