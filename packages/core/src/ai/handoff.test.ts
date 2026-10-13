@@ -35,4 +35,20 @@ describe("decideHandoff", () => {
   it("labels", () => {
     expect(HANDOFF_LABELS.window_closed).toBe("Fora da janela de 24h do Instagram");
   });
+  it("reply present but factCheck missing fails closed", () => {
+    expect(decideHandoff({ ...base, factCheck: null })).toMatchObject({ handoff: true, reason: "ai_failure" });
+  });
+  it("only one of replyBytes/maxReplyBytes -> ai_failure", () => {
+    expect(decideHandoff({ ...base, replyBytes: 10 })).toMatchObject({ reason: "ai_failure" });
+    expect(decideHandoff({ ...base, maxReplyBytes: 10 })).toMatchObject({ reason: "ai_failure" });
+  });
+  it("no_knowledge without reason has no detail", () => {
+    expect(decideHandoff({ ...base, hitCount: 0, reply: rep(true) })).toEqual({ handoff: true, reason: "no_knowledge" });
+  });
+  it("reply_too_long beats unverified_fact", () => {
+    expect(decideHandoff({ ...base, factCheck: { ok: false }, replyBytes: 5, maxReplyBytes: 1 })).toMatchObject({ reason: "reply_too_long" });
+  });
+  it("null reply with no trigger -> no handoff", () => {
+    expect(decideHandoff({ ...base, reply: null, factCheck: null })).toEqual({ handoff: false });
+  });
 });

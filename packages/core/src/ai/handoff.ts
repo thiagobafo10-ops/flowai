@@ -36,9 +36,10 @@ export function decideHandoff(input: {
     }
     return { handoff: true, reason: "needs_human" };
   }
-  if (input.replyBytes !== undefined && input.maxReplyBytes !== undefined && input.replyBytes > input.maxReplyBytes) {
-    return { handoff: true, reason: "reply_too_long" };
-  }
+  const hasBytes = input.replyBytes !== undefined;
+  if (hasBytes !== (input.maxReplyBytes !== undefined)) return { handoff: true, reason: "ai_failure" };
+  if (hasBytes && input.replyBytes! > input.maxReplyBytes!) return { handoff: true, reason: "reply_too_long" };
+  if (input.reply && !input.factCheck) return { handoff: true, reason: "ai_failure" };
   if (input.factCheck && !input.factCheck.ok) return { handoff: true, reason: "unverified_fact" };
   return { handoff: false };
 }
