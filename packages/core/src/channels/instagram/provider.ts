@@ -31,17 +31,17 @@ export class InstagramProvider implements ChannelProvider {
     return result;
   }
 
-  private async send(recipient: { id: string } | { comment_id: string }, text: string) {
+  private async send(recipient: { id: string } | { comment_id: string }, text: string, body?: Record<string, unknown>) {
     if (!instagramTextSchema.safeParse(text).success) throw new InstagramError("invalid_content", "rejected");
     const id = "id" in recipient ? recipient.id : recipient.comment_id;
     if (!id || id.length > 1024) throw new InstagramError("invalid_content", "rejected");
-    const result = await this.request(`${this.options.accountId}/messages`, { recipient, message: { text } });
+    const result = await this.request(`${this.options.accountId}/messages`, { recipient, message: body ?? { text } });
     if (typeof result.message_id !== "string" || !result.message_id) throw new InstagramError("invalid_response", "uncertain");
     return result;
   }
 
-  async sendMessage(to: ChannelRecipient, content: OutboundContent): Promise<{ externalId: string }> {
-    const result = await this.send({ id: to.externalId }, content.text);
+  async sendMessage(to: ChannelRecipient, content: OutboundContent & { instagram?: Record<string, unknown> }): Promise<{ externalId: string }> {
+    const result = await this.send({ id: to.externalId }, content.text, content.instagram);
     return { externalId: result.message_id as string };
   }
 

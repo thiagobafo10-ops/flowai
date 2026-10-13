@@ -90,3 +90,30 @@ describe("Instagram Send API", () => {
     expect(url).toBe("https://graph.instagram.com/v26.0/9001?fields=name%2Cusername");
   });
 });
+
+describe("Instagram buttons and quick replies", () => {
+  const postback = (extra: Record<string, unknown> = {}, sender = "9001") => ({ object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, messaging: [{ sender: { id: sender }, recipient: { id: sender === "9001" ? "178414000000001" : "9001" }, timestamp: 1791806400000, postback: { mid: "pb1", title: "Quero", payload: "signed.payload", ...extra } }] }] });
+  it("parses a quick reply as a message keeping its text and payload", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m9", text: "Sim", quick_reply: { payload: "signed.q" } }))).toEqual([{ kind: "message", accountId: "178414000000001", externalId: "m9", senderExternalId: "9001", senderName: null, text: "Sim", occurredAt: "2026-10-12T12:00:00.000Z", context: { origin: "quick_reply", payload: "signed.q" } }]);
+  });
+  it("parses a postback as a button event", () => {
+    expect(parseInstagramEvents(postback())).toEqual([{ kind: "button", accountId: "178414000000001", externalId: "pb1", senderExternalId: "9001", title: "Quero", payload: "signed.payload", occurredAt: "2026-10-12T12:00:00.000Z" }]);
+  });
+  it("derives an external id when the postback has no mid", () => {
+    expect(parseInstagramEvents(postback({ mid: undefined }))[0]).toMatchObject({ kind: "button", externalId: "postback:1791806400000:9001" });
+  });
+  it("ignores echo postbacks from the account itself", () => {
+    expect(parseInstagramEvents(postback({}, "178414000000001"))[0]).toMatchObject({ kind: "ignored", reason: "echo" });
+    expect(parseInstagramEvents(postback({ is_echo: true }))[0]).toMatchObject({ kind: "ignored" });
+  });
+  it("rejects a postback without payload", () => {
+    expect(() => parseInstagramEvents(postback({ payload: "" }))).toThrow();
+  });
+  it("sends the instagram body verbatim", async () => {
+    let body: unknown;
+    const p = new InstagramProvider({ accountId: "178414000000001", accessToken: "t", apiVersion: "v26.0", fetch: async (_i, init) => { body = JSON.parse(String(init?.body)); return Response.json({ message_id: "out9" }); }, now });
+    const message = { text: "Quer?", quick_replies: [{ content_type: "text", title: "Sim", payload: "p" }] };
+    await p.sendMessage({ externalId: "9001" }, { text: "Quer?", instagram: message });
+    expect(body).toEqual({ recipient: { id: "9001" }, message });
+  });
+});
