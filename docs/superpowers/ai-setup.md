@@ -72,12 +72,12 @@ delete from private.ai_limit_overrides where organization_id = '<uuid-da-organiz
 
 Valor `0` bloqueia: a IA transfere para um atendente com o motivo "Limite diário da IA atingido". O uso do dia aparece em `public.ai_usage_daily`.
 
-## Sem chave (ou chave inválida)
+## Sem chave ou com chave inválida
 
-- Conversas: a IA não responde; a conversa é transferida para um atendente com o motivo "IA não configurada na plataforma" (`not_configured`).
-- Playground: mostra que a IA não está configurada; nenhum teste é consumido.
-- Falhas temporárias da OpenAI: até 3 tentativas (esperas de 10 s e 30 s); depois a conversa é transferida com "Falha temporária da IA".
-- Indexar documentos também usa a OpenAI (embeddings); sem chave a indexação não conclui. Configure a chave antes de cadastrar documentos.
+- **Chave ausente** (`not_configured`): a IA não responde; a conversa é transferida para um atendente com o motivo "IA não configurada na plataforma". A página /ia mostra o mesmo aviso de status, e o Playground informa que a IA não está configurada, sem consumir testes.
+- **Chave inválida ou recusada pela OpenAI** (resposta não-OK, código `rejected`): o erro não é repetível (só `rate_limited`, `unavailable` e `invalid_response` têm nova tentativa), então a tarefa desiste logo e a conversa vai para um atendente com "Falha temporária da IA". O motivo exibido é genérico; para diagnosticar, procure nos logs do `ai-worker` o evento `provider_error` com `"code":"rejected"` (os logs não trazem texto de mensagens).
+- **Falhas temporárias da OpenAI** (limite de taxa, indisponibilidade, resposta inválida): até 3 tentativas (esperas de 10 s e 30 s); depois a conversa é transferida com "Falha temporária da IA".
+- **Indexação de documentos sem chave:** o documento termina com status "Erro" e a mensagem "IA não configurada na plataforma". Depois de configurar a chave, use **Reprocessar** no documento. A lista de documentos também avisa que eles serão indexados quando a chave for configurada.
 
 ## Verificar sem chave real
 
