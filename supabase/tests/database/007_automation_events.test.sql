@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(40);
 
 select tests.create_user('a@t.test') as ua \gset
 select tests.create_user('b@t.test') as ub \gset
@@ -38,15 +38,27 @@ select is((select (status, step_count)::text from public.automation_runs where i
 -- automations: admin+ escreve
 select tests.authenticate_as(:'uagent');
 select throws_ok(format($$insert into public.automations(organization_id, name, trigger_type) values (%L, 'X', 'message_received')$$, :'org_a'), '42501', null, 'agent não cria automação');
+-- fixtures da org A (postgres): a escrita da API passa só pelas funções de autoria
+select tests.clear_authentication();
+insert into public.automations (id, organization_id, name, trigger_type) values
+  ('00000000-0000-0000-0000-0000000000a1', :'org_a', 'Boas-vindas', 'message_received');
+insert into public.automation_nodes (id, organization_id, automation_id, type) values
+  ('00000000-0000-0000-0000-0000000000b1', :'org_a', '00000000-0000-0000-0000-0000000000a1', 'trigger'),
+  ('00000000-0000-0000-0000-0000000000b2', :'org_a', '00000000-0000-0000-0000-0000000000a1', 'end');
+insert into public.automation_edges (id, organization_id, automation_id, source_node_id, target_node_id) values
+  ('00000000-0000-0000-0000-0000000000f1', :'org_a', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2');
 select tests.authenticate_as(:'uadmin');
-select lives_ok(format($$insert into public.automations(id, organization_id, name, trigger_type) values ('00000000-0000-0000-0000-0000000000a1', %L, 'Boas-vindas', 'message_received')$$, :'org_a'), 'admin cria automação');
-select lives_ok(format($$insert into public.automation_nodes(id, organization_id, automation_id, type) values ('00000000-0000-0000-0000-0000000000b1', %1$L, '00000000-0000-0000-0000-0000000000a1', 'trigger'), ('00000000-0000-0000-0000-0000000000b2', %1$L, '00000000-0000-0000-0000-0000000000a1', 'end')$$, :'org_a'), 'admin cria 2 nodes');
-select lives_ok(format($$insert into public.automation_edges(id, organization_id, automation_id, source_node_id, target_node_id) values ('00000000-0000-0000-0000-0000000000f1', %L, '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2')$$, :'org_a'), 'admin cria edge');
+select throws_ok(format($$insert into public.automations(id, organization_id, name, trigger_type) values ('00000000-0000-0000-0000-0000000000a9', %L, 'Direto', 'message_received')$$, :'org_a'), '42501', null, 'admin não cria automação direto (só via save_automation)');
+select throws_ok(format($$insert into public.automation_nodes(organization_id, automation_id, type) values (%L, '00000000-0000-0000-0000-0000000000a1', 'end')$$, :'org_a'), '42501', null, 'admin não cria nodes direto');
+select throws_ok(format($$insert into public.automation_edges(organization_id, automation_id, source_node_id, target_node_id) values (%L, '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2')$$, :'org_a'), '42501', null, 'admin não cria edge direto');
 select is((select source_handle from public.automation_edges where id = '00000000-0000-0000-0000-0000000000f1'), 'default', 'source_handle default');
+select tests.clear_authentication();
 select throws_ok(format($$insert into public.automation_edges(organization_id, automation_id, source_node_id, target_node_id, source_handle) values (%L, '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2', 'maybe')$$, :'org_a'), '23514', null, 'source_handle inválido');
-select lives_ok($$update public.automations set status = 'active', name = 'Boas-vindas 2' where id = '00000000-0000-0000-0000-0000000000a1'$$, 'admin atualiza automação');
+update public.automations set name = 'Boas-vindas 2' where id = '00000000-0000-0000-0000-0000000000a1';
+select tests.authenticate_as(:'uadmin');
+select throws_ok($$update public.automations set status = 'active', name = 'X' where id = '00000000-0000-0000-0000-0000000000a1'$$, '42501', null, 'admin não atualiza automação direto');
 select throws_ok($$update public.automations set created_by_ai = true where id = '00000000-0000-0000-0000-0000000000a1'$$, '42501', null, 'created_by_ai não editável');
-select lives_ok($$update public.automation_nodes set config = '{"text":"oi"}', position = '{"x":10,"y":20}' where id = '00000000-0000-0000-0000-0000000000b1'$$, 'admin atualiza node');
+select throws_ok($$update public.automation_nodes set config = '{"text":"oi"}' where id = '00000000-0000-0000-0000-0000000000b1'$$, '42501', null, 'admin não atualiza node direto');
 select throws_ok($$update public.automation_nodes set automation_id = '00000000-0000-0000-0000-0000000000a2' where id = '00000000-0000-0000-0000-0000000000b1'$$, '42501', null, 'automation_id do node imutável');
 select throws_ok($$update public.automation_edges set source_handle = 'true' where id = '00000000-0000-0000-0000-0000000000f1'$$, '42501', null, 'edges sem update');
 
@@ -67,8 +79,8 @@ select is((select count(*)::int from public.automation_runs), 0, 'A não vê run
 select is((select count(*)::int from public.events where organization_id = :'org_b'), 0, 'A não vê events de B');
 select is((select count(*)::int from public.events where id = '00000000-0000-0000-0000-0000000000e1'), 1, 'membro lê events da org');
 select tests.authenticate_as(:'uagent');
-update public.automations set name = 'Hack' where id = '00000000-0000-0000-0000-0000000000a1';
-delete from public.automation_nodes where id = '00000000-0000-0000-0000-0000000000b1';
+select throws_ok($$update public.automations set name = 'Hack' where id = '00000000-0000-0000-0000-0000000000a1'$$, '42501', null, 'agent não atualiza automação');
+select throws_ok($$delete from public.automation_nodes where id = '00000000-0000-0000-0000-0000000000b1'$$, '42501', null, 'agent não apaga node');
 select tests.clear_authentication();
 select is((select name from public.automations where id = '00000000-0000-0000-0000-0000000000a1'), 'Boas-vindas 2', 'agent não altera automação');
 select is((select count(*)::int from public.automation_nodes where id = '00000000-0000-0000-0000-0000000000b1'), 1, 'agent não apaga node');

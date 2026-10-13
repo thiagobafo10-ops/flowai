@@ -213,14 +213,14 @@ isOneToOne: false
                   ]
                 },"automation_run_steps": {
                   Row: {
-                    "created_at": string,"error": string | null,"id": string,"iteration": number,"node_id": string,"organization_id": string,"output": Json | null,"run_id": string,"status": Database["public"]['Enums']["run_status"]
+                    "created_at": string,"error": string | null,"handle": string | null,"id": string,"iteration": number,"node_id": string,"organization_id": string,"output": Json | null,"run_id": string,"status": Database["public"]['Enums']["run_status"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"error"?: string | null,"id"?: string,"iteration"?: number,"node_id": string,"organization_id": string,"output"?: Json | null,"run_id": string,"status": Database["public"]['Enums']["run_status"]
+                    "created_at"?: string,"error"?: string | null,"handle"?: string | null,"id"?: string,"iteration"?: number,"node_id": string,"organization_id": string,"output"?: Json | null,"run_id": string,"status": Database["public"]['Enums']["run_status"]
                   }
                   Update: {
-                    "created_at"?: string,"error"?: string | null,"id"?: string,"iteration"?: number,"node_id"?: string,"organization_id"?: string,"output"?: Json | null,"run_id"?: string,"status"?: Database["public"]['Enums']["run_status"]
+                    "created_at"?: string,"error"?: string | null,"handle"?: string | null,"id"?: string,"iteration"?: number,"node_id"?: string,"organization_id"?: string,"output"?: Json | null,"run_id"?: string,"status"?: Database["public"]['Enums']["run_status"]
                   }
                   Relationships: [
                     {
@@ -245,14 +245,14 @@ isOneToOne: false
                   ]
                 },"automation_runs": {
                   Row: {
-                    "automation_id": string,"contact_id": string | null,"conversation_id": string | null,"created_at": string,"current_node_id": string | null,"error": string | null,"id": string,"organization_id": string,"resume_at": string | null,"status": Database["public"]['Enums']["run_status"],"step_count": number,"trigger_event_id": string,"updated_at": string
+                    "attempts": number,"automation_id": string,"claim_token": string | null,"claimed_until": string | null,"contact_id": string | null,"conversation_id": string | null,"created_at": string,"current_node_id": string | null,"error": string | null,"id": string,"input": Json | null,"iteration": number,"organization_id": string,"resume_at": string | null,"status": Database["public"]['Enums']["run_status"],"step_count": number,"trigger_event_id": string,"updated_at": string,"version": number | null,"wait_node_id": string | null,"waiting_for": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "automation_id": string,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"current_node_id"?: string | null,"error"?: string | null,"id"?: string,"organization_id": string,"resume_at"?: string | null,"status"?: Database["public"]['Enums']["run_status"],"step_count"?: number,"trigger_event_id": string,"updated_at"?: string
+                    "attempts"?: number,"automation_id": string,"claim_token"?: string | null,"claimed_until"?: string | null,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"current_node_id"?: string | null,"error"?: string | null,"id"?: string,"input"?: Json | null,"iteration"?: number,"organization_id": string,"resume_at"?: string | null,"status"?: Database["public"]['Enums']["run_status"],"step_count"?: number,"trigger_event_id": string,"updated_at"?: string,"version"?: number | null,"wait_node_id"?: string | null,"waiting_for"?: string | null
                   }
                   Update: {
-                    "automation_id"?: string,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"current_node_id"?: string | null,"error"?: string | null,"id"?: string,"organization_id"?: string,"resume_at"?: string | null,"status"?: Database["public"]['Enums']["run_status"],"step_count"?: number,"trigger_event_id"?: string,"updated_at"?: string
+                    "attempts"?: number,"automation_id"?: string,"claim_token"?: string | null,"claimed_until"?: string | null,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"current_node_id"?: string | null,"error"?: string | null,"id"?: string,"input"?: Json | null,"iteration"?: number,"organization_id"?: string,"resume_at"?: string | null,"status"?: Database["public"]['Enums']["run_status"],"step_count"?: number,"trigger_event_id"?: string,"updated_at"?: string,"version"?: number | null,"wait_node_id"?: string | null,"waiting_for"?: string | null
                   }
                   Relationships: [
                     {
@@ -293,16 +293,42 @@ isOneToOne: false
       referencedColumns: ["organization_id","id"]
     }
                   ]
-                },"automations": {
+                },"automation_versions": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"created_by_ai": boolean,"description": string | null,"id": string,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
+                    "automation_id": string,"created_at": string,"graph": NonNullable<Json>,"organization_id": string,"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"version": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"description"?: string | null,"id"?: string,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "automation_id": string,"created_at"?: string,"graph": NonNullable<Json>,"organization_id": string,"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"version": number
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"description"?: string | null,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "automation_id"?: string,"created_at"?: string,"graph"?: NonNullable<Json>,"organization_id"?: string,"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "automation_versions_organization_id_automation_id_fkey"
+      columns: ["organization_id","automation_id"]
+isOneToOne: false
+      referencedRelation: "automations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "automation_versions_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"automations": {
+                  Row: {
+                    "activated_at": string | null,"created_at": string,"created_by": string | null,"created_by_ai": boolean,"current_version": number,"description": string | null,"id": string,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                  }
+                  Update: {
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -431,17 +457,23 @@ isOneToOne: false
                   ]
                 },"conversations": {
                   Row: {
-                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"handoff_reason": string | null,"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
+                    "assigned_to": string | null,"automation_run_id": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"handoff_reason": string | null,"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"automation_run_id"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"automation_run_id"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "conversations_automation_run_fk"
+      columns: ["organization_id","automation_run_id"]
+isOneToOne: false
+      referencedRelation: "automation_runs"
+      referencedColumns: ["organization_id","id"]
+    },{
       foreignKeyName: "conversations_organization_id_assigned_to_fkey"
       columns: ["organization_id","assigned_to"]
 isOneToOne: false
@@ -609,17 +641,23 @@ isOneToOne: false
                   ]
                 },"instagram_send_intents": {
                   Row: {
-                    "actor_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"comment_id": string | null,"conversation_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"message_id": string | null,"organization_id": string,"pending_since": string,"recipient_external_id": string | null,"request_id": string | null,"state": string,"text": string
+                    "actor_id": string | null,"automation_run_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"comment_id": string | null,"conversation_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"message_id": string | null,"message_payload": Json | null,"organization_id": string,"pending_since": string,"recipient_external_id": string | null,"request_id": string | null,"state": string,"text": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "actor_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id": string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text": string
+                    "actor_id"?: string | null,"automation_run_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"message_payload"?: Json | null,"organization_id": string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text": string
                   }
                   Update: {
-                    "actor_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"organization_id"?: string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text"?: string
+                    "actor_id"?: string | null,"automation_run_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"comment_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"message_id"?: string | null,"message_payload"?: Json | null,"organization_id"?: string,"pending_since"?: string,"recipient_external_id"?: string | null,"request_id"?: string | null,"state"?: string,"text"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "instagram_intents_automation_run_fk"
+      columns: ["organization_id","automation_run_id"]
+isOneToOne: false
+      referencedRelation: "automation_runs"
+      referencedColumns: ["organization_id","id"]
+    },{
       foreignKeyName: "instagram_intents_conversation_fk"
       columns: ["organization_id","conversation_id","channel_id"]
 isOneToOne: false
@@ -915,7 +953,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "ai_quota":
+            "activate_automation":
+{ Args: { "p_id": string }; Returns: number
+                           },
+"ai_quota":
 { Args: { "p_org": string }; Returns: Json
                            },
 "check_auth_rate_limit":
@@ -963,6 +1004,9 @@ isOneToOne: false
 "dashboard_metrics":
 { Args: { "p_days": number,"p_org": string }; Returns: Json
                            },
+"delete_automation":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
 "delete_stage_moving_deals":
 { Args: { "p_stage": string,"p_target_stage": string }; Returns: undefined
                            },
@@ -974,6 +1018,9 @@ isOneToOne: false
                            },
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"duplicate_automation":
+{ Args: { "p_id": string }; Returns: string
                            },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
@@ -1030,6 +1077,9 @@ isOneToOne: false
               "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
             }[]
                            },
+"pause_automation":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
 "prepare_ai_playground":
 { Args: { "p_org": string }; Returns: Json
                            },
@@ -1078,6 +1128,9 @@ isOneToOne: false
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
                            },
+"save_automation":
+{ Args: { "p_graph": Json,"p_id": string,"p_name": string,"p_org": string,"p_trigger_config": Json,"p_trigger_type": Database["public"]['Enums']["automation_trigger_type"] }; Returns: string
+                           },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
                            },
@@ -1124,7 +1177,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram"|"simulator","contact_source": "whatsapp"|"instagram"|"manual"|"simulator","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
+            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end"|"handoff_ai"|"handoff_human","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created"|"instagram_comment"|"instagram_story","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram"|"simulator","contact_source": "whatsapp"|"instagram"|"manual"|"simulator","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1244,7 +1297,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram", "simulator"],"contact_source": ["whatsapp", "instagram", "manual", "simulator"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
+            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end", "handoff_ai", "handoff_human"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created", "instagram_comment", "instagram_story"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram", "simulator"],"contact_source": ["whatsapp", "instagram", "manual", "simulator"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
           }
         }
 } as const
