@@ -36,6 +36,10 @@ export function decideHandoff(input: {
     }
     return { handoff: true, reason: "needs_human" };
   }
+  // A blank reply cannot be sent: treat it as the model having nothing to say.
+  if (input.reply && input.reply.reply.trim() === "") {
+    return { handoff: true, reason: input.hitCount === 0 ? "no_knowledge" : "needs_human" };
+  }
   const hasBytes = input.replyBytes !== undefined;
   if (hasBytes !== (input.maxReplyBytes !== undefined)) return { handoff: true, reason: "ai_failure" };
   if (hasBytes && input.replyBytes! > input.maxReplyBytes!) return { handoff: true, reason: "reply_too_long" };

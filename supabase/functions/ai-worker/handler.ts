@@ -40,6 +40,18 @@ export const AI_WORKER_BUDGET_MS = 100_000;
 const IN_FLIGHT_MARGIN_MS = 45_000;
 const EMBED_BATCH = 64;
 const LOST_CLAIM = "42501";
+const INVALID_RESULT = "22023";
+
+/** The database rejected the result itself: retrying would pay for the same rejected output again. */
+class InvalidResultError extends Error {
+  constructor() { super("Result rejected by the database"); this.name = "InvalidResultError"; }
+}
+async function completing<T>(operation: Promise<T>): Promise<T> {
+  try { return await operation; } catch (error) {
+    if (error instanceof DbError && error.code === INVALID_RESULT) throw new InvalidResultError();
+    throw error;
+  }
+}
 
 /** Logs ids and codes only; never message or document text. */
 function log(deps: AiWorkerDeps, event: string, fields: Record<string, string | number | null>): void { (deps.log ?? console.error)("ai-worker", event, JSON.stringify(fields)); }
@@ -70,7 +82,7 @@ async function processReply(job: AiJob, deps: AiWorkerDeps, org: { id: string | 
   const payload = result.decision.handoff
     ? { classification, reply: null, handoff: { reason: result.decision.reason, detail: result.decision.detail ?? null }, lastMessageId: prepared.lastMessageId }
     : { classification, reply: { text: result.reply, usedChunkIds: result.usedChunkIds, factCheck: result.factCheck }, handoff: null, lastMessageId: prepared.lastMessageId };
-  const completed = await deps.completeReply(job.jobId, job.claimToken, payload);
+  const completed = await completing(deps.completeReply(job.jobId, job.claimToken, payload));
   await sendIntents(completed.intentIds, prepared.organizationId, deps);
 }
 
@@ -85,7 +97,7 @@ async function processIndex(job: AiJob, deps: AiWorkerDeps): Promise<void> {
     if (vectors.length !== batch.length) throw new AIProviderError("invalid_response");
     embeddings.push(...vectors);
   }
-  await deps.completeIndex(job.jobId, job.claimToken, chunks.map((chunk, i) => ({ index: chunk.index, content: chunk.content, tokenCount: chunk.tokenCount, embedding: embeddings[i] })));
+  await completing(deps.completeIndex(job.jobId, job.claimToken, chunks.map((chunk, i) => ({ index: chunk.index, content: chunk.content, tokenCount: chunk.tokenCount, embedding: embeddings[i] }))));
 }
 
 async function handleFailure(job: AiJob, error: unknown, org: { id: string | null }, deps: AiWorkerDeps): Promise<void> {
@@ -97,6 +109,9 @@ async function handleFailure(job: AiJob, error: unknown, org: { id: string | nul
         const handoff = await deps.handoffJob(job.jobId, job.claimToken, "not_configured");
         await sendIntents(handoff.intentIds, org.id, deps);
       } else await deps.failJob(job.jobId, job.claimToken, error.code, error.retryable);
+    } else if (error instanceof InvalidResultError) {
+      log(deps, "invalid_result", { jobId: job.jobId, kind: job.kind, code: INVALID_RESULT });
+      await deps.failJob(job.jobId, job.claimToken, "invalid_result", false);
     } else {
       log(deps, "worker_error", { jobId: job.jobId, kind: job.kind });
       await deps.failJob(job.jobId, job.claimToken, "worker_error", true);

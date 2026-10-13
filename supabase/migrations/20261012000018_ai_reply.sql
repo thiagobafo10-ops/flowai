@@ -520,10 +520,16 @@ create function public.return_to_ai(p_conversation uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare conv public.conversations;
 begin
-  select * into conv from public.conversations where id = p_conversation for update;
+  select * into conv from public.conversations where id = p_conversation;
   if not found or not public.has_role(conv.organization_id, 'agent') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  -- Mesma ordem de travas de prepare/complete/handoff/gave_up: tarefa → conversa.
+  perform 1 from public.ai_jobs
+    where conversation_id = conv.id and organization_id = conv.organization_id and kind = 'reply' and state in ('running', 'pending')
+    order by id for update;
+  select * into conv from public.conversations where id = p_conversation for update;
+  if not found then raise exception 'forbidden' using errcode = '42501'; end if;
   if not exists (select 1 from public.channels ch
                  where ch.id = conv.channel_id and ch.type in ('simulator', 'instagram')) then
     raise exception 'ai unsupported channel' using errcode = '22023';

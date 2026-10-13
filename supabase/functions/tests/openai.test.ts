@@ -67,3 +67,11 @@ Deno.test("timeout while reading the body is unavailable", async () => {
   const p = createOpenAIProvider({ apiKey: "k", fetch: hang, timeoutMs: 20 });
   assert((await code(p.chat(msgs))).code === "unavailable");
 });
+Deno.test("maxTokens is sent as max_tokens in the request body", async () => {
+  const f = createFakeOpenAIFetch(); const p = createOpenAIProvider({ apiKey: "k", fetch: f });
+  await p.structured(msgs, classificationSchema as z.ZodType<unknown>, { name: "classification", maxTokens: 300 });
+  await p.chat(msgs, { maxTokens: 800 });
+  await p.chat(msgs);
+  assert(f.calls[0].body.max_tokens === 300 && f.calls[1].body.max_tokens === 800);
+  assert(!("max_tokens" in f.calls[2].body));
+});

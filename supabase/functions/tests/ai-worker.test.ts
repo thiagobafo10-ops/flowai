@@ -187,3 +187,33 @@ Deno.test("handoffJob 42501 is a lost claim, not a failure", async () => {
   await handleAiWorker(request(), f.deps);
   assert(!f.calls.failJob && !f.calls.claimSend);
 });
+Deno.test("pipeline sends the token caps to OpenAI: classification 300, reply 800", async () => {
+  const f = fixture(); await handleAiWorker(request(), f.deps);
+  const chats = f.openai.calls.filter((c) => c.path === "/chat/completions");
+  assert(chats.map((c) => `${c.body.response_format.json_schema.name}:${c.body.max_tokens}`).join() === "classification:300,reply:800");
+});
+Deno.test("blank reply without needs_human hands off instead of completing a blank text", async () => {
+  const blank = { reply: "  ", used_chunk_ids: [], needs_human: false, handoff_reason: null };
+  const f = fixture({ script: { onCall: (_i, _p, body) => body.response_format?.json_schema?.name === "reply" ? { body: { choices: [{ message: { content: JSON.stringify(blank) } }] } } : undefined } });
+  await handleAiWorker(request(), f.deps);
+  const payload = (f.calls.completeReply[0] as any[])[2];
+  assert(payload.reply === null && payload.handoff.reason === "needs_human");
+  assert(!f.calls.failJob);
+});
+Deno.test("invalid result (22023) from completeReply fails the job without retry", async () => {
+  const f = fixture(); f.deps.completeReply = async () => { throw new DbError("22023"); };
+  await handleAiWorker(request(), f.deps);
+  assert(JSON.stringify(f.calls.failJob[0]) === '["job1","tok","invalid_result",false]');
+  assert(!f.calls.claimSend);
+});
+Deno.test("invalid result (22023) from completeIndex fails the job without retry", async () => {
+  const f = fixture({ jobs: [{ jobId: "idx", kind: "index_document", claimToken: "tok" }] });
+  f.deps.completeIndex = async () => { throw new DbError("22023"); };
+  await handleAiWorker(request(), f.deps);
+  assert(JSON.stringify(f.calls.failJob[0]) === '["idx","tok","invalid_result",false]');
+});
+Deno.test("22023 outside complete stays a retryable worker_error", async () => {
+  const f = fixture(); f.deps.prepareReply = async () => { throw new DbError("22023"); };
+  await handleAiWorker(request(), f.deps);
+  assert(JSON.stringify(f.calls.failJob[0]) === '["job1","tok","worker_error",true]');
+});

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(60);
+select plan(67);
 select tests.create_user('owner36a@t.test','Owner A') as ua \gset
 select tests.create_user('owner36b@t.test','Owner B') as ub \gset
 select tests.create_org(:'ua','Org36A') as oa \gset
@@ -135,6 +135,32 @@ select public.fail_ai_job('00000000-0000-0000-0000-000000003655','00000000-0000-
 select public.fail_ai_job('00000000-0000-0000-0000-000000003656','00000000-0000-0000-0000-0000000036a2',repeat('a',65),false);
 select is((select last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003655'),'invalid_code','código inseguro vira invalid_code');
 select is((select last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003656'),'invalid_code','código longo vira invalid_code');
+
+-- uma resposta por conversa por vez
+delete from public.ai_jobs;
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003671',:'oa','reply','00000000-0000-0000-0000-000000003621','running',1,gen_random_uuid(),now()+interval '1 minute');
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,run_after) values
+  ('00000000-0000-0000-0000-000000003672',:'oa','reply','00000000-0000-0000-0000-000000003621',now()-interval '1 second'),
+  ('00000000-0000-0000-0000-000000003673',:'oa','reply','00000000-0000-0000-0000-000000003622',now()-interval '1 second');
+select public.claim_ai_jobs(5) as c5 \gset
+select is(jsonb_array_length(:'c5'::jsonb),1,'resposta em curso bloqueia a pendente da mesma conversa');
+select is(:'c5'::jsonb->0->>'jobId','00000000-0000-0000-0000-000000003673','outra conversa não é afetada');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003672'),'pending','pendente da conversa ocupada continua pendente');
+update public.ai_jobs set state='done', claim_token=null, claimed_until=null where id='00000000-0000-0000-0000-000000003671';
+select public.claim_ai_jobs(5) as c6 \gset
+select is(:'c6'::jsonb->0->>'jobId','00000000-0000-0000-0000-000000003672','concluída a resposta em curso, a pendente é reservada');
+delete from public.ai_jobs;
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003674',:'oa','reply','00000000-0000-0000-0000-000000003622','running',1,gen_random_uuid(),now()+interval '1 minute');
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,run_after) values
+  ('00000000-0000-0000-0000-000000003675',:'oa','reply','00000000-0000-0000-0000-000000003622',now()-interval '1 second');
+select is(jsonb_array_length(public.claim_ai_jobs(5)),0,'reserva válida em curso bloqueia a nova resposta');
+update public.ai_jobs set claimed_until=now()-interval '1 second' where id='00000000-0000-0000-0000-000000003674';
+select public.sweep_ai_jobs();
+select public.claim_ai_jobs(5) as c7 \gset
+select is(:'c7'::jsonb->0->>'jobId','00000000-0000-0000-0000-000000003675','reserva vencida e varrida libera a pendente');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003674'),'cancelled','tarefa vencida substituída é cancelada');
 
 -- uma linha com erro não bloqueia a varredura nem o dispatch
 create or replace function private.ai_job_gave_up(job public.ai_jobs) returns void

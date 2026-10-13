@@ -51,4 +51,10 @@ describe("decideHandoff", () => {
   it("null reply with no trigger -> no handoff", () => {
     expect(decideHandoff({ ...base, reply: null, factCheck: null })).toEqual({ handoff: false });
   });
+  it("blank reply without needs_human and with hits -> needs_human", () => {
+    expect(decideHandoff({ ...base, reply: { ...rep(false), reply: "" } })).toEqual({ handoff: true, reason: "needs_human" });
+  });
+  it("whitespace-only reply without hits -> no_knowledge", () => {
+    expect(decideHandoff({ ...base, hitCount: 0, reply: { ...rep(false), reply: " \n\t " } })).toEqual({ handoff: true, reason: "no_knowledge" });
+  });
 });

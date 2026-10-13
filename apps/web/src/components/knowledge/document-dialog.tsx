@@ -10,6 +10,7 @@ import type { z } from "zod";
 import { knowledgeDocumentSchema, type KnowledgeDocumentInput } from "@flowai/core";
 import { applyFieldErrors } from "@/lib/apply-field-errors";
 import { getKnowledgeDocument, saveKnowledgeDocument } from "@/lib/ai/actions";
+import { editLoaderView, knowledgeDocumentKey } from "@/lib/ai/document-loader";
 import { readTextFile } from "@/lib/ai/file";
 import type { KnowledgeDocumentRow } from "@/lib/ai/queries";
 import { Button } from "@/components/ui/button";
@@ -104,7 +105,7 @@ function DocumentForm({ initial, onClose }: { initial: Initial; onClose: () => v
 
 function EditLoader({ orgId, document, onClose }: { orgId: string; document: KnowledgeDocumentRow; onClose: () => void }) {
   const query = useQuery({
-    queryKey: ["knowledge", orgId, "document", document.id],
+    queryKey: knowledgeDocumentKey(orgId, document.id),
     queryFn: async () => {
       const result = await getKnowledgeDocument(document.id);
       if (!result.ok) throw new Error(result.error);
@@ -114,19 +115,18 @@ function EditLoader({ orgId, document, onClose }: { orgId: string; document: Kno
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
-  if (query.isPending) return <p aria-busy="true" className="text-sm text-muted-foreground">Carregando documento…</p>;
-  if (query.isError) {
-    return (
-      <div role="alert" className="space-y-3">
-        <p className="text-sm text-destructive">{query.error.message}</p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>
-          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-        </div>
+  const view = editLoaderView(query);
+  if (view === "form" && query.data) return <DocumentForm initial={query.data} onClose={onClose} />;
+  if (view === "loading") return <p aria-busy="true" className="text-sm text-muted-foreground">Carregando documento…</p>;
+  return (
+    <div role="alert" className="space-y-3">
+      <p className="text-sm text-destructive">{query.error?.message}</p>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>
+        <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
       </div>
-    );
-  }
-  return <DocumentForm initial={query.data} onClose={onClose} />;
+    </div>
+  );
 }
 
 /** `document` indefinido com `open` = novo documento. */

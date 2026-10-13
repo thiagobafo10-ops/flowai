@@ -22,12 +22,18 @@ export type PipelineResult = {
 
 const MAX_REPLY_BYTES = { instagram: 1000, simulator: 4096 } as const;
 const EMBED_CONTACT_TURNS = 3;
+const CLASSIFICATION_MAX_TOKENS = 300;
+const REPLY_MAX_TOKENS = 800;
 
 export async function runReplyPipeline(input: PipelineInput, deps: PipelineDeps): Promise<PipelineResult> {
   const contactTexts = input.conversation.filter((t) => t.role === "contact").map((t) => t.text);
   const lastTurn = input.conversation[input.conversation.length - 1];
+  // Every contact turn since the last ai/human turn is new to the agent and must be scanned.
+  let firstUnanswered = input.conversation.length;
+  while (firstUnanswered > 0 && input.conversation[firstUnanswered - 1]?.role === "contact") firstUnanswered--;
+  const unanswered = input.conversation.slice(firstUnanswered);
 
-  if (lastTurn?.role === "contact" && detectInjection(lastTurn.text)) {
+  if (unanswered.some((t) => detectInjection(t.text))) {
     return {
       classification: null,
       hits: [],
@@ -42,6 +48,7 @@ export async function runReplyPipeline(input: PipelineInput, deps: PipelineDeps)
     name: "classification",
     model: deps.chatModel,
     temperature: 0,
+    maxTokens: CLASSIFICATION_MAX_TOKENS,
   });
 
   const query = contactTexts.slice(-EMBED_CONTACT_TURNS).join("\n") || (lastTurn?.text ?? "");
@@ -53,6 +60,7 @@ export async function runReplyPipeline(input: PipelineInput, deps: PipelineDeps)
     name: "reply",
     model: deps.chatModel,
     temperature: 0.2,
+    maxTokens: REPLY_MAX_TOKENS,
   });
 
   const hitIds = new Set(hits.map((h) => h.id));

@@ -191,8 +191,12 @@ language plpgsql security definer set search_path = '' as $$
 declare v_result jsonb;
 begin
   with picked as (
-    select id from public.ai_jobs where state = 'pending' and run_after <= now()
-    order by run_after, created_at limit least(greatest(coalesce(p_limit, 1), 1), 50) for update skip locked
+    select p.id from public.ai_jobs p where p.state = 'pending' and p.run_after <= now()
+      -- Uma resposta por conversa por vez: a pendente espera a reserva válida em curso terminar
+      -- (reservas vencidas são devolvidas pela varredura).
+      and not (p.kind = 'reply' and exists (select 1 from public.ai_jobs r
+        where r.kind = 'reply' and r.conversation_id = p.conversation_id and r.state = 'running' and r.claimed_until > now()))
+    order by p.run_after, p.created_at limit least(greatest(coalesce(p_limit, 1), 1), 50) for update skip locked
   ), upd as (
     update public.ai_jobs j set state = 'running', attempts = j.attempts + 1, claim_token = gen_random_uuid(),
       claimed_until = now() + interval '3 minutes'
