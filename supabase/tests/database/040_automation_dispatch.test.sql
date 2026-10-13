@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(102);
+select plan(111);
 select tests.create_user('owner40@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent40@t.test','Beto Agente') as uag \gset
 select tests.create_user('viewer40@t.test','Vera Viewer') as uv \gset
@@ -16,7 +16,8 @@ insert into public.channels(id,organization_id,type,name,status) values
   ('00000000-0000-0000-0000-000000004001',:'oa','simulator','Sim40','active');
 insert into public.tags(id,organization_id,name) values
   ('00000000-0000-0000-0000-000000004011',:'oa','vip'),
-  ('00000000-0000-0000-0000-000000004012',:'oa','frio');
+  ('00000000-0000-0000-0000-000000004012',:'oa','frio'),
+  ('00000000-0000-0000-0000-000000004013',:'oa','quente');
 insert into public.pipelines(id,organization_id,name,is_default) values ('00000000-0000-0000-0000-000000004021',:'oa','Padrão',true);
 insert into public.pipeline_stages(id,organization_id,pipeline_id,name,position) values
   ('00000000-0000-0000-0000-000000004022',:'oa','00000000-0000-0000-0000-000000004021','Novo',0),
@@ -256,7 +257,7 @@ select pg_temp.wait(:'rp1');
 select tests.authenticate_as(:'ua');
 select lives_ok(format($$select public.delete_automation(%L)$$, :'p1'),'excluir automação');
 select tests.clear_authentication();
-select is((select count(*)::int from public.automation_runs where automation_id=:'p1'),0,'RF2: excluir remove/cancela as execuções');
+select is((select count(*)::int from public.automation_runs where automation_id=:'p1'),0,'RF2: excluir a automação apaga as execuções (cascata)');
 select is((select automation_run_id from public.conversations where id=:'cp1'),null,'RF2: excluir limpa o vínculo');
 select pg_temp.ingest('p3','+5540000000070','Alô?');
 select is(pg_temp.runs(:'cp1'),0,'RF2: próxima mensagem não cria execução');
@@ -319,6 +320,10 @@ update public.conversations set automation_run_id=null where id=:'cb1';
 insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa',:'kb1','00000000-0000-0000-0000-000000004012');
 select is((select count(*)::int from public.automation_runs where automation_id in (:'tany1',:'tany2') and conversation_id=:'cb1'),1,'CRM: conversa livre ganha só uma execução (a mais antiga)');
 select is((select automation_id from public.automation_runs where conversation_id=:'cb1' and status='pending'),:'tany1'::uuid,'CRM: a automação de menor id vence o empate');
+select is((select count(*)::int from public.automation_runs r join public.conversations c on c.id=:'cb1'
+  where r.conversation_id=:'cb1' and r.status='pending' and r.id is distinct from c.automation_run_id),0,'CRM: a execução criada fica vinculada (nenhuma pendente sem vínculo)');
+insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa',:'kb1','00000000-0000-0000-0000-000000004013');
+select is((select count(*)::int from public.automation_runs where conversation_id=:'cb1' and status='pending'),1,'CRM: segundo evento na mesma transação não cria segunda execução');
 insert into public.contacts(id,organization_id,name) values ('00000000-0000-0000-0000-000000004033',:'oa','Sem conversa');
 insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa','00000000-0000-0000-0000-000000004033','00000000-0000-0000-0000-000000004011');
 select is((select count(*)::int from public.automation_runs where contact_id='00000000-0000-0000-0000-000000004033' and conversation_id is null),2,'CRM: sem conversa, todas as automações casadas criam execução');
@@ -333,6 +338,28 @@ select is((select actor_type from public.events where type='tag_added' and conta
 select is((select count(*)::int from public.automation_runs where contact_id='00000000-0000-0000-0000-000000004034'),0,'evento de automação não dispara automações');
 select set_config('flowai.automation_actor','',true);
 select ok(not private.automation_actor_on(),'automation_actor desligado de novo');
+
+-- concorrência não é observável numa só sessão: confere a estrutura (trava com SKIP LOCKED; helper de nome)
+select ok(pg_get_functiondef('private.automation_crm_event()'::regprocedure) ~* 'for update skip locked','crm_event trava a conversa com FOR UPDATE SKIP LOCKED');
+select has_function('private','automation_actor_name',array[]::text[],'helper private.automation_actor_name');
+select ok(not has_function_privilege('authenticated','private.automation_actor_name()','execute'),'authenticated não executa automation_actor_name');
+
+-- =============================================================== stop_automation em execução running vinculada
+select pg_temp.ingest('r1','+5540000000096','muito ocupado') as mr1 \gset
+select pg_temp.conv_of(:'mr1') as cr1 \gset
+select pg_temp.run_of(:'cr1') as rr1 \gset
+update public.automation_runs set status='running', claim_token=gen_random_uuid(), claimed_until=now()+interval '3 minutes' where id=:'rr1';
+select is((select automation_run_id from public.conversations where id=:'cr1'),:'rr1'::uuid,'(pré) execução running vinculada');
+select tests.authenticate_as(:'uag');
+select lives_ok(format($$select public.stop_automation(%L)$$, :'cr1'),'agent para execução running');
+select tests.clear_authentication();
+select is((select (status, claim_token is null)::text from public.automation_runs where id=:'rr1'),'(cancelled,t)','stop_automation cancela a execução running vinculada');
+
+-- =============================================================== ingest de 7 argumentos por admin autenticado (Simulador)
+select tests.authenticate_as(:'ua');
+select public.ingest_inbound_message('00000000-0000-0000-0000-000000004001','adm1','+5540000000097','Cliente','Oi',now(),'{"origin":"direct","k":1}') as madm \gset
+select tests.clear_authentication();
+select is((select context from public.messages where id=:'madm'),'{"k": 1, "origin": "direct"}'::jsonb,'admin autenticado: ingest de 7 argumentos grava context');
 
 select * from finish();
 rollback;

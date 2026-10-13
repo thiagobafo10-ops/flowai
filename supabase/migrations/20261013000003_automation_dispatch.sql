@@ -93,6 +93,7 @@ begin
         and r.status in ('pending', 'running', 'waiting'));
   get diagnostics v_rows = row_count;
   if v_rows > 0 then
+    -- só tarefas 'pending': uma tarefa da IA já em 'running' ainda pode responder (borda aceita)
     update public.ai_jobs set state = 'cancelled', claim_token = null, claimed_until = null
       where conversation_id = p_conv and kind = 'reply' and state = 'pending';
   end if;
@@ -511,6 +512,7 @@ declare
   v_key text;
   v_value text;
   v_conv uuid;
+  v_locked uuid;
   v_run uuid;
   auto public.automations;
 begin
@@ -531,6 +533,16 @@ begin
     where c.organization_id = new.organization_id and c.contact_id = new.contact_id and c.status <> 'closed'
     order by c.last_message_at desc nulls last, c.created_at desc, c.id desc
     limit 1;
+
+  -- Serializa o disparo na conversa (verificação de ocupada + criação + vínculo sob a trava). SKIP LOCKED
+  -- de propósito: este gatilho roda com a linha do contato (ou do negócio) já tocada, enquanto a ingestão
+  -- trava a conversa antes de tocar o contato; esperar aqui inverteria a ordem e poderia gerar deadlock.
+  -- Conversa travada por outra transação = ocupada (ela está recebendo mensagem/automação): nada é
+  -- registrado. A própria transação nunca é pulada (SKIP LOCKED não pula travas próprias).
+  if v_conv is not null then
+    select c.id into v_locked from public.conversations c where c.id = v_conv for update skip locked;
+    if v_locked is null then return null; end if;
+  end if;
 
   for auto in
     select a.* from public.automations a
@@ -597,14 +609,23 @@ create trigger automation_contact_deleted before delete on public.contacts
   for each row execute function private.automation_contact_deleted();
 
 -- ---------------------------------------------------------------- Parar automação (agent+)
+-- Nome do usuário atual para mensagens de sistema (mesma regra de log_conversation_system_message).
+create function private.automation_actor_name() returns text
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select nullif(btrim(p.full_name), '') from public.profiles p where p.id = auth.uid()), 'Alguém');
+$$;
+
 create function public.stop_automation(p_conversation uuid) returns void
 language plpgsql security definer set search_path = '' as $$
-declare conv public.conversations; v_rows int; v_actor text;
+declare conv public.conversations; v_org uuid; v_rows int;
 begin
-  select * into conv from public.conversations where id = p_conversation for update;
-  if not found or not public.has_role(conv.organization_id, 'agent') then
+  -- papel conferido antes de travar: quem não pode parar não segura a linha da conversa
+  select organization_id into v_org from public.conversations where id = p_conversation;
+  if v_org is null or not public.has_role(v_org, 'agent') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  select * into conv from public.conversations where id = p_conversation and organization_id = v_org for update;
+  if not found then raise exception 'forbidden' using errcode = '42501'; end if;
   update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
     where organization_id = conv.organization_id and conversation_id = conv.id
       and (status in ('pending', 'waiting') or (id = conv.automation_run_id and status = 'running'));
@@ -612,17 +633,17 @@ begin
   update public.conversations set automation_run_id = null where id = conv.id and automation_run_id is not null;
   if v_rows = 0 then return; end if;
 
-  select coalesce(nullif(btrim(full_name), ''), 'Alguém') into v_actor from public.profiles where id = auth.uid();
   insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, sender_user_id,
       content, status)
     values (conv.organization_id, conv.id, conv.channel_id, 'outbound', 'system', auth.uid(),
-      'Automação interrompida por ' || coalesce(v_actor, 'Alguém'), 'delivered');
+      'Automação interrompida por ' || private.automation_actor_name(), 'delivered');
 end $$;
 
 -- ---------------------------------------------------------------- grants
 revoke all on function
   private.automation_normalize(text),
   private.automation_actor_on(),
+  private.automation_actor_name(),
   private.automation_keyword_matches(text, jsonb),
   private.automation_payload(uuid, uuid, text),
   private.automation_verify_payload(text),
