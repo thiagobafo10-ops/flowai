@@ -1039,6 +1039,8 @@ isOneToOne: false
                            },
 "ingest_inbound_message":
 { Args: { "p_channel": string,"p_external_id": string,"p_sender_external_id": string,"p_sender_name": string,"p_sent_at": string,"p_text": string }; Returns: string
+                           } |
+{ Args: { "p_channel": string,"p_context": Json,"p_external_id": string,"p_sender_external_id": string,"p_sender_name": string,"p_sent_at": string,"p_text": string }; Returns: string
                            },
 "ingest_instagram_event":
 { Args: { "p_connection_id": string,"p_event": Json }; Returns: Json
@@ -1156,6 +1158,9 @@ isOneToOne: false
                            },
 "slugify":
 { Args: { "p": string }; Returns: string
+                           },
+"stop_automation":
+{ Args: { "p_conversation": string }; Returns: undefined
                            },
 "sweep_ai_jobs":
 { Args: Record<PropertyKey, never>; Returns: undefined
