@@ -32,6 +32,7 @@ export function RealtimeProvider({ orgId, initialUnread, children }: {
       void client.invalidateQueries({ queryKey: ["conversation", orgId] });
       void client.invalidateQueries({ queryKey: ["unread", orgId] });
       void client.invalidateQueries({ queryKey: ["inbox-contact", orgId] });
+      void client.invalidateQueries({ queryKey: ["knowledge"] });
     };
     const changed = () => {
       if (timer) clearTimeout(timer);
@@ -39,7 +40,8 @@ export function RealtimeProvider({ orgId, initialUnread, children }: {
     };
     const channel = supabase.channel(`inbox:${orgId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `organization_id=eq.${orgId}` }, changed)
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${orgId}` }, changed);
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `organization_id=eq.${orgId}` }, changed)
+      .on("postgres_changes", { event: "*", schema: "public", table: "knowledge_documents", filter: `organization_id=eq.${orgId}` }, changed);
     void (async () => {
       // subscribe captures the current token in its join payload. Wait for Auth
       // to load the browser cookie session before opening a protected subscription.
