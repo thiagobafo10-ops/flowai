@@ -66,7 +66,11 @@ async function buildStep(run: RunClaim, prepared: Extract<PreparedRun, { action:
   const node = graph.nodes.find((n) => n.id === nodeId);
   if (!node) throw new RunError("invalid_graph");
   if (prepared.waitingFor) {
-    const handle = prepared.waitingFor === "delay" ? "default" : prepared.input ? resolveReply(node, { optionId: prepared.input.optionId ?? null, text: prepared.input.text ?? null }) : "no_reply";
+    // Comment private replies always wait, including plain text/URL-only messages.
+    const config = node.config as { mode?: string; buttons?: { kind: string }[]; quickReplies?: unknown[] };
+    const plainMessage = node.type === "message" && config.mode === "text"
+      && !config.buttons?.some((b) => b.kind === "path") && !config.quickReplies?.length;
+    const handle = prepared.waitingFor === "delay" || plainMessage ? "default" : prepared.input ? resolveReply(node, { optionId: prepared.input.optionId ?? null, text: prepared.input.text ?? null }) : "no_reply";
     return { nodeId, iteration: prepared.iteration, handle, effects: [], route: routeFor(graph, nodeId, handle) };
   }
 

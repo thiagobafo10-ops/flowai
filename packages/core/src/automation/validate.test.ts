@@ -311,7 +311,7 @@ describe("validateGraph", () => {
         nodes: [node("t", "trigger"), node("m", "message", { mode: "ai" }), node("e", "end")],
         edges: [edge("t", "m"), edge("m", "e", "sent"), edge("m", "e", "handoff")],
       };
-      expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
+      expect(codes(g, comment)).toEqual(["comment_first_message", "comment_needs_reply"]);
     });
 
     it("texto com botões ou default para end são aceitos", () => {
@@ -328,7 +328,23 @@ describe("validateGraph", () => {
         nodes: [node("t", "trigger"), node("a", "tag", { tagId: TAG }), node("m", "message", text()), node("m2", "message", text()), node("e", "end")],
         edges: [edge("t", "a"), edge("a", "m"), edge("m", "m2"), edge("m2", "e")],
       };
-      expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
+      expect(codes(g, comment)).toEqual(["comment_first_message", "comment_needs_reply"]);
+    });
+
+    it("condition before first private reply must be rejected", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("c", "condition", { kind: "has_tag", tagId: TAG }), node("m", "message", text()), node("e", "end")],
+        edges: [edge("t", "c"), edge("c", "m", "true"), edge("c", "e", "false"), edge("m", "e")],
+      };
+      expect(codes(g, comment)).toEqual(["comment_first_message"]);
+    });
+
+    it("CRM before first private reply must be rejected", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), tagNode("a"), node("m", "message", text()), node("e", "end")],
+        edges: [edge("t", "a"), edge("a", "m"), edge("m", "e")],
+      };
+      expect(codes(g, comment)).toEqual(["comment_first_message"]);
     });
 
     it("não se aplica a outros gatilhos", () => {

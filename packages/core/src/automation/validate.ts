@@ -221,6 +221,11 @@ export function validateGraph(
   // Comentário (regra da Meta): a primeira mensagem de cada caminho é a resposta ao comentário. Se o cliente não
   // responder (no_reply, ou default quando não há opções), nada mais pode ser enviado: só ações e fim.
   if (trigger.type === "instagram_comment" && triggers.length > 0) {
+    const firstIds = targetsOf(triggers[0]!.id, ["default"]);
+    const first = firstIds.length === 1 ? byId.get(firstIds[0]!) : undefined;
+    if (!first || first.type !== "message" || messageOptions(first.config) === null) {
+      add(triggers[0]!.id, "comment_first_message", "Conecte o gatilho de comentário diretamente a uma mensagem de texto.");
+    }
     const isMessage = (n: GraphNode) => n.type === "message";
     const firstMessages = [...walk(triggers.map((t) => t.id), isMessage)].map((id) => byId.get(id)!).filter(isMessage);
     for (const m of firstMessages) {

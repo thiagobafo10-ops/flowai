@@ -81,6 +81,15 @@ Deno.test("condition selects false exit", async () => {
   await handleAutomationWorker(request(), f.deps);
   assert(f.steps[0]?.handle === "false" && f.steps[1].nodeId === "e" && f.sends.length === 0);
 });
+for (const input of [null, { optionId: null, text: "Obrigado" }]) {
+  Deno.test(`plain first comment reply resumes default to CRM without resend (${input ? "reply" : "timeout"})`, async () => {
+    const f = fixture({ waitingFor: "reply", input, graph: graph([node("t", "trigger"), textNode(), node("tag", "tag", { tagId: CHUNK }), node("e", "end")], [edge("t", "m"), edge("m", "tag"), edge("tag", "e")]) });
+    await handleAutomationWorker(request(), f.deps);
+    assert(f.steps[0]?.handle === "default" && f.steps[0].effects.length === 0);
+    assert(f.steps[1]?.nodeId === "tag" && f.steps[1].effects[0]?.type === "add_tag");
+    assert(f.sends.length === 0 && f.failures.length === 0);
+  });
+}
 Deno.test("delay parks after apply and resumes through default without another delay", async () => {
   const g = graph([node("t", "trigger"), node("d", "delay", { minutes: 10 }), node("e", "end")], [edge("t", "d"), edge("d", "e")]);
   const f = fixture({ currentNodeId: "d", graph: g }); await handleAutomationWorker(request(), f.deps);
