@@ -13,11 +13,15 @@
 -- * Cota da IA: um efeito ai_message com aiReply consome a cota de respostas. Cota esgotada → nada é
 --   enviado, o passo grava result 'quota_exceeded' e handle 'handoff', e a execução segue pela saída
 --   'handoff' do bloco (currentNodeId = alvo dessa saída; sem saída → concluída). O mesmo vale para
---   'reply_too_long'. Ou seja: o worker roteia 'handoff' seguindo o currentNodeId devolvido. prepare
+--   'reply_too_long' da IA. Ou seja: o worker roteia 'handoff' seguindo o currentNodeId devolvido. Bloqueios
+--   do canal (janela de 24h, canal inativo, conversa fechada) são conferidos ANTES de consumir a cota. prepare
 --   antecipa a cota em ai.quotaLeft para o worker nem chamar a OpenAI quando ela já acabou.
 -- * ai_message sem aiReply não envia nada (o worker usa a saída handoff quando a IA decide transferir).
--- * Resultados de passo (result): sent | queued | no_conversation | conversation_busy | conversation_closed |
---   window_closed | quota_exceeded | reply_too_long | channel_unavailable | max_steps | <código de erro>.
+-- * Resultados de passo (result) e o fim da execução que provocam:
+--   sent | queued | no_conversation | conversation_busy (segue a rota) · window_closed, reply_too_long de
+--   send_text (completed) · conversation_closed (cancelled) · channel_unavailable (failed) · quota_exceeded,
+--   reply_too_long da IA (saída handoff) · max_steps | <código de erro> (failed).
+-- * handoff_ai / handoff_human são terminais: a execução termina 'completed' e libera a conversa.
 -- * Erros: 42501 = reserva perdida (o worker não chama fail); 22023 = passo inválido (fail 'invalid_step').
 -- * Ordem de travas: conversa → execução (a mesma de automation_inbound/stop_automation).
 
@@ -84,36 +88,74 @@ begin
   return r;
 end $$;
 
--- Execução terminou: a conversa deixa de estar em automação e a IA volta a atender.
+-- Execução terminou: a conversa deixa de estar em automação (a IA volta a atender) e um passo que ainda
+-- aguardava resposta/tempo fica 'cancelled' (a retomada, quando acontece, regrava o passo como 'completed').
 create function private.automation_release(p_run uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   update public.conversations set automation_run_id = null where automation_run_id = p_run;
+  update public.automation_run_steps set status = 'cancelled' where run_id = p_run and status = 'waiting';
 end $$;
 
 create function private.automation_cancel_run(p_run uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
+  update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null,
+    waiting_for = null, wait_node_id = null, input = null
     where id = p_run;
   perform private.automation_release(p_run);
 end $$;
 
 -- Exclusão de conversa/contato: cancela também a execução em curso (o worker recebe skip / 42501).
+-- Raro: excluir um contato trava contato → conversas → execuções, enquanto um apply trava conversa →
+-- execução → (contact_tags/deals do contato); um deadlock possível aborta uma das transações e o worker
+-- trata o erro como falha retentável (nova tentativa após o backoff).
 create or replace function private.automation_conversation_deleted() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
-    where conversation_id = old.id and status in ('pending', 'running', 'waiting');
+  perform private.automation_cancel_runs(old.id, null, true);
   return old;
 end $$;
 
 create or replace function private.automation_contact_deleted() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
-    where contact_id = old.id and status in ('pending', 'running', 'waiting');
+  perform private.automation_cancel_runs(null, old.id, true);
   return old;
+end $$;
+
+-- Há outra execução ativa (pending/running/waiting) na conversa? Usado por apply e rerun. O disparo da
+-- Task 6 (automation_inbound / automation_crm_event) mantém o mesmo predicado inline.
+create function private.automation_conversation_busy(p_org uuid, p_conv uuid, p_except_run uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.automation_runs r
+    join public.conversations c on c.id = p_conv
+    where r.organization_id = p_org and r.id is distinct from p_except_run
+      and (r.conversation_id = c.id or r.id = c.automation_run_id)
+      and r.status in ('pending', 'running', 'waiting'));
+$$;
+
+-- Motivo que impede enviar p_text na conversa agora (null = pode enviar). Calculado uma vez, antes de
+-- consumir cota ou gravar qualquer coisa. Instagram: limite de 1000 bytes e a janela de 24h da Fase 6.
+create function private.automation_send_blocker(p_conv public.conversations, p_text text) returns text
+language plpgsql stable security definer set search_path = '' as $$
+declare v_type public.channel_type; v_block text;
+begin
+  if p_conv.id is null then return 'no_conversation'; end if;
+  if p_conv.status = 'closed' then return 'conversation_closed'; end if;
+  select ch.type into v_type from public.channels ch where ch.id = p_conv.channel_id;
+  if v_type = 'instagram' then
+    if octet_length(p_text) > 1000 then return 'reply_too_long'; end if;
+    v_block := private.ai_instagram_blocker(p_conv);
+    if v_block = 'window_closed' then return 'window_closed'; end if;
+    if v_block is not null then return 'channel_unavailable'; end if;
+    return null;
+  end if;
+  if v_type = 'simulator' then
+    if char_length(p_text) > 4096 then return 'reply_too_long'; end if;
+    return null;
+  end if;
+  return 'channel_unavailable';
 end $$;
 
 -- Conversa aberta mais recente do contato (a mesma escolha do disparo de CRM).
@@ -266,22 +308,17 @@ begin
 end $$;
 
 -- Grava a mensagem da automação na conversa (já travada). Simulador: delivered. Instagram: pending + intent
--- com message_payload e automation_run_id, após a checagem da janela de 24h (a mesma da Fase 6).
--- result: sent | queued | conversation_closed | window_closed | channel_unavailable.
+-- com message_payload e automation_run_id. O chamador já conferiu private.automation_send_blocker.
+-- result: sent | queued.
 create function private.automation_deliver(p_run uuid, p_conv public.conversations, p_node uuid, p_text text,
   p_buttons jsonb, p_quick_replies jsonb, p_instagram jsonb, p_ai_metadata jsonb, out result text, out intent_id uuid)
 language plpgsql security definer set search_path = '' as $$
-declare v_type public.channel_type; v_message uuid; v_recipient text; v_block text; v_context jsonb;
+declare v_type public.channel_type; v_message uuid; v_recipient text; v_context jsonb;
 begin
-  if p_conv.status = 'closed' then result := 'conversation_closed'; return; end if;
   select ch.type into v_type from public.channels ch where ch.id = p_conv.channel_id;
   v_context := jsonb_build_object('automation', jsonb_build_object('runId', p_run, 'nodeId', p_node,
     'buttons', coalesce(p_buttons, '[]'::jsonb), 'quickReplies', coalesce(p_quick_replies, '[]'::jsonb)));
   if v_type = 'instagram' then
-    if octet_length(p_text) > 1000 then raise exception 'text too long' using errcode = '22023'; end if;
-    v_block := private.ai_instagram_blocker(p_conv);
-    if v_block = 'window_closed' then result := 'window_closed'; return; end if;
-    if v_block is not null then result := 'channel_unavailable'; return; end if;
     select k.instagram_id into v_recipient from public.contacts k
       where k.id = p_conv.contact_id and k.organization_id = p_conv.organization_id;
     insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, status,
@@ -297,8 +334,6 @@ begin
     result := 'queued';
     return;
   end if;
-  if v_type is distinct from 'simulator' then result := 'channel_unavailable'; return; end if;
-  if char_length(p_text) > 4096 then raise exception 'text too long' using errcode = '22023'; end if;
   insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, status,
       context, ai_metadata)
     values (p_conv.organization_id, p_conv.id, p_conv.channel_id, 'outbound', 'automation', p_text, 'delivered',
@@ -415,7 +450,8 @@ declare
   v_route jsonb := p_step -> 'route';
   v_graph jsonb; v_node jsonb; v_out jsonb; v_resume boolean := false; v_has_step boolean;
   v_next uuid; v_until timestamptz; v_kind text;
-  e jsonb; v_text text; v_type public.channel_type; v_send record; v_cand uuid; v_send_block text; v_conv_checked boolean := false;
+  e jsonb; v_text text; v_block text; v_send record; v_cand uuid; v_send_block text; v_conv_checked boolean := false;
+  v_terminal boolean := false; v_reroute boolean := false;
   v_result text; v_intents uuid[] := '{}'; v_payloads jsonb := '{}'::jsonb; v_status public.run_status; v_error text;
 begin
   run := private.automation_lock_run(p_run);
@@ -457,7 +493,28 @@ begin
     end if;
   end if;
 
-  -- retomada da espera: conclui o passo do nó de espera com o handle resolvido
+  -- conversa da execução fechada desde o último passo: cancela (result conversation_closed) e libera o
+  -- vínculo; a execução nunca é estacionada em espera numa conversa fechada.
+  if run.conversation_id is not null then
+    select * into conv from public.conversations where id = run.conversation_id;
+    if conv.id is null or conv.status = 'closed' then
+      v_out := jsonb_build_object('state', 'cancelled', 'intentIds', '[]'::jsonb, 'payloads', '{}'::jsonb,
+        'result', 'conversation_closed', 'currentNodeId', v_node_id);
+      perform private.automation_cancel_run(run.id);
+      if v_resume then
+        update public.automation_run_steps set status = 'cancelled', output = v_out
+          where run_id = run.id and node_id = v_node_id and iteration = v_iteration;
+      else
+        insert into public.automation_run_steps (organization_id, run_id, node_id, iteration, status, output, handle)
+          values (run.organization_id, run.id, v_node_id, v_iteration, 'cancelled', v_out, v_handle);
+      end if;
+      return v_out;
+    end if;
+  end if;
+
+  -- retomada da espera: conclui o passo do nó de espera com o handle resolvido. O worker é um serviço
+  -- confiável: o handle não é conferido contra input aqui (o worker o calcula com resolveReply sobre o
+  -- input devolvido por prepare); só se exige que a execução esteja de fato aguardando neste nó.
   if v_resume then
     if jsonb_array_length(p_step -> 'effects') > 0 or v_kind not in ('next', 'end') or v_handle is null then
       raise exception 'invalid resume' using errcode = '22023';
@@ -493,10 +550,6 @@ begin
     return v_out;
   end if;
 
-  if run.conversation_id is not null then
-    select * into conv from public.conversations where id = run.conversation_id;
-  end if;
-
   -- efeitos
   for e in select * from jsonb_array_elements(p_step -> 'effects') loop
     case e ->> 'type'
@@ -526,13 +579,17 @@ begin
     when 'close_conversation' then
       if conv.id is not null then
         update public.conversations set status = 'closed' where id = conv.id and status <> 'closed';
+        select * into conv from public.conversations where id = conv.id;
       end if;
+    -- transferências são terminais: a execução termina 'completed' (a saída do bloco é ignorada)
     when 'handoff_ai' then
+      v_terminal := true;
       if conv.id is not null then
         update public.conversations set handled_by = 'ai', status = 'open', handoff_reason = null, automation_run_id = null
           where id = conv.id;
       end if;
     when 'handoff_human' then
+      v_terminal := true;
       if conv.id is not null then
         update public.conversations set status = 'pending_human', handled_by = 'human' where id = conv.id;
         insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, status)
@@ -550,10 +607,7 @@ begin
             select * into conv from public.conversations where id = v_cand for update skip locked;
             if not found then
               v_send_block := 'conversation_busy';
-            elsif exists (select 1 from public.automation_runs r
-                where r.organization_id = run.organization_id and r.id <> run.id
-                  and (r.conversation_id = conv.id or r.id = conv.automation_run_id)
-                  and r.status in ('pending', 'running', 'waiting')) then
+            elsif private.automation_conversation_busy(run.organization_id, conv.id, run.id) then
               v_send_block := 'conversation_busy';
               conv := null;
             else
@@ -570,19 +624,19 @@ begin
         v_result := v_send_block;
         continue;
       end if;
-      select ch.type into v_type from public.channels ch where ch.id = conv.channel_id;
+      v_text := case when e ->> 'type' = 'ai_message' then v_ai ->> 'text' else e ->> 'text' end;
+      -- bloqueios do canal antes de qualquer escrita e antes de consumir a cota da IA
+      v_block := private.automation_send_blocker(conv, v_text);
+      if v_block is not null then
+        v_result := v_block;
+        -- texto longo da IA segue pela saída handoff; o de send_text conclui a execução
+        if v_block = 'reply_too_long' and e ->> 'type' = 'ai_message' then v_reroute := true; end if;
+        continue;
+      end if;
       if e ->> 'type' = 'ai_message' then
-        v_text := v_ai ->> 'text';
-        if char_length(v_text) > 4096 or (v_type = 'instagram' and octet_length(v_text) > 1000) then
-          v_result := 'reply_too_long';
-          continue;
-        end if;
-        if v_type = 'instagram' and private.ai_instagram_blocker(conv) = 'window_closed' then
-          v_result := 'window_closed';
-          continue;
-        end if;
         if not public.consume_ai_quota(run.organization_id, 'reply') then
           v_result := 'quota_exceeded';
+          v_reroute := true;
           continue;
         end if;
         select * into v_send from private.automation_deliver(run.id, conv, v_node_id, v_text, null, null,
@@ -602,14 +656,18 @@ begin
   end loop;
 
   -- rota final (resultados que mudam a rota têm prioridade sobre a do worker)
-  if v_result = 'channel_unavailable' then
+  if v_result = 'conversation_closed' then
+    v_status := 'cancelled';
+  elsif v_result = 'channel_unavailable' then
     v_status := 'failed'; v_error := 'channel_unavailable';
   elsif v_result = 'window_closed' then
     v_status := 'completed';
-  elsif v_result in ('quota_exceeded', 'reply_too_long') then
+  elsif v_reroute then
     v_handle := 'handoff';
     v_next := private.automation_graph_target(v_graph, v_node_id, 'handoff');
     v_status := case when v_next is null then 'completed' else 'running' end;
+  elsif v_result = 'reply_too_long' or v_terminal then
+    v_status := 'completed';
   elsif v_kind = 'next' then
     v_status := 'running';
   elsif v_kind in ('waitReply', 'waitDelay') then
@@ -700,11 +758,8 @@ begin
     raise exception 'invalid_node' using errcode = '22023';
   end if;
   -- uma execução ativa por conversa
-  if run.conversation_id is not null and exists (select 1 from public.automation_runs r
-      join public.conversations c on c.id = run.conversation_id
-      where r.organization_id = run.organization_id and r.id <> run.id
-        and (r.conversation_id = c.id or r.id = c.automation_run_id)
-        and r.status in ('pending', 'running', 'waiting')) then
+  if run.conversation_id is not null
+     and private.automation_conversation_busy(run.organization_id, run.conversation_id, run.id) then
     raise exception 'conversation_busy' using errcode = '22023';
   end if;
   update public.automation_runs set iteration = iteration + 1, current_node_id = p_node, status = 'pending',
@@ -783,6 +838,8 @@ revoke all on function
   private.automation_lock_run(uuid),
   private.automation_release(uuid),
   private.automation_cancel_run(uuid),
+  private.automation_conversation_busy(uuid, uuid, uuid),
+  private.automation_send_blocker(public.conversations, text),
   private.automation_contact_conversation(uuid, uuid),
   private.automation_run_context(public.automation_runs, uuid, text),
   private.automation_ai_context(public.automation_runs, uuid),

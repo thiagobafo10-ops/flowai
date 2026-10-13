@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(148);
+select plan(174);
 select tests.create_user('owner41@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent41@t.test','Beto Agente') as uag \gset
 select tests.create_user('out41@t.test','Fora') as uout \gset
@@ -168,10 +168,11 @@ select throws_ok(format($$select public.apply_automation_step(%L, %L, %L)$$, :'r
 select throws_ok(format($$select public.apply_automation_step(%L, %L, %L)$$, :'r1', :'t1',
   pg_temp.step(:'nm', jsonb_build_object('teleport', true))),'22023',null,'rota inválida: 22023');
 
-select public.apply_automation_step(:'r1', :'t1', pg_temp.step(:'nm',
+select pg_temp.step(:'nm',
   jsonb_build_object('waitReply', jsonb_build_object('until', now() + interval '24 hours')),
   '[{"type":"send_text","text":"Escolha","buttons":[{"id":"a1","title":"Sim","kind":"path"},{"id":"u1","title":"Site","kind":"url","url":"https://exemplo.com.br"}]}]',
-  null)) as s1 \gset
+  null) as st1 \gset
+select public.apply_automation_step(:'r1', :'t1', :'st1'::jsonb) as s1 \gset
 select is(:'s1'::jsonb->>'state','waiting','botões: execução aguarda resposta');
 select is((select waiting_for||'/'||wait_node_id::text||'/'||coalesce(input::text,'null')||'/'||(claim_token is null)::text
   from public.automation_runs where id=:'r1'),'reply/'||:'nm'||'/null/true','espera: waiting_for, wait_node_id, input nulo, reserva liberada');
@@ -184,6 +185,8 @@ select is((select jsonb_array_length(context#>'{automation,buttons}')||'/'||(con
 select is(private.automation_verify_payload(:'s1'::jsonb#>>'{payloads,a1}')->>'nodeId',:'nm','payload do botão path é verificável');
 select ok(not (:'s1'::jsonb->'payloads' ? 'u1'),'botão url não ganha payload');
 select is(pg_temp.link(:'c1'),:'r1'::uuid,'conversa segue vinculada durante a espera');
+select is(public.apply_automation_step(:'r1', :'t1', :'st1'::jsonb),:'s1'::jsonb,'replay do envio no Simulador devolve o resultado gravado (payloads)');
+select is((select count(*)::int from public.messages where conversation_id=:'c1' and direction='outbound'),1,'replay do Simulador não reenvia');
 
 -- clique: a resposta retoma a execução
 select public.ingest_inbound_message('00000000-0000-0000-0000-000000004101','in41a','+5541000000001','Maria','Sim',now(),
@@ -247,12 +250,13 @@ select public.automation_button_payloads(:'r6', :'t6', :'nm') as bp \gset
 select is(private.automation_verify_payload(:'bp'::jsonb->>'a1')->>'runId',:'r6','button_payloads: payload verificável');
 select is((select array_agg(k order by k) from jsonb_object_keys(:'bp'::jsonb) k),array['a1'],'button_payloads: só opções path');
 select throws_ok(format($$select public.automation_button_payloads(%L, gen_random_uuid(), %L)$$, :'r6', :'nm'),'42501',null,'button_payloads com token errado: 42501');
-select public.apply_automation_step(:'r6', :'t6', pg_temp.step(:'nm',
+select pg_temp.step(:'nm',
   jsonb_build_object('waitReply', jsonb_build_object('until', now() + interval '24 hours')),
   jsonb_build_array(jsonb_build_object('type','send_text','text','Escolha',
     'buttons', '[{"id":"a1","title":"Sim","kind":"path"}]'::jsonb,
     'instagram', jsonb_build_object('text','Escolha','quick_replies', jsonb_build_array(jsonb_build_object('content_type','text','title','Sim','payload', :'bp'::jsonb->>'a1'))))),
-  null)) as s6 \gset
+  null) as st6 \gset
+select public.apply_automation_step(:'r6', :'t6', :'st6'::jsonb) as s6 \gset
 select is(jsonb_array_length(:'s6'::jsonb->'intentIds'),1,'Instagram: um intent');
 select is((select (message_payload#>>'{quick_replies,0,payload}')||'/'||automation_run_id::text||'/'||text||'/'||recipient_external_id||'/'||state
   from public.instagram_send_intents where id=(:'s6'::jsonb->'intentIds'->>0)::uuid),
@@ -260,6 +264,24 @@ select is((select (message_payload#>>'{quick_replies,0,payload}')||'/'||automati
 select is((select m.sender_type::text||'/'||m.status::text from public.messages m join public.instagram_send_intents i on i.message_id=m.id
   where i.id=(:'s6'::jsonb->'intentIds'->>0)::uuid),'automation/pending','Instagram: mensagem pendente da automação');
 select is(:'s6'::jsonb->>'state','waiting','Instagram: aguarda resposta');
+select is(public.apply_automation_step(:'r6', :'t6', :'st6'::jsonb),:'s6'::jsonb,'replay Instagram devolve intentIds e payloads gravados');
+select is((select count(*)::int from public.instagram_send_intents where conversation_id=:'c6'),1,'replay Instagram não cria intent');
+select is((select count(*)::int from public.messages where conversation_id=:'c6' and direction='outbound'),1,'replay Instagram não cria mensagem');
+
+-- texto acima de 1000 bytes no Instagram → reply_too_long, execução concluída, nada enviado
+select pg_temp.contact('19', null, 'ig19') as k19 \gset
+select pg_temp.conv('19', '00000000-0000-0000-0000-000000004102') as c19 \gset
+insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,created_at)
+  values (:'oa',:'c19','00000000-0000-0000-0000-000000004102','inbound','contact','Oi','delivered',now());
+select pg_temp.run('19', :'c19', :'k19', :'nm') as r19 \gset
+select pg_temp.hold(:'r19') as t19 \gset
+select public.apply_automation_step(:'r19', :'t19', pg_temp.step(:'nm',
+  jsonb_build_object('waitReply', jsonb_build_object('until', now() + interval '24 hours')),
+  jsonb_build_array(jsonb_build_object('type','send_text','text',repeat('á',600),'instagram',jsonb_build_object('text',repeat('á',600)))),
+  null)) as s19 \gset
+select is((:'s19'::jsonb->>'result')||'/'||(:'s19'::jsonb->>'state'),'reply_too_long/completed','texto longo no Instagram: reply_too_long e concluída');
+select is((select count(*)::int from public.messages where conversation_id=:'c19' and direction='outbound'),0,'texto longo: sem mensagem');
+select is((select count(*)::int from public.instagram_send_intents where conversation_id=:'c19'),0,'texto longo: sem intent');
 
 -- fora da janela de 24h → window_closed e execução concluída
 select pg_temp.contact('7', null, 'ig7') as k7 \gset
@@ -311,7 +333,8 @@ select is(:'s9'::jsonb->>'currentNodeId',:'nh','cota esgotada: segue pela saída
 select is((select handle from public.automation_run_steps where run_id=:'r9' and node_id=:'nai'),'handoff','passo registra handle handoff');
 select is((select count(*)::int from public.messages where conversation_id=:'c9' and direction='outbound'),0,'cota esgotada: nada enviado');
 -- handoff_human
-select is(public.apply_automation_step(:'r9', :'t9', pg_temp.step(:'nh', jsonb_build_object('next', :'ne'), '[{"type":"handoff_human"}]'))->>'state','running','handoff_human aplicado');
+select is(public.apply_automation_step(:'r9', :'t9', pg_temp.step(:'nh', jsonb_build_object('next', :'ne'), '[{"type":"handoff_human"}]'))->>'state','completed','handoff_human é terminal (ignora a saída)');
+select is(pg_temp.st(:'r9')||'/'||coalesce(pg_temp.link(:'c9')::text,'null'),'completed/null','handoff_human: execução concluída e vínculo liberado');
 select is((select status::text||'/'||handled_by::text from public.conversations where id=:'c9'),'pending_human/human','handoff_human: pending_human/human');
 select is((select content from public.messages where conversation_id=:'c9' and sender_type='system'),'Automação transferiu para atendimento humano','texto de sistema da transferência');
 delete from private.ai_limit_overrides where organization_id=:'oa';
@@ -327,19 +350,67 @@ select public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'nai', jsonb_b
 select is((select sender_type::text||'/'||content from public.messages where conversation_id=:'c10' and direction='outbound'),'automation/Olá da IA','IA: mensagem enviada pela automação');
 select is((select replies from public.ai_usage_daily where organization_id=:'oa'),:used0 + 1,'IA consome a cota');
 select is(:'s10'::jsonb->>'currentNodeId',:'ne','IA enviada segue a rota do worker');
+select is(public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'nai', jsonb_build_object('next', :'ne'), '[{"type":"ai_message"}]', 'sent')
+  || '{"aiReply":{"text":"Olá da IA","usedChunkIds":[]}}'::jsonb),:'s10'::jsonb,'replay da IA devolve o resultado gravado');
+select is((select replies from public.ai_usage_daily where organization_id=:'oa'),:used0 + 1,'replay da IA não consome cota');
+select is((select count(*)::int from public.messages where conversation_id=:'c10' and direction='outbound'),1,'replay da IA não reenvia');
+
+-- canal do Instagram inativo: nada é consumido, execução termina com channel_unavailable
+insert into public.channels(id,organization_id,type,name,status) values ('00000000-0000-0000-0000-000000004103',:'oa','instagram','IG41off','error');
+select pg_temp.contact('20', null, 'ig20') as k20 \gset
+select pg_temp.conv('20', '00000000-0000-0000-0000-000000004103') as c20 \gset
+insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,created_at)
+  values (:'oa',:'c20','00000000-0000-0000-0000-000000004103','inbound','contact','Oi','delivered',now());
+select pg_temp.run('20', :'c20', :'k20', :'nai') as r20 \gset
+select pg_temp.hold(:'r20') as t20 \gset
+select public.apply_automation_step(:'r20', :'t20', pg_temp.step(:'nai', jsonb_build_object('next', :'ne'), '[{"type":"ai_message"}]', 'sent')
+  || '{"aiReply":{"text":"Olá","usedChunkIds":[]}}'::jsonb) as s20 \gset
+select is(:'s20'::jsonb->>'result','channel_unavailable','canal inativo: channel_unavailable');
+select is((select replies from public.ai_usage_daily where organization_id=:'oa'),:used0 + 1,'canal inativo: cota não consumida');
+select is(pg_temp.st(:'r20')||'/'||coalesce(pg_temp.link(:'c20')::text,'null'),'failed/null','canal inativo: execução termina e libera o vínculo');
 
 -- handoff_ai, atribuição e fechamento
 select is(public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'ne', jsonb_build_object('next', :'ne'),
   jsonb_build_array(jsonb_build_object('type','assign_user','userId',:'uout'))))->>'state','running','atribuição a não-membro é ignorada');
 select is((select assigned_to from public.conversations where id=:'c10'),null,'não-membro não é atribuído');
 update public.automation_runs set current_node_id=:'nh' where id=:'r10';
-select public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'nh', jsonb_build_object('next', :'nd'),
-  jsonb_build_array(jsonb_build_object('type','assign_user','userId',:'uag'), '{"type":"handoff_ai"}'::jsonb)));
+select is(public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'nh', jsonb_build_object('next', :'nd'),
+  jsonb_build_array(jsonb_build_object('type','assign_user','userId',:'uag'), '{"type":"handoff_ai"}'::jsonb)))->>'state',
+  'completed','handoff_ai é terminal (ignora a saída)');
 select is((select assigned_to::text||'/'||handled_by::text||'/'||status::text||'/'||coalesce(automation_run_id::text,'null') from public.conversations where id=:'c10'),
   :'uag'||'/ai/open/null','assign_user e handoff_ai (vínculo limpo)');
-select public.apply_automation_step(:'r10', :'t10', pg_temp.step(:'nd', '{"end":true}', '[{"type":"close_conversation"}]'));
-select is((select status::text from public.conversations where id=:'c10'),'closed','close_conversation fecha');
-select is(pg_temp.st(:'r10'),'completed','execução concluída após fechar');
+select is(pg_temp.st(:'r10'),'completed','handoff_ai: execução concluída');
+-- fechamento
+select pg_temp.contact('17', '+5541000000017') as k17 \gset
+select pg_temp.conv('17', '00000000-0000-0000-0000-000000004101') as c17 \gset
+select pg_temp.run('17', :'c17', :'k17', :'nd') as r17 \gset
+select pg_temp.hold(:'r17') as t17 \gset
+select public.apply_automation_step(:'r17', :'t17', pg_temp.step(:'nd', '{"end":true}', '[{"type":"close_conversation"}]'));
+select is((select status::text from public.conversations where id=:'c17'),'closed','close_conversation fecha');
+select is(pg_temp.st(:'r17'),'completed','execução concluída após fechar');
+
+-- conversa fechada entre passos: o próximo apply cancela (nunca fica aguardando)
+select pg_temp.contact('21', '+5541000000021') as k21 \gset
+select pg_temp.conv('21', '00000000-0000-0000-0000-000000004101') as c21 \gset
+select pg_temp.run('21', :'c21', :'k21', :'nt') as r21 \gset
+select pg_temp.hold(:'r21') as t21 \gset
+select public.apply_automation_step(:'r21', :'t21', pg_temp.step(:'nt', jsonb_build_object('next', :'nm')));
+update public.conversations set status='closed' where id=:'c21';
+select public.apply_automation_step(:'r21', :'t21', pg_temp.step(:'nm',
+  jsonb_build_object('waitReply', jsonb_build_object('until', now() + interval '24 hours')),
+  '[{"type":"send_text","text":"Oi"}]', null)) as s21 \gset
+select is((:'s21'::jsonb->>'state')||'/'||(:'s21'::jsonb->>'result'),'cancelled/conversation_closed','conversa fechada: cancelled/conversation_closed');
+select is((select status::text||'/'||coalesce(waiting_for,'null') from public.automation_runs where id=:'r21'),'cancelled/null','conversa fechada: execução não fica aguardando');
+select is((select status::text from public.automation_run_steps where run_id=:'r21' and node_id=:'nm'),'cancelled','conversa fechada: passo cancelado');
+select is((select count(*)::int from public.messages where conversation_id=:'c21' and direction='outbound' and sender_type='automation'),0,'conversa fechada: nada enviado');
+
+-- contato excluído com execução em curso → cancelada; prepare skip
+select pg_temp.contact('18', '+5541000000018') as k18 \gset
+select pg_temp.run('18', null, :'k18', :'nt') as r18 \gset
+select pg_temp.hold(:'r18') as t18 \gset
+delete from public.contacts where id=:'k18';
+select is(pg_temp.st(:'r18'),'cancelled','excluir o contato cancela a execução em curso');
+select is(public.prepare_automation_run(:'r18', :'t18')->>'action','skip','prepare: contato excluído → skip');
 
 -- =============================================================== execuções sem conversa (nível de contato)
 select pg_temp.contact('11', '+5541000000011') as k11 \gset
@@ -411,6 +482,19 @@ select is(pg_temp.link(:'c1'),:'r1'::uuid,'reexecução revincula a conversa liv
 select pg_temp.hold(:'r1') as t1d \gset
 select public.apply_automation_step(:'r1', :'t1d', pg_temp.step(:'ng', jsonb_build_object('next', :'nd'), '[]', 'default', 1));
 select is((select count(*)::int from public.automation_run_steps where run_id=:'r1' and node_id=:'ng'),2,'nova iteração grava novo passo');
+
+-- execução em espera termina: o passo que aguardava fica cancelado
+update public.conversations set status='closed' where id=:'c6';
+select is(pg_temp.st(:'r6'),'cancelled','fechar a conversa cancela a execução em espera');
+select is((select status::text from public.automation_run_steps where run_id=:'r6' and node_id=:'nm'),'cancelled','passo em espera fica cancelado');
+select pg_temp.contact('22', '+5541000000022') as k22 \gset
+select pg_temp.conv('22', '00000000-0000-0000-0000-000000004101') as c22 \gset
+select pg_temp.run('22', :'c22', :'k22', :'nd') as r22 \gset
+select pg_temp.hold(:'r22') as t22 \gset
+select public.apply_automation_step(:'r22', :'t22', pg_temp.step(:'nd', jsonb_build_object('waitDelay', jsonb_build_object('until', now()))));
+select pg_temp.hold(:'r22') as t22b \gset
+select public.fail_automation_run(:'r22', :'t22b', 'boom', false);
+select is((select status::text from public.automation_run_steps where run_id=:'r22' and node_id=:'nd'),'cancelled','desistência na retomada cancela o passo em espera');
 
 -- =============================================================== dispatch
 update public.automation_runs set status='cancelled', claim_token=null where status in ('pending','waiting','running');

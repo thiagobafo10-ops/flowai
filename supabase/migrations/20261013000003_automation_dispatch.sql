@@ -100,15 +100,23 @@ begin
   return v_rows > 0;
 end $$;
 
--- Cancela execuções pendentes/em espera da conversa e/ou do contato.
-create function private.automation_cancel_runs(p_conv uuid, p_contact uuid) returns int
+-- Cancela execuções pendentes/em espera (e, com p_include_running, também as em curso) da conversa e/ou
+-- do contato. O passo que aguardava resposta/tempo dessas execuções fica 'cancelled'.
+create function private.automation_cancel_runs(p_conv uuid, p_contact uuid, p_include_running boolean default false)
+returns int
 language plpgsql security definer set search_path = '' as $$
 declare v_rows int;
 begin
-  update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
-    where status in ('pending', 'waiting')
-      and ((p_conv is not null and conversation_id = p_conv) or (p_contact is not null and contact_id = p_contact));
-  get diagnostics v_rows = row_count;
+  with cancelled as (
+    update public.automation_runs set status = 'cancelled', claim_token = null, claimed_until = null, resume_at = null
+      where (status in ('pending', 'waiting') or (p_include_running and status = 'running'))
+        and ((p_conv is not null and conversation_id = p_conv) or (p_contact is not null and contact_id = p_contact))
+      returning id
+  ), steps as (
+    update public.automation_run_steps s set status = 'cancelled'
+      from cancelled c where s.run_id = c.id and s.status = 'waiting'
+  )
+  select count(*)::int into v_rows from cancelled;
   return v_rows;
 end $$;
 
@@ -649,7 +657,7 @@ revoke all on function
   private.automation_verify_payload(text),
   private.automation_start_run(public.automations, uuid, uuid, uuid),
   private.automation_link_run(uuid, uuid),
-  private.automation_cancel_runs(uuid, uuid),
+  private.automation_cancel_runs(uuid, uuid, boolean),
   private.automation_inbound(),
   private.automation_crm_event(),
   private.automation_conversation_closed(),
