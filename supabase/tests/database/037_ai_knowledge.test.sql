@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(75);
+select plan(85);
 select tests.create_user('owner37a@t.test','Owner A') as ua \gset
 select tests.create_user('owner37b@t.test','Owner B') as ub \gset
 select tests.create_user('agent37@t.test','Agent') as uagent \gset
@@ -91,12 +91,12 @@ select is((select state from public.ai_jobs where id=:'j2'),'cancelled','tarefa 
 select is((select content from public.knowledge_chunks where document_id=:'d1' and chunk_index=0),'intocado','stale não toca os chunks');
 select is((select status::text from public.knowledge_documents where id=:'d1'),'processing','stale não muda o status');
 
--- salvar de novo cancela a tarefa pendente anterior (sem colidir)
+-- salvar de novo reaproveita a tarefa pendente (sem colidir)
 select (id)::uuid as j3 from public.ai_jobs where document_id=:'d1' and state='pending' \gset
 select tests.authenticate_as(:'ua');
 select public.save_knowledge_document(:'oa', :'d1', 'Título 4', 'Conteúdo 4');
 select tests.clear_authentication();
-select is((select state from public.ai_jobs where id=:'j3'),'cancelled','tarefa pendente anterior é cancelada');
+select is((select state||':'||document_generation from public.ai_jobs where id=:'j3'),'pending:4','tarefa pendente anterior é reaproveitada com a nova geração');
 select is((select count(*)::int from public.ai_jobs where document_id=:'d1' and state='pending'),1,'só uma tarefa pendente por documento');
 select is((select count(*)::int from public.knowledge_chunks where document_id=:'d1'),0,'edição apaga os chunks');
 
@@ -133,10 +133,38 @@ select is((select state from public.ai_jobs where id=:'j5'),'running','tarefa se
 select is(public.complete_index_document(:'j5','00000000-0000-0000-0000-0000000037a5','[]'::jsonb),'done','lista vazia é válida');
 select is((select status::text||':'||chunk_count from public.knowledge_documents where id=:'d2'),'ready:0','ready com 0 chunks');
 
--- reprocess
+-- validação estrita dos chunks (sem escrita parcial)
 select tests.authenticate_as(:'ua');
-select tests.authenticate_as(:'ua'); select public.reprocess_knowledge_document(:'d1'); select tests.clear_authentication();
+select public.save_knowledge_document(:'oa', null, 'Doc validação', 'texto') as d4 \gset
 select tests.clear_authentication();
+select (id)::uuid as j9 from public.ai_jobs where document_id=:'d4' \gset
+update public.ai_jobs set state='running', attempts=1, claim_token='00000000-0000-0000-0000-0000000037b9', claimed_until=now()+interval '3 minutes' where id=:'j9';
+select throws_ok(format($$select public.complete_index_document(%L,'00000000-0000-0000-0000-0000000037b9',
+  jsonb_build_array(
+    jsonb_build_object('index',0,'content','a','tokenCount',1,'embedding',pg_temp.vj(1)),
+    jsonb_build_object('index',0,'content','b','tokenCount',1,'embedding',pg_temp.vj(1))))$$,:'j9'),'22023',null,'índice duplicado');
+select throws_ok(format($$select public.complete_index_document(%L,'00000000-0000-0000-0000-0000000037b9',
+  jsonb_build_array(jsonb_build_object('index',1.5,'content','a','tokenCount',1,'embedding',pg_temp.vj(1))))$$,:'j9'),'22023',null,'índice não inteiro');
+select throws_ok(format($$select public.complete_index_document(%L,'00000000-0000-0000-0000-0000000037b9',
+  jsonb_build_array(jsonb_build_object('index',-1,'content','a','tokenCount',1,'embedding',pg_temp.vj(1))))$$,:'j9'),'22023',null,'índice negativo');
+select throws_ok(format($$select public.complete_index_document(%L,'00000000-0000-0000-0000-0000000037b9',
+  jsonb_build_array(jsonb_build_object('index',0,'content','','tokenCount',1,'embedding',pg_temp.vj(1))))$$,:'j9'),'22023',null,'conteúdo vazio');
+select throws_ok(format($$select public.complete_index_document(%L,'00000000-0000-0000-0000-0000000037b9',
+  jsonb_build_array(jsonb_build_object('index',0,'content','a','tokenCount',1,'embedding',(select jsonb_agg(case when g=5 then '"x"'::jsonb else '0'::jsonb end) from generate_series(1,1536) g))))$$,:'j9'),'22023',null,'elemento não numérico no embedding');
+select is((select count(*)::int from public.knowledge_chunks where document_id=:'d4'),0,'validação não escreve nada');
+
+-- documento apagado durante a indexação: stale, sem erro
+select tests.authenticate_as(:'ua');
+select public.save_knowledge_document(:'oa', null, 'Doc apagado', 'texto') as d5 \gset
+select tests.clear_authentication();
+select (id)::uuid as j10 from public.ai_jobs where document_id=:'d5' \gset
+update public.ai_jobs set state='running', attempts=1, claim_token='00000000-0000-0000-0000-0000000037c0', claimed_until=now()+interval '3 minutes' where id=:'j10';
+delete from public.knowledge_documents where id=:'d5';
+select is(public.complete_index_document(:'j10','00000000-0000-0000-0000-0000000037c0','[]'::jsonb),'stale','complete após documento apagado devolve stale');
+select is(public.prepare_index_document(:'j10','00000000-0000-0000-0000-0000000037c0'),null,'prepare após documento apagado devolve null');
+
+-- reprocess
+select tests.authenticate_as(:'ua'); select public.reprocess_knowledge_document(:'d1'); select tests.clear_authentication();
 select is((select count(*)::int from public.knowledge_chunks where document_id=:'d1'),0,'reprocess apaga os chunks');
 select is((select status::text||':'||generation||':'||chunk_count||':'||title||':'||content from public.knowledge_documents where id=:'d1'),'processing:5:0:Título 4:Conteúdo 4','reprocess volta a processing sem mudar título e conteúdo');
 select is((select count(*)::int from public.ai_jobs where document_id=:'d1' and state='pending' and document_generation=5),1,'reprocess cria nova tarefa');
@@ -178,6 +206,8 @@ select is((select count(*)::int from public.match_knowledge_chunks(:'oa',(pg_tem
 select is((select array_agg(content) from public.match_knowledge_chunks(:'ob',(pg_temp.vj(1))::text::extensions.vector)),array['da org B'],'busca da org B só vê a própria');
 select is((select document_title from public.match_knowledge_chunks(:'ob',(pg_temp.vj(1))::text::extensions.vector)),'Pronto B','devolve o título do documento');
 select throws_ok(format($$select * from public.match_knowledge_chunks(%L,'[1,2]'::extensions.vector)$$,:'oa'),'22023',null,'embedding de dimensão errada');
+select is((select count(*)::int from public.match_knowledge_chunks(:'oa',(pg_temp.vj(1))::text::extensions.vector)),2,'controle da busca');
+select is((select count(*)::int from public.match_knowledge_chunks(:'oa',(select (array_fill(0::real,array[1536]))::extensions.vector))),0,'embedding de norma zero não devolve nada');
 
 -- privilégios
 select ok(not has_function_privilege('authenticated','public.match_knowledge_chunks(uuid,extensions.vector,integer,double precision)','execute'),'authenticated não executa match_knowledge_chunks');

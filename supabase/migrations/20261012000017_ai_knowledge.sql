@@ -19,10 +19,12 @@ create function private.restart_document_indexing(p_org uuid, p_doc uuid, p_gene
 language plpgsql security definer set search_path = '' as $$
 begin
   delete from public.knowledge_chunks where organization_id = p_org and document_id = p_doc;
-  update public.ai_jobs set state = 'cancelled', claim_token = null, claimed_until = null
-    where organization_id = p_org and document_id = p_doc and kind = 'index_document' and state = 'pending';
+  -- Reaproveita a tarefa pendente existente (sem corrida com o índice único parcial).
   insert into public.ai_jobs (organization_id, kind, document_id, document_generation)
-    values (p_org, 'index_document', p_doc, p_generation);
+    values (p_org, 'index_document', p_doc, p_generation)
+    on conflict (document_id) where kind = 'index_document' and state = 'pending'
+    do update set document_generation = excluded.document_generation, run_after = now(), attempts = 0,
+      last_error = null, claim_token = null, claimed_until = null;
 end $$;
 
 -- ---------------------------------------------------------------- escrita (admin)
@@ -63,6 +65,7 @@ begin
   update public.knowledge_documents
     set status = 'processing', error = null, chunk_count = 0, generation = generation + 1
     where id = p_id returning generation into v_gen;
+  if not found then raise exception 'forbidden' using errcode = '42501'; end if;
   perform private.restart_document_indexing(v_org, p_id, v_gen);
 end $$;
 
@@ -92,19 +95,29 @@ begin
   if p_token is null then raise exception 'invalid claim' using errcode = '42501'; end if;
   select * into job from public.ai_jobs
     where id = p_job and kind = 'index_document' and state = 'running' and claim_token = p_token for update;
-  if not found then raise exception 'invalid claim' using errcode = '42501'; end if;
+  if not found then
+    -- Documento apagado durante a indexação: a tarefa sumiu por cascata.
+    if not exists (select 1 from public.ai_jobs where id = p_job) then return 'stale'; end if;
+    raise exception 'invalid claim' using errcode = '42501';
+  end if;
   if p_chunks is null or jsonb_typeof(p_chunks) <> 'array' then
     raise exception 'invalid chunks' using errcode = '22023';
   end if;
   -- valida tudo antes de qualquer escrita
   for c in select value from jsonb_array_elements(p_chunks) loop
     if jsonb_typeof(c) <> 'object'
-      or jsonb_typeof(c->'index') <> 'number' or jsonb_typeof(c->'content') <> 'string'
+      or jsonb_typeof(c->'index') <> 'number' or (c->>'index') !~ '^[0-9]{1,9}$'
+      or jsonb_typeof(c->'content') <> 'string' or c->>'content' = ''
       or coalesce(jsonb_typeof(c->'tokenCount'), 'number') <> 'number'
-      or jsonb_typeof(c->'embedding') <> 'array' or jsonb_array_length(c->'embedding') <> 1536 then
+      or coalesce(c->>'tokenCount', '0') !~ '^[0-9]{1,9}$'
+      or jsonb_typeof(c->'embedding') <> 'array' or jsonb_array_length(c->'embedding') <> 1536
+      or exists (select 1 from jsonb_array_elements(c->'embedding') x where jsonb_typeof(x) <> 'number') then
       raise exception 'invalid chunk' using errcode = '22023';
     end if;
   end loop;
+  if (select count(distinct (e.value->>'index')::int) from jsonb_array_elements(p_chunks) e) <> jsonb_array_length(p_chunks) then
+    raise exception 'duplicate chunk index' using errcode = '22023';
+  end if;
   select * into doc from public.knowledge_documents
     where id = job.document_id and organization_id = job.organization_id for update;
   if not found or doc.generation is distinct from job.document_generation then
@@ -136,7 +149,7 @@ begin
           and d.generation = job.document_generation;
     end if;
   exception when others then
-    null;
+    raise warning 'ai_job_gave_up: job % failed with SQLSTATE %', job.id, sqlstate;
   end;
 end $$;
 
@@ -149,16 +162,23 @@ begin
   if p_embedding is null or extensions.vector_dims(p_embedding) <> 1536 then
     raise exception 'invalid embedding' using errcode = '22023';
   end if;
+  -- consulta de norma zero não tem direção: sem resultados
+  if extensions.vector_norm(p_embedding) = 0 then return; end if;
   perform set_config('hnsw.iterative_scan', 'relaxed_order', true);
   return query
-    select c.id, c.document_id, d.title, c.content,
-      (1 - (c.embedding operator(extensions.<=>) p_embedding))::float
-    from public.knowledge_chunks c
-    join public.knowledge_documents d on d.organization_id = c.organization_id and d.id = c.document_id
-    where c.organization_id = p_org and d.status = 'ready'
-      and (1 - (c.embedding operator(extensions.<=>) p_embedding)) >= coalesce(p_min_similarity, 0.3)
-    order by c.embedding operator(extensions.<=>) p_embedding
-    limit greatest(coalesce(p_k, 5), 0);
+    with cand as materialized (
+      select c.id, c.document_id, d.title, c.content,
+        (1 - (c.embedding operator(extensions.<=>) p_embedding))::float as sim
+      from public.knowledge_chunks c
+      join public.knowledge_documents d on d.organization_id = c.organization_id and d.id = c.document_id
+      where c.organization_id = p_org and d.status = 'ready'
+      order by c.embedding operator(extensions.<=>) p_embedding
+      limit greatest(coalesce(p_k, 5), 0)
+    )
+    select cand.id, cand.document_id, cand.title, cand.content, cand.sim
+    from cand
+    where cand.sim = cand.sim and cand.sim >= coalesce(p_min_similarity, 0.3)
+    order by cand.sim desc;
 end $$;
 
 -- ---------------------------------------------------------------- grants
