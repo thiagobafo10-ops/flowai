@@ -1,4 +1,4 @@
-export type KeywordMode = "contains" | "equals" | "starts_with";
+import type { KeywordMode } from "./schemas.ts";
 
 /** NFD + remoção de marcas + minúsculas + espaços colapsados. */
 export function normalizeText(s: string): string {
@@ -21,16 +21,41 @@ export function matchKeyword(text: string, keywords: string[], mode: KeywordMode
   return false;
 }
 
-/** Substitui {primeiro_nome} e {nome}; variáveis vazias somem junto com o espaço excedente. */
+/**
+ * Substitui {primeiro_nome} e {nome}.
+ * Variável preenchida: substituição simples. Variável vazia: some junto com o espaço/tabulação
+ * excedente ao redor (nunca quebras de linha) e, antes de pontuação, também a vírgula anterior
+ * ("Oi, {nome}!" -> "Oi!"). No início de linha remove o espaço seguinte. O espaçamento do
+ * restante do texto (inclusive nas pontas) é preservado.
+ */
 export function renderTemplate(text: string, contact: { name: string | null }): string {
-  const full = (contact.name ?? "").trim().replace(/\s+/g, " ");
+  const full = (contact.name ?? "").trim().replace(/s+/g, " ");
   const values: Record<string, string> = { primeiro_nome: full.split(" ")[0] ?? "", nome: full };
-  return text
-    .replace(/(^|\s*)\{(primeiro_nome|nome)\}(\s*)/g, (_m, before: string, key: string, after: string) => {
-      const v = values[key];
-      if (v) return `${before}${v}${after}`;
-      if (before === "") return ""; // início do texto: descarta também o espaço seguinte
-      return after && !/^[,.;:!?]/.test(after) ? " " : "";
-    })
-    .trim();
+  const re = /{(primeiro_nome|nome)}/;
+  let out = "";
+  let rest = text;
+  for (;;) {
+    const m = re.exec(rest);
+    if (!m) return out + rest;
+    out += rest.slice(0, m.index);
+    let after = rest.slice(m.index + m[0].length);
+    const value = values[m[1]!];
+    if (value) {
+      out += value;
+    } else {
+      const afterWs = /^[ \t]*/.exec(after)![0];
+      const next = after.slice(afterWs.length);
+      if (out === "" || out.endsWith("\n")) {
+        after = next;
+      } else if (/^[,.;:!?]/.test(next)) {
+        out = out.replace(/[ \t]+$/, "").replace(/,$/, "");
+        after = next;
+      } else if (afterWs === "" && next !== "" && !next.startsWith("\n") && /[ \t]$/.test(out)) {
+        // "Oi {nome}tudo": mantém um espaço
+      } else {
+        out = out.replace(/[ \t]+$/, "");
+      }
+    }
+    rest = after;
+  }
 }

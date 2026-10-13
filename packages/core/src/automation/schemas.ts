@@ -28,7 +28,8 @@ export const NODE_TYPES = [
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
-const keywordModeSchema = z.enum(["contains", "equals", "starts_with"]);
+export const keywordModeSchema = z.enum(["contains", "equals", "starts_with"]);
+export type KeywordMode = z.infer<typeof keywordModeSchema>;
 const keywordsSchema = z
   .array(z.string().trim().min(1, "Informe a palavra-chave.").max(100, "Máximo de 100 caracteres por palavra-chave."))
   .min(1, "Informe ao menos uma palavra-chave.")
@@ -104,12 +105,21 @@ const conditionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("stage_is"), stageId: uuid }),
   z.object({ kind: z.literal("lead_score_gte"), value: z.number().int().min(0).max(100) }),
   z.object({ kind: z.literal("intent_is"), intent: z.string().trim().min(1).max(100) }),
-  z.object({
-    kind: z.literal("business_hours"),
-    days: z.array(z.number().int().min(1).max(7)).min(1, "Escolha ao menos um dia."),
-    start: hhmm,
-    end: hhmm,
-  }),
+  z
+    .object({
+      kind: z.literal("business_hours"),
+      days: z.array(z.number().int().min(1).max(7)).min(1, "Escolha ao menos um dia."),
+      start: hhmm,
+      end: hhmm,
+    })
+    .superRefine((v, ctx) => {
+      if (new Set(v.days).size !== v.days.length) {
+        ctx.addIssue({ code: "custom", path: ["days"], message: "Os dias não podem se repetir." });
+      }
+      if (v.start >= v.end) {
+        ctx.addIssue({ code: "custom", path: ["end"], message: "O horário final deve ser depois do inicial." });
+      }
+    }),
 ]);
 
 export const nodeConfigSchemas: Record<NodeType, z.ZodType> = {

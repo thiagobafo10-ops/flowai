@@ -54,6 +54,14 @@ describe("delay / condition / outros", () => {
     expect(nodeConfigSchemas.condition.safeParse({ ...ok, end: "25:00" }).success).toBe(false);
     expect(nodeConfigSchemas.condition.safeParse({ ...ok, days: [8] }).success).toBe(false);
   });
+  it("business_hours exige dias únicos e início antes do fim", () => {
+    const base = { kind: "business_hours", days: [1, 2], start: "09:00", end: "18:00" };
+    expect(nodeConfigSchemas.condition.safeParse({ ...base, days: [1, 1] }).success).toBe(false);
+    const r = nodeConfigSchemas.condition.safeParse({ ...base, start: "18:00" });
+    expect(r.success).toBe(false);
+    expect(JSON.stringify(r.error?.issues)).toContain("O horário final deve ser depois do inicial.");
+    expect(nodeConfigSchemas.condition.safeParse({ ...base, start: "20:00", end: "08:00" }).success).toBe(false);
+  });
   it("webhook só https", () => {
     expect(nodeConfigSchemas.webhook.safeParse({ url: "http://a.com" }).success).toBe(false);
     expect(nodeConfigSchemas.webhook.safeParse({ url: "https://a.com/x" }).success).toBe(true);
