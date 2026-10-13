@@ -96,3 +96,48 @@ Deno.test("network error is retryable", async () => {
   const r = await postSafeWebhook(URL_OK, {}, { fetch: f, resolve: publicResolve });
   assert(!r.ok && r.code === "network_error" && r.retryable);
 });
+
+Deno.test("fix1: translated IPv6 (NAT64, SIIT, 6to4, Teredo) cannot reach private IPv4", async () => {
+  for (const ip of ["64:ff9b::a00:1", "64:ff9b::10.0.0.1", "64:ff9b:1::a00:1", "::ffff:0:a00:1", "2002:a00:1::1", "2002:7f00:1::", "2001:0:4136:e378:8000:63bf:3fff:fdd2"]) assert(isBlockedAddress(ip), ip);
+  for (const ip of ["64:ff9b::8.8.8.8", "64:ff9b::808:808", "2002:808:808::1", "::ffff:0:808:808"]) assert(!isBlockedAddress(ip), ip);
+  const s = spy(() => new Response("ok"));
+  const r = await postSafeWebhook("https://[64:ff9b::10.0.0.1]/x", {}, { fetch: s.f, resolve: publicResolve });
+  assert(!r.ok && r.code === "blocked_address" && s.calls.length === 0);
+  for (const a of ["64:ff9b:1::a00:1", "::ffff:0:a00:1", "2002:a00:1::1"]) {
+    const x = await postSafeWebhook(URL_OK, {}, { fetch: s.f, resolve: () => Promise.resolve([a]) });
+    assert(!x.ok && x.code === "blocked_address", a);
+  }
+  const ok = await postSafeWebhook(URL_OK, {}, { fetch: s.f, resolve: () => Promise.resolve(["64:ff9b::8.8.8.8"]) });
+  assert(ok.ok);
+});
+
+Deno.test("fix2/3: site-local, multicast, discard, documentation and extra IPv4 ranges are blocked", () => {
+  for (const ip of ["fec0::1", "feff::1", "ff02::1", "ff00::", "100::1", "2001:db8::1", "198.18.0.1", "198.19.255.255", "192.0.0.5", "192.0.2.1", "198.51.100.7", "203.0.113.9"]) assert(isBlockedAddress(ip), ip);
+  for (const ip of ["100:0:0:1::1", "2001:db9::1", "198.20.0.1", "192.0.1.1", "2a00:1450::1"]) assert(!isBlockedAddress(ip), ip);
+});
+
+Deno.test("fix3: alternate IPv4 literal forms, IPv4-compatible and AAAA-only blocked", async () => {
+  const s = spy(() => new Response("ok"));
+  for (const u of ["https://2130706433/x", "https://0x7f.0.0.1/x", "https://[::127.0.0.1]/x", "https://localhost../x", "https://a.internal../x"]) {
+    const r = await postSafeWebhook(u, {}, { fetch: s.f, resolve: publicResolve });
+    assert(!r.ok && r.code === "blocked_address", u);
+  }
+  const r = await postSafeWebhook(URL_OK, {}, { fetch: s.f, resolve: () => Promise.resolve(["fd00::1"]) });
+  assert(!r.ok && r.code === "blocked_address" && s.calls.length === 0);
+});
+
+Deno.test("fix3: DNS resolution is under the timeout", async () => {
+  const s = spy(() => new Response("ok"));
+  const r = await postSafeWebhook(URL_OK, {}, { fetch: s.f, resolve: () => new Promise(() => {}), timeoutMs: 20 });
+  assert(!r.ok && r.code === "timeout" && r.retryable && s.calls.length === 0);
+});
+
+Deno.test("fix3: unserializable body is non-retryable invalid_body", async () => {
+  const s = spy(() => new Response("ok"));
+  const cyc: Record<string, unknown> = {}; cyc.self = cyc;
+  for (const b of [cyc, 10n, undefined]) {
+    const r = await postSafeWebhook(URL_OK, b, { fetch: s.f, resolve: publicResolve });
+    assert(!r.ok && r.code === "invalid_body" && !r.retryable);
+  }
+  assert(s.calls.length === 0);
+});

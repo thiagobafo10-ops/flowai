@@ -1,7 +1,7 @@
 export type Resolver = (host: string) => Promise<string[]>;
 export type WebhookResult =
   | { ok: true; status: number }
-  | { ok: false; code: "invalid_url" | "blocked_address" | "timeout" | "http_error" | "too_large" | "network_error"; retryable: boolean };
+  | { ok: false; code: "invalid_url" | "blocked_address" | "timeout" | "http_error" | "too_large" | "network_error" | "invalid_body"; retryable: boolean };
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -9,8 +9,11 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 export const defaultResolver: Resolver = async (host) => {
   const [a, aaaa] = await Promise.allSettled([Deno.resolveDns(host, "A"), Deno.resolveDns(host, "AAAA")]);
   const out: string[] = [];
-  if (a.status === "fulfilled") out.push(...a.value);
-  if (aaaa.status === "fulfilled") out.push(...aaaa.value);
+  for (const r of [a, aaaa]) {
+    if (r.status === "fulfilled") out.push(...r.value);
+    // Only NXDOMAIN/NODATA (NotFound) may be ignored; any other failure of one family fails closed.
+    else if (!(r.reason instanceof Deno.errors.NotFound)) throw new Error("dns_failed");
+  }
   if (out.length === 0) throw new Error("dns_failed");
   return out;
 };
@@ -26,6 +29,8 @@ function blockedIPv4(o: number[]): boolean {
   const [a, b] = o;
   return a === 0 || a === 10 || (a === 100 && b >= 64 && b <= 127) || a === 127 ||
     (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && (o[2] === 0 || o[2] === 2)) ||
+    (a === 198 && b === 51 && o[2] === 100) || (a === 203 && b === 0 && o[2] === 113) ||
     a >= 224; // 224/4 multicast and 240/4 reserved (includes broadcast)
 }
 
@@ -57,6 +62,15 @@ export function isBlockedAddress(ip: string): boolean {
   if (v4) return blockedIPv4(v4);
   const g = parseIPv6(host);
   if (!g) return true;
+  const v4of = (hi: number, lo: number) => blockedIPv4([hi >> 8, hi & 255, lo >> 8, lo & 255]);
+  const zeros = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+  // NAT64 64:ff9b::/96 checks the embedded IPv4; 64:ff9b:1::/48 and anything else under 64:ff9b is blocked.
+  if (g[0] === 0x64 && g[1] === 0xff9b) return zeros(2, 6) ? v4of(g[6], g[7]) : true;
+  if (zeros(0, 4) && g[4] === 0xffff && g[5] === 0) return v4of(g[6], g[7]); // SIIT ::ffff:0:0:0/96
+  if (g[0] === 0x2002) return v4of(g[1], g[2]); // 6to4
+  if (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8)) return true; // Teredo, documentation
+  if (g[0] === 0x100 && zeros(1, 4)) return true; // discard 100::/64
+  if ((g[0] & 0xffc0) === 0xfec0 || (g[0] & 0xff00) === 0xff00) return true; // site-local, multicast
   if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) {
     // ::, ::1, IPv4-mapped (::ffff:a.b.c.d) and deprecated IPv4-compatible (::a.b.c.d)
     if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true;
@@ -95,22 +109,31 @@ export async function postSafeWebhook(
   try { u = new URL(url); } catch { return fail("invalid_url", false); }
   if (u.protocol !== "https:" || u.username || u.password || !u.hostname) return fail("invalid_url", false);
 
-  const host = u.hostname.toLowerCase().replace(/\.$/, "");
+  let payload: string | undefined;
+  try { payload = JSON.stringify(body); } catch { payload = undefined; }
+  if (payload === undefined) return fail("invalid_body", false);
+
+  const signal = AbortSignal.timeout(deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const host = u.hostname.toLowerCase().replace(/\.+$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) return fail("blocked_address", false);
   if (isIpLiteral(host)) {
     if (isBlockedAddress(host)) return fail("blocked_address", false);
   } else {
     let addrs: string[];
-    try { addrs = await (deps.resolve ?? defaultResolver)(host); } catch { return fail("network_error", true); }
+    try {
+      addrs = await Promise.race([
+        (deps.resolve ?? defaultResolver)(host),
+        new Promise<never>((_, rej) => signal.addEventListener("abort", () => rej(signal.reason), { once: true })),
+      ]);
+    } catch (e) { return isTimeout(e, signal) ? fail("timeout", true) : fail("network_error", true); }
     if (addrs.length === 0 || addrs.some(isBlockedAddress)) return fail("blocked_address", false);
   }
 
-  const signal = AbortSignal.timeout(deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
     const res = await deps.fetch(u.toString(), {
       method: "POST",
       headers: { "content-type": "application/json", "user-agent": "FlowAI-Webhook/1" },
-      body: JSON.stringify(body),
+      body: payload,
       redirect: "manual",
       signal,
     });
