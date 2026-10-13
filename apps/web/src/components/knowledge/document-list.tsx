@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
-import { deleteKnowledgeDocument, getAiStatus, reprocessKnowledgeDocument } from "@/lib/ai/actions";
+import { deleteKnowledgeDocument, reprocessKnowledgeDocument } from "@/lib/ai/actions";
+import { useAiStatus } from "@/lib/ai/use-ai-status";
 import { KNOWLEDGE_STATUS_LABEL } from "@/lib/ai/messages";
 import type { KnowledgeDocumentRow } from "@/lib/ai/queries";
 import { Button } from "@/components/ui/button";
@@ -24,15 +25,7 @@ const dateFormat = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeSt
 export function DocumentList({ orgId }: { orgId: string }) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["knowledge", orgId], queryFn: fetchDocuments });
-  const status = useQuery({
-    queryKey: ["ai-status", orgId],
-    queryFn: async () => {
-      const result = await getAiStatus();
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    },
-    staleTime: 60_000,
-  });
+  const status = useAiStatus(orgId);
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<KnowledgeDocumentRow | null>(null);

@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { knowledgeDocumentSchema } from "@flowai/core";
+import { agentConfigSchema, knowledgeDocumentSchema, playgroundInputSchema, type AgentConfigInput } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
-import { AI_DOCUMENT_GONE, AI_DOCUMENT_INVALID, AI_FORBIDDEN, AI_STATUS_FAILED, AI_UNEXPECTED } from "./messages";
+import type { PlaygroundMessage, PlaygroundResult } from "./types";
+import { AI_DOCUMENT_GONE, AI_PLAYGROUND_ERRORS, AI_DOCUMENT_INVALID, AI_FORBIDDEN, AI_STATUS_FAILED, AI_UNEXPECTED } from "./messages";
 
 type Supabase = Awaited<ReturnType<typeof createServerClient>>;
 type Fail = { ok: false; error: string };
@@ -19,6 +20,12 @@ async function context(write: boolean): Promise<Ctx | Fail> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: AI_FORBIDDEN };
   return { orgId: org.id, supabase };
+}
+
+function zodFail(error: z.ZodError): Fail & { fieldErrors: Record<string, string[]> } {
+  const fieldErrors: Record<string, string[]> = {};
+  for (const issue of error.issues) (fieldErrors[String(issue.path[0] ?? "form")] ??= []).push(issue.message);
+  return { ok: false, error: error.issues[0]?.message ?? AI_UNEXPECTED, fieldErrors };
 }
 
 function dbError(label: string, error: { code?: string }): Fail {
@@ -93,4 +100,40 @@ export async function getKnowledgeDocument(id: string): Promise<ActionResult<{ i
   if (error) return dbError("get knowledge document failed", error);
   if (!data) return { ok: false, error: AI_DOCUMENT_GONE };
   return { ok: true, data: { id: data.id, title: data.title, content: data.content } };
+}
+
+export async function saveAgent(input: AgentConfigInput): Promise<ActionResult> {
+  const c = await context(true);
+  if (!("supabase" in c)) return c;
+  const parsed = agentConfigSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  const v = parsed.data;
+  const { data, error } = await c.supabase
+    .from("ai_agents")
+    .update({
+      name: v.name, personality: v.personality, objective: v.objective, tone: v.tone, system_prompt: v.systemPrompt,
+      is_active: v.isActive, auto_reply: v.autoReply, human_handoff: v.humanHandoff,
+    })
+    .eq("organization_id", c.orgId)
+    .select("id");
+  if (error) return dbError("save agent failed", error);
+  if (!data || data.length === 0) return { ok: false, error: AI_PLAYGROUND_ERRORS.agent_not_configured! };
+  return { ok: true, data: undefined };
+}
+
+export async function runPlayground(messages: PlaygroundMessage[]): Promise<ActionResult<PlaygroundResult>> {
+  const c = await context(true);
+  if (!("supabase" in c)) return c;
+  const parsed = playgroundInputSchema.safeParse({ messages });
+  if (!parsed.success) return zodFail(parsed.error);
+  const { data: { session } } = await c.supabase.auth.getSession();
+  if (!session) return { ok: false, error: AI_FORBIDDEN };
+  const { data, error } = await c.supabase.functions.invoke("ai-playground", {
+    body: { organizationId: c.orgId, action: "test", messages: parsed.data.messages },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (error || !data) return { ok: false, error: AI_UNEXPECTED };
+  if (typeof data.error === "string") return { ok: false, error: AI_PLAYGROUND_ERRORS[data.error] ?? AI_UNEXPECTED };
+  if (typeof data.reply !== "string") return { ok: false, error: AI_UNEXPECTED };
+  return { ok: true, data: data as PlaygroundResult };
 }
