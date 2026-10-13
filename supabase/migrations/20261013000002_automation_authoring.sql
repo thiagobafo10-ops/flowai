@@ -34,7 +34,7 @@ declare
   v_id uuid := p_id;
   v_name text := btrim(coalesce(p_name, ''));
   v_status public.automation_status;
-  n jsonb; e jsonb; v_ids uuid[] := '{}'; v_nid uuid; v_src uuid; v_dst uuid;
+  n jsonb; e jsonb; v_ids uuid[] := '{}'; v_eids uuid[] := '{}'; v_rows int; v_nid uuid; v_src uuid; v_dst uuid;
   v_uuid_re constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 begin
   if not public.has_role(p_org, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
@@ -84,6 +84,8 @@ begin
        or (e ->> 'source') !~ v_uuid_re or (e ->> 'target') !~ v_uuid_re then
       raise exception 'invalid_edge' using errcode = '22023';
     end if;
+    if (e ->> 'id')::uuid = any (v_eids) then raise exception 'duplicate_edge_id' using errcode = '22023'; end if;
+    v_eids := v_eids || (e ->> 'id')::uuid;
     v_src := (e ->> 'source')::uuid; v_dst := (e ->> 'target')::uuid;
     if not (v_src = any (v_ids)) or not (v_dst = any (v_ids)) then
       raise exception 'edge_unknown_node' using errcode = '22023';
@@ -111,7 +113,10 @@ begin
     insert into public.automation_nodes (id, organization_id, automation_id, type, config, position)
       values ((n ->> 'id')::uuid, p_org, v_id, (n ->> 'type')::public.automation_node_type,
         coalesce(n -> 'config', '{}'::jsonb), coalesce(n -> 'position', '{"x":0,"y":0}'::jsonb))
-    on conflict (id) do update set type = excluded.type, config = excluded.config, position = excluded.position;
+    on conflict (id) do update set type = excluded.type, config = excluded.config, position = excluded.position
+      where public.automation_nodes.automation_id = v_id and public.automation_nodes.organization_id = p_org;
+    get diagnostics v_rows = row_count;
+    if v_rows <> 1 then raise exception 'node_id_in_use' using errcode = '22023'; end if;
   end loop;
   for e in select * from jsonb_array_elements(p_graph -> 'edges') loop
     insert into public.automation_edges (id, organization_id, automation_id, source_node_id, target_node_id, source_handle)
@@ -153,11 +158,8 @@ begin
   select * into a from public.automations where id = p_id and public.is_member(organization_id) for update;
   if not found then raise exception 'automation_not_found' using errcode = 'P0002'; end if;
   if not public.has_role(a.organization_id, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
-  update public.automation_runs set status = 'cancelled', resume_at = null, claim_token = null, claimed_until = null
-    where automation_id = p_id and status in ('pending', 'running', 'waiting');
-  update public.conversations set automation_run_id = null
-    where organization_id = a.organization_id
-      and automation_run_id in (select id from public.automation_runs where automation_id = p_id);
+  -- Exclusão definitiva: runs e steps saem em cascata com a automação e o vínculo
+  -- conversations.automation_run_id é liberado pela FK (on delete set null).
   delete from public.automations where id = p_id;
 end $$;
 

@@ -88,3 +88,11 @@ alter table private.automation_secrets enable row level security;
 revoke all on private.automation_secrets from anon, authenticated;
 insert into private.automation_secrets (payload_secret_id)
   select vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'flowai-automation-payload-secret');
+
+-- Execuções referenciam nodes do grafo da SUA versão (automation_versions.graph), não da tabela
+-- editável: editar o rascunho não pode zerar current_node_id nem apagar steps de runs em andamento.
+alter table public.automation_runs drop constraint automation_runs_organization_id_automation_id_current_node_fkey;
+alter table public.automation_run_steps drop constraint automation_run_steps_organization_id_node_id_fkey;
+-- version é nulo apenas em linhas legadas; runs novos sempre gravam a versão.
+alter table public.automation_runs add constraint automation_runs_version_fk
+  foreign key (automation_id, version) references public.automation_versions (automation_id, version);

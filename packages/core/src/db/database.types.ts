@@ -230,12 +230,6 @@ isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "automation_run_steps_organization_id_node_id_fkey"
-      columns: ["organization_id","node_id"]
-isOneToOne: false
-      referencedRelation: "automation_nodes"
-      referencedColumns: ["organization_id","id"]
-    },{
       foreignKeyName: "automation_run_steps_organization_id_run_id_fkey"
       columns: ["organization_id","run_id"]
 isOneToOne: false
@@ -256,12 +250,6 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
-      foreignKeyName: "automation_runs_organization_id_automation_id_current_node_fkey"
-      columns: ["organization_id","automation_id","current_node_id"]
-isOneToOne: false
-      referencedRelation: "automation_nodes"
-      referencedColumns: ["organization_id","automation_id","id"]
-    },{
       foreignKeyName: "automation_runs_organization_id_automation_id_fkey"
       columns: ["organization_id","automation_id"]
 isOneToOne: false
@@ -291,6 +279,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "events"
       referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "automation_runs_version_fk"
+      columns: ["automation_id","version"]
+isOneToOne: false
+      referencedRelation: "automation_versions"
+      referencedColumns: ["automation_id","version"]
     }
                   ]
                 },"automation_versions": {

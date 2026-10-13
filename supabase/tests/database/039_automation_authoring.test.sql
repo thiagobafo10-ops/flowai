@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(61);
+select plan(79);
 select tests.create_user('owner39@t.test','Owner39') as ua \gset
 select tests.create_user('admin39@t.test','Admin39') as uadm \gset
 select tests.create_user('agent39@t.test','Agent39') as uag \gset
@@ -145,5 +145,42 @@ select tests.clear_authentication();
 select is((select automation_run_id from public.conversations where id='00000000-0000-0000-0000-000000003921'),null,'conversa liberada da automação');
 select is((select count(*)::int from public.automation_runs where id='00000000-0000-0000-0000-0000000039d1'),0,'runs removidos com a automação');
 
+
+-- execuções em andamento sobrevivem à edição (nodes viram ids do grafo da versão)
+select tests.authenticate_as(:'uadm');
+select public.save_automation(:'oa', null, 'Run', 'message_received', '{}', pg_temp.graph()) as rid \gset
+select is(public.activate_automation(:'rid'),1,'ativa automação do run (v1)');
+select tests.clear_authentication();
+insert into public.events (id, organization_id, type, actor_type) values ('00000000-0000-0000-0000-0000000039f2', :'oa', 'x', 'system');
+select lives_ok(format($$insert into public.automation_runs (id, organization_id, automation_id, trigger_event_id, version, status, waiting_for, current_node_id)
+  values ('00000000-0000-0000-0000-0000000039d2', %L, %L, '00000000-0000-0000-0000-0000000039f2', 1, 'waiting', 'reply', '00000000-0000-0000-0000-0000000039a2')$$, :'oa', :'rid'),'run v1 esperando no node X');
+select lives_ok(format($$insert into public.automation_run_steps (organization_id, run_id, node_id, status) values (%L, '00000000-0000-0000-0000-0000000039d2', '00000000-0000-0000-0000-0000000039a1', 'completed')$$, :'oa'),'step do trigger');
+select tests.authenticate_as(:'uadm');
+select lives_ok(format($$select public.save_automation(%L,%L,'Run','message_received','{}',%L)$$, :'oa', :'rid',
+  jsonb_build_object('nodes', jsonb_build_array(pg_temp.graph()->'nodes'->0), 'edges', '[]'::jsonb)),'v2 sem o node X');
+select tests.clear_authentication();
+select is((select current_node_id from public.automation_runs where id='00000000-0000-0000-0000-0000000039d2'),'00000000-0000-0000-0000-0000000039a2'::uuid,'current_node_id do run preservado');
+select is((select count(*)::int from public.automation_run_steps where run_id='00000000-0000-0000-0000-0000000039d2'),1,'steps preservados');
+select lives_ok(format($$insert into public.automation_run_steps (organization_id, run_id, node_id, status) values (%L, '00000000-0000-0000-0000-0000000039d2', '00000000-0000-0000-0000-0000000039a2', 'completed')$$, :'oa'),'step para node removido ainda insere');
+select throws_ok(format($$insert into public.automation_runs (organization_id, automation_id, trigger_event_id, version) values (%L, %L, gen_random_uuid(), 99)$$, :'oa', :'rid'),'23503',null,'run exige versão existente');
+
+-- ids de outra organização, papéis e idempotência
+select tests.authenticate_as(:'uadm');
+select throws_ok($$select public.activate_automation('00000000-0000-0000-0000-0000000039b1')$$,'P0002',null,'activate de outra org: P0002');
+select throws_ok($$select public.pause_automation('00000000-0000-0000-0000-0000000039b1')$$,'P0002',null,'pause de outra org: P0002');
+select throws_ok($$select public.delete_automation('00000000-0000-0000-0000-0000000039b1')$$,'P0002',null,'delete de outra org: P0002');
+select throws_ok($$select public.duplicate_automation('00000000-0000-0000-0000-0000000039b1')$$,'P0002',null,'duplicate de outra org: P0002');
+select throws_ok(format($$select public.save_automation(%L,null,'Y','message_received','{}',%L)$$, :'oa', pg_temp.graph()),'22023',null,'node id de outra automação rejeitado');
+select throws_ok(format($$select public.save_automation(%L,%L,'Run','message_received','{}',%L)$$, :'oa', :'rid',
+  jsonb_set(pg_temp.graph(), '{edges}', jsonb_build_array(pg_temp.graph()#>'{edges,0}', pg_temp.graph()#>'{edges,0}'))),'22023',null,'ids de aresta duplicados rejeitados');
+select is(public.activate_automation(:'rid'),2,'ativar já ativa é idempotente');
+select is((select count(*)::int from public.automation_versions where automation_id=:'rid'),2,'sem versão extra');
+select tests.authenticate_as(:'uag');
+select throws_ok(format($$select public.pause_automation(%L)$$, :'rid'),'42501',null,'agent não pausa');
+select tests.authenticate_as(:'uadm');
+select public.pause_automation(:'rid');
+select public.save_automation(:'oa', :'rid', 'Run', 'message_received', '{}', pg_temp.graph());
+select is(public.activate_automation(:'rid'),3,'pausada -> salvar -> ativar cria nova versão');
+select tests.clear_authentication();
 select * from finish();
 rollback;
