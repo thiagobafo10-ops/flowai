@@ -3,22 +3,12 @@
 import { nodeConfigSchemas } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { Input } from "@/components/ui/input";
-import { Field, RefOptions, errorAt, invalidProps, rec, selectClass, str, useLiveForm, type FormProps } from "./fields";
-
-type Unit = "minutes" | "hours" | "days";
-const UNIT_MINUTES: Record<Unit, number> = { minutes: 1, hours: 60, days: 1440 };
-
-function splitMinutes(minutes: unknown): { amount: number; unit: Unit } {
-  const m = typeof minutes === "number" && Number.isFinite(minutes) ? minutes : 60;
-  if (m > 0 && m % 1440 === 0) return { amount: m / 1440, unit: "days" };
-  if (m > 0 && m % 60 === 0) return { amount: m / 60, unit: "hours" };
-  return { amount: m, unit: "minutes" };
-}
+import { rec, str } from "../config-utils";
+import { Field, RefOptions, errorAt, invalidProps, selectClass, useLiveForm, type FormProps } from "./fields";
+import { delayToConfig, delayToValues, type DelayValues } from "./mappings";
 
 export function DelayForm({ config, onChange }: FormProps) {
-  type V = { amount: number; unit: Unit };
-  const toConfig = (v: V) => ({ minutes: Math.round(Number(v.amount) * UNIT_MINUTES[v.unit]) });
-  const { register, formState: { errors } } = useLiveForm<V>(nodeConfigSchemas.delay, splitMinutes(rec(config).minutes), toConfig, onChange);
+  const { register, formState: { errors } } = useLiveForm<DelayValues>(nodeConfigSchemas.delay, delayToValues(config), delayToConfig, onChange);
   const error = errorAt(errors, "minutes");
   return (
     <Field id="delay-amount" label="Esperar" error={error} hint="De 1 minuto a 7 dias.">

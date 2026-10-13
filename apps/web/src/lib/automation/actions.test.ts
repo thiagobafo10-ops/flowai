@@ -140,6 +140,47 @@ test("ativar uma automação válida chama a RPC", async () => {
   expect(state.rpcs[0]).toEqual(["activate_automation", { p_id: ID }]);
 });
 
+const HOOK = "00000000-0000-4000-8000-0000000000d3";
+const EXAMPLE_URL_GRAPH = {
+  nodes: [
+    { id: NODE, type: "trigger", config: {}, position: { x: 0, y: 0 } },
+    { id: HOOK, type: "webhook", config: { url: "https://exemplo.com.br" }, position: { x: 0, y: 100 } },
+    { id: END, type: "end", config: {}, position: { x: 0, y: 200 } },
+  ],
+  edges: [
+    { id: "00000000-0000-4000-8000-0000000000e1", source_node_id: NODE, target_node_id: HOOK, source_handle: "default" },
+    { id: "00000000-0000-4000-8000-0000000000e2", source_node_id: HOOK, target_node_id: END, source_handle: "default" },
+  ],
+};
+const PLACEHOLDER_ISSUE = { code: "placeholder", message: "Edite este campo antes de ativar." };
+
+test("ativar com a URL de exemplo do modelo não chama a RPC", async () => {
+  seedAutomation("draft", EXAMPLE_URL_GRAPH);
+  const r = await activateAutomation(ID);
+  expect(r).toEqual({ ok: true, data: { activated: false, issues: [{ nodeId: HOOK, ...PLACEHOLDER_ISSUE }] } });
+  expect(state.rpcs).toHaveLength(0);
+});
+
+test("ativar com referência reservada no gatilho não chama a RPC", async () => {
+  seedAutomation("draft", VALID_GRAPH);
+  state.tables.automations = [{ id: ID, name: "A", status: "draft", trigger_type: "tag_added", trigger_config: { tagId: TEMPLATE_PLACEHOLDER.tagId } }];
+  const r = await activateAutomation(ID);
+  expect(r.ok && r.data.activated).toBe(false);
+  if (r.ok) expect(r.data.issues).toContainEqual({ nodeId: NODE, ...PLACEHOLDER_ISSUE });
+  expect(state.rpcs).toHaveLength(0);
+});
+
+test("salvar automação ativa com a URL de exemplo é recusado", async () => {
+  seedAutomation("active", EXAMPLE_URL_GRAPH);
+  const graph = {
+    nodes: EXAMPLE_URL_GRAPH.nodes,
+    edges: EXAMPLE_URL_GRAPH.edges.map((e) => ({ id: e.id, source: e.source_node_id, target: e.target_node_id, sourceHandle: e.source_handle })),
+  };
+  const r = await saveAutomation({ id: ID, name: "A", triggerType: "message_received", triggerConfig: { firstMessageOnly: false }, graph: graph as never });
+  expect(r).toEqual({ ok: false, error: "Corrija os erros antes de salvar uma automação ativa." });
+  expect(state.rpcs).toHaveLength(0);
+});
+
 test("salvar automação ativa com problemas é recusado com a mensagem exata", async () => {
   seedAutomation("active", EMPTY_GRAPH);
   const r = await saveAutomation({ id: ID, name: "A", triggerType: "message_received", triggerConfig: { firstMessageOnly: false }, graph: EMPTY_GRAPH });

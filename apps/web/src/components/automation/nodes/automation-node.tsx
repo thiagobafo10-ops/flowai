@@ -9,7 +9,7 @@ import {
 import type { NodeType } from "@flowai/core";
 import { cn } from "@/lib/utils";
 import { nodeHandles, type FlowNode, type HandleSpec } from "../graph-mapping";
-import { PLACEHOLDER_MESSAGE } from "../placeholders";
+import { PLACEHOLDER_MESSAGE } from "@/lib/automation/placeholders";
 import { useEditorContext } from "./context";
 import { NODE_LABEL } from "./labels";
 import { nodeSummary, triggerSummary } from "./summary";

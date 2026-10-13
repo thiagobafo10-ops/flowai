@@ -6,24 +6,11 @@ import type { EditorRefs } from "@/lib/automation/queries";
 import { Input } from "@/components/ui/input";
 import { WEEKDAY_LABEL } from "../nodes/labels";
 import {
-  Field, KeywordModeOptions, KeywordsField, RefOptions, cleanKeywords, errorAt, invalidProps, rec, selectClass, str, useLiveForm, type FormProps,
+  Field, KeywordModeOptions, KeywordsField, RefOptions, errorAt, invalidProps, selectClass, useLiveForm, type FormProps,
 } from "./fields";
+import { conditionToConfig, conditionToValues, type ConditionKind, type ConditionValues } from "./mappings";
 
-type Kind = "keyword" | "has_tag" | "stage_is" | "lead_score_gte" | "intent_is" | "business_hours";
-type V = {
-  kind: Kind;
-  keywords: string[];
-  mode: string;
-  tagId: string;
-  stageId: string;
-  value: number;
-  intent: string;
-  days: string[];
-  start: string;
-  end: string;
-};
-
-const KIND_LABEL: Record<Kind, string> = {
+const KIND_LABEL: Record<ConditionKind, string> = {
   keyword: "A última mensagem tem palavra-chave",
   has_tag: "O contato tem a etiqueta",
   stage_is: "O negócio está na etapa",
@@ -32,41 +19,8 @@ const KIND_LABEL: Record<Kind, string> = {
   business_hours: "Está no horário comercial",
 };
 
-function toValues(config: unknown): V {
-  const c = rec(config);
-  return {
-    kind: (Object.keys(KIND_LABEL).includes(str(c.kind)) ? c.kind : "keyword") as Kind,
-    keywords: Array.isArray(c.keywords) ? (c.keywords as string[]) : [],
-    mode: str(c.mode, "contains"),
-    tagId: str(c.tagId),
-    stageId: str(c.stageId),
-    value: typeof c.value === "number" ? c.value : 50,
-    intent: str(c.intent),
-    days: Array.isArray(c.days) ? c.days.map(String) : ["1", "2", "3", "4", "5"],
-    start: str(c.start, "09:00"),
-    end: str(c.end, "18:00"),
-  };
-}
-
-function toConfig(v: V): unknown {
-  switch (v.kind) {
-    case "keyword":
-      return { kind: v.kind, keywords: cleanKeywords(v.keywords), mode: v.mode };
-    case "has_tag":
-      return { kind: v.kind, tagId: v.tagId };
-    case "stage_is":
-      return { kind: v.kind, stageId: v.stageId };
-    case "lead_score_gte":
-      return { kind: v.kind, value: Number.isFinite(v.value) ? v.value : undefined };
-    case "intent_is":
-      return { kind: v.kind, intent: v.intent };
-    case "business_hours":
-      return { kind: v.kind, days: (v.days ?? []).map(Number).sort((a, b) => a - b), start: v.start, end: v.end };
-  }
-}
-
 export function ConditionForm({ refs, config, onChange }: FormProps & { refs: EditorRefs }) {
-  const { register, control, formState: { errors } } = useLiveForm<V>(nodeConfigSchemas.condition, toValues(config), toConfig, onChange);
+  const { register, control, formState: { errors } } = useLiveForm<ConditionValues>(nodeConfigSchemas.condition, conditionToValues(config), conditionToConfig, onChange);
   const kind = useWatch({ control, name: "kind" });
   const err = (path: string) => errorAt(errors, path);
   return (

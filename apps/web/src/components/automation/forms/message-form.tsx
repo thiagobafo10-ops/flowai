@@ -5,21 +5,11 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import { nodeConfigSchemas } from "@flowai/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Field, errorAt, invalidProps, rec, selectClass, str, textareaClass, useLiveForm, type FormProps } from "./fields";
+import { Field, errorAt, invalidProps, selectClass, textareaClass, useLiveForm, type FormProps } from "./fields";
+import { messageToConfig, messageToValues, type ButtonValue, type MessageValues } from "./mappings";
 
 const MAX_BUTTONS = 3;
 const MAX_QUICK_REPLIES = 13;
-
-type ButtonValue = { id: string; title: string; kind: "path" | "url"; url: string };
-type QuickValue = { id: string; title: string };
-type V = {
-  mode: "text" | "ai";
-  text: string;
-  options: "none" | "buttons" | "quickReplies";
-  buttons: ButtonValue[];
-  quickReplies: QuickValue[];
-  replyTimeoutHours: number;
-};
 
 /** Identificador curto da opção (vira a saída `opt:<id>`); o admin só edita o título. */
 function newOptionId(): string {
@@ -28,46 +18,12 @@ function newOptionId(): string {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
-function toValues(config: unknown): V {
-  const c = rec(config);
-  const buttons = Array.isArray(c.buttons)
-    ? c.buttons.map((b) => {
-        const r = rec(b);
-        return { id: str(r.id), title: str(r.title), kind: r.kind === "url" ? "url" : "path", url: str(r.url) } as ButtonValue;
-      })
-    : [];
-  const quickReplies = Array.isArray(c.quickReplies) ? c.quickReplies.map((q) => ({ id: str(rec(q).id), title: str(rec(q).title) })) : [];
-  return {
-    mode: c.mode === "ai" ? "ai" : "text",
-    text: str(c.text),
-    options: buttons.length ? "buttons" : quickReplies.length ? "quickReplies" : "none",
-    buttons,
-    quickReplies,
-    replyTimeoutHours: typeof c.replyTimeoutHours === "number" ? c.replyTimeoutHours : 24,
-  };
-}
-
-function toConfig(v: V): unknown {
-  if (v.mode === "ai") return { mode: "ai" };
-  const config: Record<string, unknown> = { mode: "text", text: v.text ?? "" };
-  if (v.options === "buttons" && v.buttons?.length) {
-    config.buttons = v.buttons.map((b) =>
-      b.kind === "url" ? { id: b.id, title: b.title, kind: "url", url: b.url?.trim() || undefined } : { id: b.id, title: b.title, kind: "path" },
-    );
-  }
-  if (v.options === "quickReplies" && v.quickReplies?.length) {
-    config.quickReplies = v.quickReplies.map((q) => ({ id: q.id, title: q.title }));
-  }
-  config.replyTimeoutHours = Number.isFinite(v.replyTimeoutHours) ? v.replyTimeoutHours : 24;
-  return config;
-}
-
 export function MessageForm({ config, onChange, instagram }: FormProps & { instagram: boolean }) {
-  const { register, control, formState: { errors } } = useLiveForm<V>(nodeConfigSchemas.message, toValues(config), toConfig, onChange);
+  const { register, control, formState: { errors } } = useLiveForm<MessageValues>(nodeConfigSchemas.message, messageToValues(config), messageToConfig, onChange);
   const buttons = useFieldArray({ control, name: "buttons", keyName: "key" });
   const quickReplies = useFieldArray({ control, name: "quickReplies", keyName: "key" });
   const [mode, text, options, buttonValues] = useWatch({ control, name: ["mode", "text", "options", "buttons"] }) as [
-    V["mode"], V["text"], V["options"], ButtonValue[],
+    MessageValues["mode"], MessageValues["text"], MessageValues["options"], ButtonValue[],
   ];
   const err = (path: string) => errorAt(errors, path);
   const bytes = new TextEncoder().encode(text ?? "").length;

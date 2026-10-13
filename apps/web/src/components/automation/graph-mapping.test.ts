@@ -77,6 +77,10 @@ describe("nodeHandles", () => {
     ]);
     expect(nodeHandles({ id: "d", type: "delay", config: { minutes: 5 }, position })).toEqual([{ id: "default", label: "" }]);
     expect(nodeHandles({ id: "e", type: "end", config: {}, position })).toEqual([]);
+    expect(nodeHandles({ id: "q", type: "message", config: { mode: "text", text: "Oi", quickReplies: [{ id: "x1", title: " " }] }, position })[0]).toEqual({
+      id: "opt:x1",
+      label: "Sem título",
+    });
   });
 });
 

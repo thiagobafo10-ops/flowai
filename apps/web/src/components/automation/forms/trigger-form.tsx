@@ -5,43 +5,8 @@ import type { EditorRefs } from "@/lib/automation/queries";
 import { AUTOMATION_TRIGGER_LABEL } from "@/lib/automation/messages";
 import { Input } from "@/components/ui/input";
 import { defaultTriggerConfig } from "../nodes/labels";
-import {
-  Field, KeywordModeOptions, KeywordsField, RefOptions, cleanKeywords, errorAt, invalidProps, rec, selectClass, str, useLiveForm,
-} from "./fields";
-
-type V = { firstMessageOnly: boolean; keywords: string[]; mode: string; channelId: string; mediaId: string; tagId: string; stageId: string };
-
-function toValues(config: unknown): V {
-  const c = rec(config);
-  return {
-    firstMessageOnly: c.firstMessageOnly === true,
-    keywords: Array.isArray(c.keywords) ? (c.keywords as string[]) : [],
-    mode: str(c.mode, "contains"),
-    channelId: str(c.channelId),
-    mediaId: str(c.mediaId),
-    tagId: str(c.tagId),
-    stageId: str(c.stageId),
-  };
-}
-
-function toConfig(type: TriggerType, v: V): unknown {
-  switch (type) {
-    case "message_received":
-      return { firstMessageOnly: !!v.firstMessageOnly };
-    case "keyword_detected":
-      return { keywords: cleanKeywords(v.keywords), mode: v.mode };
-    case "instagram_comment":
-      return { channelId: v.channelId, mediaId: v.mediaId?.trim() || null, keywords: cleanKeywords(v.keywords), mode: v.mode };
-    case "instagram_story":
-      return { channelId: v.channelId };
-    case "contact_created":
-      return {};
-    case "tag_added":
-      return { tagId: v.tagId || null };
-    case "stage_changed":
-      return { stageId: v.stageId || null };
-  }
-}
+import { Field, KeywordModeOptions, KeywordsField, RefOptions, errorAt, invalidProps, selectClass, useLiveForm } from "./fields";
+import { triggerToConfig, triggerToValues, type TriggerValues } from "./mappings";
 
 type Props = {
   triggerType: TriggerType;
@@ -80,7 +45,7 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
   refs: EditorRefs;
   onChange: (config: unknown) => void;
 }) {
-  const { register, control, formState: { errors } } = useLiveForm<V>(triggerConfigSchemas[type], toValues(config), (v) => toConfig(type, v), onChange);
+  const { register, control, formState: { errors } } = useLiveForm<TriggerValues>(triggerConfigSchemas[type], triggerToValues(config), (v) => triggerToConfig(type, v), onChange);
   const err = (path: string) => errorAt(errors, path);
   const keywordFields = (
     <>

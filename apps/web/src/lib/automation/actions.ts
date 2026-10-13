@@ -15,6 +15,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import { instantiateTemplate } from "./instantiate";
+import { placeholderIssues } from "./placeholders";
 import { loadAutomation, loadGraphRefs } from "./queries";
 import {
   AUTOMATION_ACTIVATE_WITH_ISSUES,
@@ -127,7 +128,7 @@ export async function saveAutomation(input: SaveInput): Promise<ActionResult<{ i
     if (current.error) throw current.error;
     if (!current.data) return { ok: false, error: AUTOMATION_GONE };
     const { refs } = await loadGraphRefs(c.supabase, c.orgId);
-    issues = validateGraph(graph.data, { type: trigger.data, config: input.triggerConfig }, refs);
+    issues = [...validateGraph(graph.data, { type: trigger.data, config: input.triggerConfig }, refs), ...placeholderIssues(graph.data, input.triggerConfig)];
     if (current.data.status === "active" && issues.length > 0) return { ok: false, error: AUTOMATION_ACTIVE_WITH_ISSUES };
   } catch (error) {
     return unexpected("save automation validation failed", error);
@@ -157,7 +158,10 @@ export async function activateAutomation(id: string): Promise<ActionResult<{ act
     const automation = await loadAutomation(c.supabase, c.orgId, id);
     if (!automation) return { ok: false, error: AUTOMATION_GONE };
     const { refs } = await loadGraphRefs(c.supabase, c.orgId);
-    issues = validateGraph(automation.graph, { type: automation.triggerType, config: automation.triggerConfig }, refs);
+    issues = [
+      ...validateGraph(automation.graph, { type: automation.triggerType, config: automation.triggerConfig }, refs),
+      ...placeholderIssues(automation.graph, automation.triggerConfig),
+    ];
   } catch (error) {
     return unexpected("activate automation validation failed", error);
   }

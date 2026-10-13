@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { requiredHandles, type AutomationGraph, type NodeType } from "@flowai/core";
+import { isRecord } from "./config-utils";
 
 export type FlowNodeData = { config: unknown };
 export type FlowNode = Node<FlowNodeData, NodeType>;
@@ -17,8 +18,6 @@ const FIXED_LABELS: Record<string, string> = {
   sent: "Enviada",
   handoff: "Transferiu",
 };
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Grafo salvo → nós e arestas do React Flow (posições e saídas preservadas). */
 export function toFlow(graph: AutomationGraph): { nodes: FlowNode[]; edges: FlowEdge[] } {
@@ -59,8 +58,19 @@ export function nodeHandles(node: Pick<GraphNode, "type" | "config"> & Partial<G
   const full: GraphNode = { id: node.id ?? "", position: node.position ?? { x: 0, y: 0 }, type: node.type, config: node.config };
   return requiredHandles(full).map((id) => ({
     id,
-    label: id.startsWith("opt:") ? titles.get(id.slice(4)) || id.slice(4) : (FIXED_LABELS[id] ?? id),
+    label: id.startsWith("opt:") ? titles.get(id.slice(4))?.trim() || "Sem título" : (FIXED_LABELS[id] ?? id),
   }));
+}
+
+/** Troca a configuração de um nó (sem mexer nas arestas). */
+export function setNodeConfig(nodes: FlowNode[], nodeId: string, config: unknown): FlowNode[] {
+  return nodes.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, config } } : n));
+}
+
+/** Remove as arestas que saíam de saídas que deixam de existir com a nova configuração do nó. */
+export function pruneEdges(edges: FlowEdge[], nodeId: string, type: NodeType, config: unknown): FlowEdge[] {
+  const handles = new Set(nodeHandles({ type, config }).map((h) => h.id));
+  return edges.filter((e) => e.source !== nodeId || handles.has(e.sourceHandle));
 }
 
 /** Troca a configuração de um nó e remove as arestas que saíam de saídas que deixaram de existir. */
@@ -72,11 +82,7 @@ export function updateNodeConfig(
 ): { nodes: FlowNode[]; edges: FlowEdge[] } {
   const target = nodes.find((n) => n.id === nodeId);
   if (!target) return { nodes, edges };
-  const handles = new Set(nodeHandles({ type: target.type as NodeType, config }).map((h) => h.id));
-  return {
-    nodes: nodes.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, config } } : n)),
-    edges: edges.filter((e) => e.source !== nodeId || handles.has(e.sourceHandle)),
-  };
+  return { nodes: setNodeConfig(nodes, nodeId, config), edges: pruneEdges(edges, nodeId, target.type as NodeType, config) };
 }
 
 /** Nova ligação; cada saída (nó + handle) tem no máximo uma, então a anterior é substituída. */

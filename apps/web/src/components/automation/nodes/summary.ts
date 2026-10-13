@@ -1,11 +1,9 @@
 import type { NodeType, TriggerType } from "@flowai/core";
 import type { EditorRefs } from "@/lib/automation/queries";
 import { AUTOMATION_TRIGGER_LABEL } from "@/lib/automation/messages";
+import { rec, str } from "../config-utils";
 import { KEYWORD_MODE_LABEL, WEEKDAY_LABEL } from "./labels";
 
-type Rec = Record<string, unknown>;
-const rec = (v: unknown): Rec => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Rec) : {});
-const str = (v: unknown) => (typeof v === "string" ? v : "");
 const nameOf = (list: { id: string; name: string }[], id: unknown, missing: string) =>
   typeof id === "string" && id ? (list.find((o) => o.id === id)?.name ?? "Item removido") : missing;
 
@@ -14,7 +12,7 @@ function clip(text: string, max = 90): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-function keywords(c: Rec): string {
+function keywords(c: Record<string, unknown>): string {
   const list = Array.isArray(c.keywords) ? c.keywords.filter((k): k is string => typeof k === "string" && k.trim() !== "") : [];
   if (!list.length) return "Sem palavras-chave";
   return `${KEYWORD_MODE_LABEL[str(c.mode)] ?? "Contém"}: ${clip(list.join(", "), 60)}`;

@@ -7,6 +7,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Label } from "@/components/ui/label";
+import { friendlyMessage } from "../issue-copy";
 import { KEYWORD_MODE_LABEL } from "../nodes/labels";
 
 export const selectClass =
@@ -58,13 +59,13 @@ export function useLiveForm<V extends FieldValues>(schema: z.ZodType, defaultVal
 export function errorAt(errors: FieldErrors, path: string, deep = false): string | undefined {
   const e = get(errors, path) as Record<string, unknown> | undefined;
   if (!e) return undefined;
-  if (typeof e.message === "string") return e.message;
+  if (typeof e.message === "string") return friendlyMessage(e.message);
   const root = e.root as { message?: unknown } | undefined;
-  if (typeof root?.message === "string") return root.message;
+  if (typeof root?.message === "string") return friendlyMessage(root.message);
   if (!deep) return undefined;
   for (const value of Object.values(e)) {
     const m = (value as { message?: unknown } | undefined)?.message;
-    if (typeof m === "string") return m;
+    if (typeof m === "string") return friendlyMessage(m);
   }
   return undefined;
 }
@@ -105,9 +106,6 @@ export function KeywordsField<V extends FieldValues>({ id, control, name, error 
   );
 }
 
-export function cleanKeywords(list: unknown): string[] {
-  return Array.isArray(list) ? list.filter((k): k is string => typeof k === "string").map((k) => k.trim()).filter(Boolean) : [];
-}
 
 export function KeywordModeOptions() {
   return (
@@ -130,6 +128,3 @@ export function RefOptions({ options, empty }: { options: { id: string; name: st
   );
 }
 
-export const rec = (v: unknown): Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-export const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);

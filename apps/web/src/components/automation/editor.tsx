@@ -21,10 +21,11 @@ import type { AutomationStatus, EditorRefs } from "@/lib/automation/queries";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { connectEdge, fromFlow, toFlow, updateNodeConfig, type FlowEdge, type FlowNode } from "./graph-mapping";
+import { connectEdge, fromFlow, pruneEdges, setNodeConfig, toFlow, type FlowEdge, type FlowNode } from "./graph-mapping";
+import { presentIssues } from "./issue-copy";
 import { NodePanel } from "./node-panel";
 import { PALETTE_MIME, Palette } from "./palette";
-import { placeholderIssues } from "./placeholders";
+import { placeholderIssues } from "@/lib/automation/placeholders";
 import { EditorContext, type EditorContextValue } from "./nodes/context";
 import { nodeTypes } from "./nodes/automation-node";
 import { NODE_LABEL, PALETTE_TYPES, defaultNodeConfig } from "./nodes/labels";
@@ -66,8 +67,11 @@ export function AutomationEditor({ orgId, id }: { orgId: string; id: string }) {
   const query = useQuery({
     queryKey: ["automation", orgId, id],
     queryFn: () => fetchDetail(id),
-    // O editor copia os dados para o estado local na montagem; recarregar em segundo plano não deve sobrescrevê-lo.
+    // O editor copia o grafo para o estado local na montagem; uma nova abertura sempre busca o estado do servidor
+    // (sem cache entre montagens) e recargas com o editor aberto só atualizam dados de exibição (versão, refs).
     staleTime: Infinity,
+    gcTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
     retry: (count, error) => !(error instanceof NotFoundError) && count < 2,
   });
@@ -129,7 +133,11 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
     [refs],
   );
   const issues = useMemo<GraphIssue[]>(
-    () => [...validateGraph(graph, { type: triggerType, config: triggerConfig }, graphRefs), ...placeholderIssues(graph, triggerConfig)],
+    () =>
+      presentIssues(
+        [...validateGraph(graph, { type: triggerType, config: triggerConfig }, graphRefs), ...placeholderIssues(graph, triggerConfig)],
+        graph,
+      ),
     [graph, triggerType, triggerConfig, graphRefs],
   );
   const issuesByNode = useMemo(() => {
@@ -167,9 +175,10 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
     setEdges((es) => connectEdge(es, connection, () => crypto.randomUUID()));
   }
   function changeConfig(nodeId: string, config: unknown) {
-    const next = updateNodeConfig(nodes, edges, nodeId, config);
-    setNodes(next.nodes);
-    setEdges(next.edges);
+    const type = nodes.find((n) => n.id === nodeId)?.type;
+    if (!type) return;
+    setNodes((ns) => setNodeConfig(ns, nodeId, config));
+    setEdges((es) => pruneEdges(es, nodeId, type, config));
   }
   function changeTrigger(type: TriggerType, config: unknown) {
     setTriggerType(type);
@@ -199,7 +208,11 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
   }
 
   // ── Ações ──────────────────────────────────────────────────────────
-  const refresh = () => void client.invalidateQueries({ queryKey: ["automations", orgId] });
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: ["automations", orgId] });
+    // Atualiza versão/refs exibidas; o grafo local não é sobrescrito (o estado é copiado só na montagem).
+    void client.invalidateQueries({ queryKey: ["automation", orgId, automation.id] });
+  };
   async function persist(): Promise<boolean> {
     const at = current;
     const result = await saveAutomation({ id: automation.id, name, triggerType, triggerConfig, graph });
