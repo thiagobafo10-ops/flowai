@@ -35,7 +35,7 @@ const MONTH_RE = Object.keys(MONTHS).join("|");
 const MONEY_SYM_RE = new RegExp(String.raw`(R\$|US\$|\$)\s*(${NUM})(?:\s*${MIL}${END})?`, "giu");
 const MONEY_WORD_RE = new RegExp(String.raw`${NB}(${NUM})(?:\s*${MIL})?\s*(reais|real|d[óo]lares|d[óo]lar)${END}`, "giu");
 const PERCENT_RE = new RegExp(String.raw`${NB}(${NUM})\s*(?:%|por\s*cento${END})`, "giu");
-const RANGE = String.raw`(?:\s*(?:a|à|-|–|—|até|ou)\s*(${NUM}))?`;
+const RANGE = String.raw`(?:\s*(?:a|à|e|-|–|—|até|ou)\s*(${NUM}))?`;
 const DURATION_RE = new RegExp(String.raw`${NB}(${NUM})${RANGE}\s*(${DUR_UNIT_RE})${END}`, "giu");
 const QUANTITY_RE = new RegExp(String.raw`${NB}(${NUM})${RANGE}\s*(unidades?|pe[çc]as?|itens?|pcs|parcelas?|vezes)${END}`, "giu");
 const INSTALLMENT_RE = new RegExp(String.raw`${NB}(\d+)\s*x${END}`, "giu");
@@ -47,7 +47,7 @@ const DAY_ONLY_RE = new RegExp(
 );
 
 const W =
-  "zero|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|duzentas|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|mil|meio|meia";
+  "zero|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|duzentas|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|mil|meia";
 const WORD_UNITS: Record<string, { kind: FactKind; unit: string }> = {
   reais: { kind: "money", unit: "brl" }, real: { kind: "money", unit: "brl" },
   "dólares": { kind: "money", unit: "usd" }, dolares: { kind: "money", unit: "usd" },

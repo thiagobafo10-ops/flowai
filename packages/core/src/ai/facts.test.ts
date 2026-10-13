@@ -75,5 +75,19 @@ describe("verifyFacts", () => {
       expect(verifyFacts("em dez dias", ["prazo de dez dias"]).ok).toBe(true);
       expect(verifyFacts("5 mil reais", ["5 mil reais"]).ok).toBe(true);
     });
+    it("'entre X e Y' checks both bounds", () => {
+      expect(verifyFacts("entre 2 e 3 dias", ["3 dias"]).ok).toBe(false);
+      expect(verifyFacts("entre 2 e 3 dias", ["entre 2 e 3 dias"]).ok).toBe(true);
+    });
+    it("um/uma + unit fail closed unless same text in source", () => {
+      expect(verifyFacts("prazo de uma semana", []).ok).toBe(false);
+      expect(verifyFacts("prazo de uma semana", ["entrega em uma semana"]).ok).toBe(true);
+      expect(verifyFacts("garantia de um ano", []).ok).toBe(false);
+      expect(verifyFacts("garantia de um ano", ["garantia de um ano"]).ok).toBe(true);
+    });
+    it("meio-dia is not a duration", () => {
+      expect(verifyFacts("abrimos ao meio-dia", []).ok).toBe(true);
+      expect(verifyFacts("abrimos ao meio dia", []).ok).toBe(true);
+    });
   });
 });
