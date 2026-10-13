@@ -56,6 +56,12 @@ isOneToOne: true
                   }
                   Relationships: [
                     {
+      foreignKeyName: "ai_classifications_message_conversation_fk"
+      columns: ["organization_id","conversation_id","message_id"]
+isOneToOne: false
+      referencedRelation: "messages"
+      referencedColumns: ["organization_id","conversation_id","id"]
+    },{
       foreignKeyName: "ai_classifications_organization_id_conversation_id_fkey"
       columns: ["organization_id","conversation_id"]
 isOneToOne: false
@@ -425,14 +431,14 @@ isOneToOne: false
                   ]
                 },"conversations": {
                   Row: {
-                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
+                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"handoff_reason": string | null,"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -739,14 +745,14 @@ isOneToOne: false
                   ]
                 },"messages": {
                   Row: {
-                    "channel_id": string,"content": string,"content_type": string,"context": NonNullable<Json>,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
+                    "ai_metadata": Json | null,"channel_id": string,"content": string,"content_type": string,"context": NonNullable<Json>,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "channel_id": string,"content": string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "ai_metadata"?: Json | null,"channel_id": string,"content": string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Update: {
-                    "channel_id"?: string,"content"?: string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "ai_metadata"?: Json | null,"channel_id"?: string,"content"?: string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -927,6 +933,9 @@ isOneToOne: false
 "cleanup_instagram_events":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"complete_ai_reply":
+{ Args: { "p_job": string,"p_result": Json,"p_token": string }; Returns: Json
+                           },
 "complete_index_document":
 { Args: { "p_chunks": Json,"p_job": string,"p_token": string }; Returns: string
                            },
@@ -975,6 +984,9 @@ isOneToOne: false
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
                            },
+"handoff_ai_job":
+{ Args: { "p_job": string,"p_reason": string,"p_token": string }; Returns: Json
+                           },
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
                            },
@@ -1018,6 +1030,12 @@ isOneToOne: false
               "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
             }[]
                            },
+"prepare_ai_playground":
+{ Args: { "p_org": string }; Returns: Json
+                           },
+"prepare_ai_reply":
+{ Args: { "p_job": string,"p_token": string }; Returns: Json
+                           },
 "prepare_index_document":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
                            },
@@ -1053,6 +1071,9 @@ isOneToOne: false
                            },
 "retry_instagram_send_intent":
 { Args: { "p_message_id": string }; Returns: string
+                           },
+"return_to_ai":
+{ Args: { "p_conversation": string }; Returns: undefined
                            },
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
