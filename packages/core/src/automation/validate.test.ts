@@ -86,7 +86,8 @@ describe("validateGraph", () => {
 
   it("multiple_triggers", () => {
     const g = { ...valid, nodes: [...valid.nodes, node("t2", "trigger")], edges: [...valid.edges, edge("t2", "m")] };
-    expect(codes(g)).toContain("multiple_triggers");
+    const issues = validateGraph(g, generic, refs).filter((i) => i.code === "multiple_triggers");
+    expect(issues).toEqual([expect.objectContaining({ nodeId: "t2" })]);
   });
 
   it("unreachable (nó órfão)", () => {
@@ -100,7 +101,15 @@ describe("validateGraph", () => {
       nodes: [node("t", "trigger"), node("a", "tag", { tagId: TAG }), node("b", "remove_tag", { tagId: TAG })],
       edges: [edge("t", "a"), edge("a", "b"), edge("b", "a")],
     };
-    expect(codes(g)).toContain("cycle");
+    expect(validateGraph(g, generic, refs)).toEqual([expect.objectContaining({ code: "cycle", nodeId: "a" })]);
+  });
+
+  it("cycle: laço em si mesmo", () => {
+    const g: AutomationGraph = {
+      nodes: [node("t", "trigger"), node("a", "tag", { tagId: TAG })],
+      edges: [edge("t", "a"), edge("a", "a")],
+    };
+    expect(validateGraph(g, generic, refs)).toEqual([expect.objectContaining({ code: "cycle", nodeId: "a" })]);
   });
 
   it("missing_handle: condição sem false", () => {
@@ -146,9 +155,28 @@ describe("validateGraph", () => {
     expect(codes(g)).toContain("extra_handle");
   });
 
-  it("dangling_edge", () => {
-    const g = { ...valid, edges: [...valid.edges, edge("m", "ghost", "default")] };
-    expect(codes(g)).toContain("dangling_edge");
+  it("dangling_edge: destino inexistente", () => {
+    const g: AutomationGraph = {
+      nodes: [node("t", "trigger"), node("m", "message", text())],
+      edges: [edge("t", "m"), edge("m", "ghost")],
+    };
+    const d = validateGraph(g, generic, refs).filter((i) => i.code === "dangling_edge");
+    expect(d).toEqual([expect.objectContaining({ nodeId: "m" })]);
+  });
+
+  it("dangling_edge: origem inexistente", () => {
+    const g = { ...valid, edges: [...valid.edges, edge("ghost", "e")] };
+    const d = validateGraph(g, generic, refs).filter((i) => i.code === "dangling_edge");
+    expect(d).toEqual([expect.objectContaining({ nodeId: null })]);
+  });
+
+  it("duplicate_handle", () => {
+    const g: AutomationGraph = {
+      nodes: [node("t", "trigger"), node("m", "message", text()), node("e", "end"), node("e2", "end")],
+      edges: [edge("t", "m"), edge("m", "e"), edge("m", "e2")],
+    };
+    const issues = validateGraph(g, generic, refs);
+    expect(issues).toEqual([expect.objectContaining({ code: "duplicate_handle", nodeId: "m" })]);
   });
 
   it("invalid_config traz a mensagem do Zod", () => {
@@ -219,12 +247,63 @@ describe("validateGraph", () => {
   });
 
   describe("comment_needs_reply", () => {
-    it("mensagem sem opções cujo default não vai para end", () => {
+    const tagNode = (id: string) => node(id, "tag", { tagId: TAG });
+    const btn = text({ buttons: [{ id: "a", title: "Sim", kind: "path" }] });
+
+    it("sem opções: default alcança outra mensagem", () => {
       const g: AutomationGraph = {
-        nodes: [node("t", "trigger"), node("m", "message", text()), node("a", "tag", { tagId: TAG }), node("e", "end")],
-        edges: [edge("t", "m"), edge("m", "a"), edge("a", "e")],
+        nodes: [node("t", "trigger"), node("m", "message", text()), tagNode("a"), node("m2", "message", text()), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "a"), edge("a", "m2"), edge("m2", "e")],
       };
       expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
+    });
+
+    it("sem opções: default só com ações e fim é aceito", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("m", "message", text()), tagNode("a"), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "a"), edge("a", "e")],
+      };
+      expect(codes(g, comment)).toEqual([]);
+    });
+
+    it("no_reply alcança mensagem", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("m", "message", btn), node("m2", "message", text()), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "e", "opt:a"), edge("m", "m2", "no_reply"), edge("m2", "e")],
+      };
+      expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
+    });
+
+    it("no_reply com ação e fim é aceito (opt pode seguir com mensagem)", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("m", "message", btn), node("m2", "message", text()), tagNode("a"), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "m2", "opt:a"), edge("m2", "e"), edge("m", "a", "no_reply"), edge("a", "e")],
+      };
+      expect(codes(g, comment)).toEqual([]);
+    });
+
+    it("atrás de condição, um ramo alcança mensagem", () => {
+      const g: AutomationGraph = {
+        nodes: [
+          node("t", "trigger"),
+          node("m", "message", btn),
+          node("c", "condition", { kind: "has_tag", tagId: TAG }),
+          node("m2", "message", text()),
+          node("e", "end"),
+        ],
+        edges: [edge("t", "m"), edge("m", "e", "opt:a"), edge("m", "c", "no_reply"), edge("c", "m2", "true"), edge("c", "e", "false"), edge("m2", "e")],
+      };
+      expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
+    });
+
+    it("bypass: default para end e default para mensagem", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("m", "message", text()), node("m2", "message", text()), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "e"), edge("m", "m2"), edge("m2", "e")],
+      };
+      const c = codes(g, comment);
+      expect(c).toContain("duplicate_handle");
+      expect(c).toContain("comment_needs_reply");
     });
 
     it("mensagem de ia como primeira", () => {
@@ -246,16 +325,16 @@ describe("validateGraph", () => {
 
     it("considera a primeira mensagem após outros nós", () => {
       const g: AutomationGraph = {
-        nodes: [node("t", "trigger"), node("a", "tag", { tagId: TAG }), node("m", "message", text()), node("x", "tag", { tagId: TAG }), node("e", "end")],
-        edges: [edge("t", "a"), edge("a", "m"), edge("m", "x"), edge("x", "e")],
+        nodes: [node("t", "trigger"), node("a", "tag", { tagId: TAG }), node("m", "message", text()), node("m2", "message", text()), node("e", "end")],
+        edges: [edge("t", "a"), edge("a", "m"), edge("m", "m2"), edge("m2", "e")],
       };
       expect(codes(g, comment)).toEqual(["comment_needs_reply"]);
     });
 
     it("não se aplica a outros gatilhos", () => {
       const g: AutomationGraph = {
-        nodes: [node("t", "trigger"), node("m", "message", text()), node("a", "tag", { tagId: TAG }), node("e", "end")],
-        edges: [edge("t", "m"), edge("m", "a"), edge("a", "e")],
+        nodes: [node("t", "trigger"), node("m", "message", text()), node("m2", "message", text()), node("e", "end")],
+        edges: [edge("t", "m"), edge("m", "m2"), edge("m2", "e")],
       };
       expect(codes(g)).toEqual([]);
     });

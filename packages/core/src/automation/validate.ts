@@ -81,7 +81,9 @@ export function validateGraph(
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const triggers = graph.nodes.filter((n) => n.type === "trigger");
   if (triggers.length === 0) add(null, "no_trigger", "A automação precisa de um gatilho.");
-  if (triggers.length > 1) add(null, "multiple_triggers", "A automação deve ter apenas um gatilho.");
+  for (const extra of triggers.slice(1)) {
+    add(extra.id, "multiple_triggers", "A automação deve ter apenas um gatilho.");
+  }
   const triggerNodeId = triggers.length === 1 ? triggers[0]!.id : null;
 
   // Arestas
@@ -94,18 +96,40 @@ export function validateGraph(
     outgoing.set(e.source, [...(outgoing.get(e.source) ?? []), e]);
   }
 
-  // Alcançabilidade (BFS a partir dos gatilhos)
-  if (triggers.length > 0) {
-    const seen = new Set(triggers.map((t) => t.id));
-    const queue = [...seen];
+  // Uma saída só pode ter uma ligação
+  for (const [id, list] of outgoing) {
+    const n = byId.get(id)!;
+    const counts = new Map<string, number>();
+    for (const e of list) counts.set(e.sourceHandle, (counts.get(e.sourceHandle) ?? 0) + 1);
+    for (const [h, c] of counts) {
+      if (c > 1) add(id, "duplicate_handle", `Cada saída só pode ter uma ligação ("${label(n)}", saída "${h}").`);
+    }
+  }
+
+  // Ligações que partem de uma saída (ignora arestas pendentes)
+  const targetsOf = (id: string, handles?: string[]) =>
+    (outgoing.get(id) ?? []).filter((e) => !handles || handles.includes(e.sourceHandle)).map((e) => e.target);
+
+  /** BFS compartilhado: nós alcançados a partir de `starts` (inclusive). Em nós com `stopAt` verdadeiro, não expande as saídas. */
+  const walk = (starts: string[], stopAt?: (n: GraphNode) => boolean): Set<string> => {
+    const seen = new Set(starts);
+    const queue = [...starts];
     while (queue.length) {
-      for (const e of outgoing.get(queue.shift()!) ?? []) {
-        if (!seen.has(e.target)) {
-          seen.add(e.target);
-          queue.push(e.target);
+      const id = queue.shift()!;
+      if (stopAt?.(byId.get(id)!)) continue;
+      for (const t of targetsOf(id)) {
+        if (!seen.has(t)) {
+          seen.add(t);
+          queue.push(t);
         }
       }
     }
+    return seen;
+  };
+
+  // Alcançabilidade (a partir dos gatilhos)
+  if (triggers.length > 0) {
+    const seen = walk(triggers.map((t) => t.id));
     for (const n of graph.nodes) {
       if (!seen.has(n.id)) add(n.id, "unreachable", `O passo "${label(n)}" não é alcançado a partir do gatilho.`);
     }
@@ -185,6 +209,8 @@ export function validateGraph(
         if (c.kind === "stage_is") checkRef(n.id, "stage", c.stageId as string);
         break;
       case "message":
+        // Contagem sobre o texto bruto: variáveis ({nome}...) podem expandir no envio,
+        // e o caminho de envio aplica o limite final sobre o texto renderizado.
         if (instagram && c.mode === "text" && encoder.encode(c.text as string).length > INSTAGRAM_MAX_BYTES) {
           add(n.id, "message_too_long_instagram", "A mensagem passa de 1000 bytes, o limite do Instagram. Encurte o texto.");
         }
@@ -192,30 +218,22 @@ export function validateGraph(
     }
   }
 
-  // Comentário: a primeira mensagem alcançada precisa ser uma resposta que não deixa o comentário sem retorno
+  // Comentário (regra da Meta): a primeira mensagem de cada caminho é a resposta ao comentário. Se o cliente não
+  // responder (no_reply, ou default quando não há opções), nada mais pode ser enviado: só ações e fim.
   if (trigger.type === "instagram_comment" && triggers.length > 0) {
-    const seen = new Set(triggers.map((t) => t.id));
-    const queue = [...seen];
-    while (queue.length) {
-      const id = queue.shift()!;
-      const n = byId.get(id)!;
-      const outs = outgoing.get(id) ?? [];
-      if (n.type === "message") {
-        const defaultToEnd = outs.some((e) => e.sourceHandle === "default" && byId.get(e.target)?.type === "end");
-        if (!hasOptions(n) && !defaultToEnd) {
-          add(
-            n.id,
-            "comment_needs_reply",
-            "Em automações de comentário, a primeira mensagem deve ter botões ou respostas rápidas, ou seguir direto para o fim.",
-          );
-        }
-        continue;
-      }
-      for (const e of outs) {
-        if (!seen.has(e.target)) {
-          seen.add(e.target);
-          queue.push(e.target);
-        }
+    const isMessage = (n: GraphNode) => n.type === "message";
+    const firstMessages = [...walk(triggers.map((t) => t.id), isMessage)].map((id) => byId.get(id)!).filter(isMessage);
+    for (const m of firstMessages) {
+      const isText = messageOptions(m.config) !== null;
+      const silentHandles = hasOptions(m) ? ["no_reply"] : ["default"];
+      const reached = isText ? walk(targetsOf(m.id, silentHandles), isMessage) : new Set<string>();
+      const sendsAfterSilence = [...reached].some((id) => isMessage(byId.get(id)!));
+      if (!isText || sendsAfterSilence) {
+        add(
+          m.id,
+          "comment_needs_reply",
+          "Em automações de comentário, quando o cliente não responde a primeira mensagem, o fluxo só pode ter ações e terminar; não envie outra mensagem.",
+        );
       }
     }
   }
