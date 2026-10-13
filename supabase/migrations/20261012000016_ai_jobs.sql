@@ -88,7 +88,7 @@ begin
   select case p_kind when 'reply' then coalesce(ov.daily_replies, s.daily_replies)
                      else coalesce(ov.daily_tests, s.daily_tests) end into v_limit
     from private.ai_settings s left join private.ai_limit_overrides ov on ov.organization_id = p_org;
-  if v_limit <= 0 then return false; end if;
+  if coalesce(v_limit, 0) <= 0 then return false; end if;
   if p_kind = 'reply' then
     insert into public.ai_usage_daily as u (organization_id, day, replies) values (p_org, v_day, 1)
       on conflict (organization_id, day) do update set replies = u.replies + 1 where u.replies < v_limit
@@ -146,15 +146,28 @@ end $$;
 
 create function public.fail_ai_job(p_job uuid, p_token uuid, p_error_code text, p_retryable boolean) returns void
 language plpgsql security definer set search_path = '' as $$
-declare job public.ai_jobs;
+declare job public.ai_jobs; v_code text;
 begin
+  if p_token is null then return; end if;
   select * into job from public.ai_jobs where id = p_job and state = 'running' and claim_token = p_token for update;
-  if not found or p_token is null then return; end if;
+  if not found then return; end if;
+  v_code := case when p_error_code ~ '^[a-z0-9_]{1,64}$' then p_error_code else 'invalid_code' end;
   if p_retryable and job.attempts < 3 then
-    update public.ai_jobs set state = 'pending', claim_token = null, claimed_until = null, last_error = p_error_code,
-      run_after = now() + (array[10, 30, 90])[job.attempts] * interval '1 second' where id = job.id;
+    -- Já existe tarefa pendente para o mesmo alvo: ela a substitui (relê o estado atual).
+    if exists (select 1 from public.ai_jobs o where o.id <> job.id and o.state = 'pending' and o.organization_id = job.organization_id
+        and ((job.kind = 'reply' and o.kind = 'reply' and o.conversation_id = job.conversation_id)
+          or (job.kind = 'index_document' and o.kind = 'index_document' and o.document_id = job.document_id))) then
+      update public.ai_jobs set state = 'cancelled', claim_token = null, claimed_until = null, last_error = v_code where id = job.id;
+      return;
+    end if;
+    begin
+      update public.ai_jobs set state = 'pending', claim_token = null, claimed_until = null, last_error = v_code,
+        run_after = now() + (array[10, 30, 90])[job.attempts] * interval '1 second' where id = job.id;
+    exception when unique_violation then
+      update public.ai_jobs set state = 'cancelled', claim_token = null, claimed_until = null, last_error = v_code where id = job.id;
+    end;
   else
-    update public.ai_jobs set state = 'failed', claim_token = null, claimed_until = null, last_error = p_error_code
+    update public.ai_jobs set state = 'failed', claim_token = null, claimed_until = null, last_error = v_code
       where id = job.id returning * into job;
     perform private.ai_job_gave_up(job);
   end if;
@@ -165,7 +178,11 @@ language plpgsql security definer set search_path = '' as $$
 declare job public.ai_jobs;
 begin
   for job in select * from public.ai_jobs where state = 'running' and claimed_until < now() order by claimed_until for update skip locked loop
-    perform public.fail_ai_job(job.id, job.claim_token, 'claim_expired', true);
+    begin
+      perform public.fail_ai_job(job.id, job.claim_token, 'claim_expired', true);
+    exception when others then
+      raise warning 'sweep_ai_jobs: job % failed with SQLSTATE %', job.id, sqlstate;
+    end;
   end loop;
 end $$;
 

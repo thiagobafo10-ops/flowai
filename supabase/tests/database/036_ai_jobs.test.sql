@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(60);
 select tests.create_user('owner36a@t.test','Owner A') as ua \gset
 select tests.create_user('owner36b@t.test','Owner B') as ub \gset
 select tests.create_org(:'ua','Org36A') as oa \gset
@@ -22,6 +22,16 @@ select ok(not has_function_privilege('authenticated','public.claim_ai_jobs(integ
 select ok(not has_function_privilege('authenticated','public.consume_ai_quota(uuid,text)','execute'),'authenticated não executa consume_ai_quota');
 select ok(not has_function_privilege('authenticated','public.fail_ai_job(uuid,uuid,text,boolean)','execute'),'authenticated não executa fail_ai_job');
 select ok(has_function_privilege('authenticated','public.ai_quota(uuid)','execute'),'authenticated executa ai_quota');
+select ok(not has_function_privilege('anon','public.ai_quota(uuid)','execute'),'anon não executa ai_quota');
+select ok(not has_function_privilege('authenticated','public.configure_ai_worker(text,text,text)','execute'),'authenticated não executa configure_ai_worker');
+select ok(not has_function_privilege('anon','public.configure_ai_worker(text,text,text)','execute'),'anon não executa configure_ai_worker');
+select ok(not has_function_privilege('authenticated','public.read_ai_worker_config()','execute'),'authenticated não executa read_ai_worker_config');
+select ok(not has_function_privilege('anon','public.read_ai_worker_config()','execute'),'anon não executa read_ai_worker_config');
+select ok(not has_function_privilege('authenticated','public.sweep_ai_jobs()','execute'),'authenticated não executa sweep_ai_jobs');
+select ok(not has_function_privilege('anon','public.sweep_ai_jobs()','execute'),'anon não executa sweep_ai_jobs');
+select ok(not has_function_privilege('authenticated','public.dispatch_ai_worker()','execute'),'authenticated não executa dispatch_ai_worker');
+select ok(not has_function_privilege('anon','public.dispatch_ai_worker()','execute'),'anon não executa dispatch_ai_worker');
+select is((select daily_tests from private.ai_settings),30,'limite padrão de testes é 30');
 
 -- uso diário: membro lê só a própria organização
 insert into public.ai_usage_daily(organization_id,day,replies,tests) values (:'oa',(now() at time zone 'America/Sao_Paulo')::date,5,1),(:'ob',current_date,7,2);
@@ -40,6 +50,9 @@ update public.organizations set timezone='Pacific/Kiritimati' where id=:'oa';
 select public.consume_ai_quota(:'oa','reply');
 select is((select day from public.ai_usage_daily where organization_id=:'oa'),
   (now() at time zone 'Pacific/Kiritimati')::date,'dia segue o fuso da organização');
+update public.organizations set timezone='Pacific/Pago_Pago' where id=:'ob';
+select public.consume_ai_quota(:'ob','reply');
+select isnt((select day from public.ai_usage_daily where organization_id=:'ob'),(select day from public.ai_usage_daily where organization_id=:'oa'),'fusos distantes dão dias diferentes');
 update public.ai_usage_daily set replies=299 where organization_id=:'oa';
 select is(public.consume_ai_quota(:'oa','reply'),true,'300ª resposta passa');
 select is(public.consume_ai_quota(:'oa','reply'),false,'301ª resposta é negada');
@@ -93,6 +106,48 @@ select is((select count(*)::int from net.http_request_queue), :before_http, 'sem
 insert into public.ai_jobs(organization_id,kind,conversation_id,run_after) values (:'oa','reply','00000000-0000-0000-0000-000000003621',now()-interval '1 second');
 select public.dispatch_ai_worker();
 select is((select count(*)::int from net.http_request_queue), :before_http + 1, 'tarefa vencida chama o worker');
+select ok((select url like '%/functions/v1/ai-worker' and headers ? 'X-FlowAI-Worker' from net.http_request_queue order by id desc limit 1),'requisição vai para o ai-worker com o header do worker');
 select is((select schedule from cron.job where jobname='flowai-ai-worker'),'5 seconds','cron do worker de IA agendado');
+
+-- retry não pode colidir com outra tarefa pendente do mesmo alvo
+delete from public.ai_jobs;
+insert into public.knowledge_documents(id,organization_id,title,content) values ('00000000-0000-0000-0000-000000003641',:'oa','Doc','x');
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003651',:'oa','reply','00000000-0000-0000-0000-000000003622','running',1,gen_random_uuid(),now()-interval '1 second');
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,run_after) values
+  ('00000000-0000-0000-0000-000000003652',:'oa','reply','00000000-0000-0000-0000-000000003622',now()+interval '1 hour');
+insert into public.ai_jobs(id,organization_id,kind,document_id,document_generation,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003653',:'oa','index_document','00000000-0000-0000-0000-000000003641',1,'running',1,gen_random_uuid(),now()-interval '1 second');
+insert into public.ai_jobs(id,organization_id,kind,document_id,document_generation,run_after) values
+  ('00000000-0000-0000-0000-000000003654',:'oa','index_document','00000000-0000-0000-0000-000000003641',2,now()+interval '1 hour');
+select lives_ok($$select public.sweep_ai_jobs()$$,'sweep não falha com tarefa pendente do mesmo alvo');
+select is((select state||':'||last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003651'),'cancelled:claim_expired','reply substituída é cancelada');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003652'),'pending','reply pendente intacta');
+select is((select state||':'||last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003653'),'cancelled:claim_expired','indexação substituída é cancelada');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003654'),'pending','indexação pendente intacta');
+select lives_ok($$select public.dispatch_ai_worker()$$,'dispatch segue funcionando');
+
+-- código de erro é validado
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003655',:'oa','reply','00000000-0000-0000-0000-000000003623','running',1,'00000000-0000-0000-0000-0000000036a1',now()+interval '1 minute'),
+  ('00000000-0000-0000-0000-000000003656',:'oa','reply','00000000-0000-0000-0000-000000003623','running',1,'00000000-0000-0000-0000-0000000036a2',now()+interval '1 minute');
+select public.fail_ai_job('00000000-0000-0000-0000-000000003655','00000000-0000-0000-0000-0000000036a1','Texto da mensagem: oi!',false);
+select public.fail_ai_job('00000000-0000-0000-0000-000000003656','00000000-0000-0000-0000-0000000036a2',repeat('a',65),false);
+select is((select last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003655'),'invalid_code','código inseguro vira invalid_code');
+select is((select last_error from public.ai_jobs where id='00000000-0000-0000-0000-000000003656'),'invalid_code','código longo vira invalid_code');
+
+-- uma linha com erro não bloqueia a varredura nem o dispatch
+create or replace function private.ai_job_gave_up(job public.ai_jobs) returns void
+language plpgsql as $$ begin raise exception 'boom'; end $$;
+delete from public.ai_jobs;
+insert into public.ai_jobs(id,organization_id,kind,conversation_id,state,attempts,claim_token,claimed_until) values
+  ('00000000-0000-0000-0000-000000003661',:'oa','reply','00000000-0000-0000-0000-000000003621','running',3,gen_random_uuid(),now()-interval '2 seconds'),
+  ('00000000-0000-0000-0000-000000003662',:'oa','reply','00000000-0000-0000-0000-000000003622','running',1,gen_random_uuid(),now()-interval '1 second');
+insert into public.ai_jobs(organization_id,kind,conversation_id,run_after) values (:'oa','reply','00000000-0000-0000-0000-000000003623',now()-interval '1 second');
+select count(*)::int as before_http2 from net.http_request_queue \gset
+select lives_ok($$select public.dispatch_ai_worker()$$,'dispatch sobrevive a linha com erro');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003661'),'running','linha com erro permanece como estava');
+select is((select state from public.ai_jobs where id='00000000-0000-0000-0000-000000003662'),'pending','demais linhas são processadas');
+select is((select count(*)::int from net.http_request_queue), :before_http2 + 1, 'dispatch ainda chama o worker');
 select * from finish();
 rollback;
