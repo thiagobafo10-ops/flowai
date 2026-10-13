@@ -5,7 +5,7 @@ import { AIProviderError, chunkText, runReplyPipeline, type AIProvider, type Kno
 export type AiJob = { jobId: string; kind: "reply" | "index_document"; claimToken: string };
 export type PreparedReply =
   | { action: "skip" }
-  | { action: "handoff"; reason: string; intentIds: string[] }
+  | { action: "handoff"; reason: string; organizationId: string; intentIds: string[] }
   | ({ action: "run"; organizationId: string; conversationId: string; channelType: "simulator" | "instagram"; lastMessageId: string } & Pick<PipelineInput, "agent" | "company" | "contact" | "stages" | "conversation">);
 export type PreparedIndex = { documentId: string; organizationId: string; generation: number; title: string; content: string };
 export type IndexChunk = { index: number; content: string; tokenCount: number; embedding: number[] };
@@ -24,6 +24,8 @@ export type AiWorkerDeps = SendDeps & {
   provider: AIProvider;
   chatModel: string;
   deadlineMs?: number;
+  /** Receives ids and codes only; defaults to console.error. */
+  log?: (...args: unknown[]) => void;
 };
 
 /** Database error carrying the SQLSTATE returned by PostgREST. */
@@ -34,29 +36,31 @@ export class DbError extends Error {
 
 export const AI_WORKER_CONCURRENCY = 3;
 export const AI_WORKER_BUDGET_MS = 100_000;
+/** In-flight jobs may take up to ~45 s (2 OpenAI calls + embedding + send); no new batch starts inside this window. */
+const IN_FLIGHT_MARGIN_MS = 45_000;
 const EMBED_BATCH = 64;
 const LOST_CLAIM = "42501";
 
 /** Logs ids and codes only; never message or document text. */
-function log(event: string, fields: Record<string, string | number | null>): void { console.error("ai-worker", event, JSON.stringify(fields)); }
+function log(deps: AiWorkerDeps, event: string, fields: Record<string, string | number | null>): void { (deps.log ?? console.error)("ai-worker", event, JSON.stringify(fields)); }
 function isLostClaim(error: unknown): boolean { return error instanceof DbError && error.code === LOST_CLAIM; }
 
-/** organizationId is null when the DB handoff result does not carry it; the claimed connection's own org is used then (the claim itself is already authorized by the service-only RPC). */
-async function sendIntents(intentIds: string[], organizationId: string | null, deps: AiWorkerDeps): Promise<void> {
+/** The organization must be known: sendClaimedInstagram checks it against the connection. Without it nothing is claimed. */
+async function sendIntents(intentIds: string[], organizationId: string | null | undefined, deps: AiWorkerDeps): Promise<void> {
+  if (!organizationId) { if (intentIds.length) log(deps, "missing_organization", { count: intentIds.length }); return; }
   for (const intentId of intentIds) {
     try {
       const claim = await deps.claimSend(intentId);
       if (!claim) continue;
-      const orgId = organizationId ?? (await deps.readConnectionSecrets(claim.connectionId))?.organizationId ?? "";
-      await sendClaimedInstagram(claim, orgId, deps);
-    } catch { log("send_failed", { intentId }); }
+      await sendClaimedInstagram(claim, organizationId, deps);
+    } catch { log(deps, "send_failed", { intentId }); }
   }
 }
 
 async function processReply(job: AiJob, deps: AiWorkerDeps, org: { id: string | null }): Promise<void> {
   const prepared = await deps.prepareReply(job.jobId, job.claimToken);
   if (prepared.action === "skip") return;
-  if (prepared.action === "handoff") { await sendIntents(prepared.intentIds, org.id, deps); return; }
+  if (prepared.action === "handoff") { await sendIntents(prepared.intentIds, prepared.organizationId, deps); return; }
   org.id = prepared.organizationId;
   const result = await runReplyPipeline(
     { agent: prepared.agent, company: prepared.company, contact: prepared.contact, stages: prepared.stages, conversation: prepared.conversation, channelType: prepared.channelType },
@@ -85,20 +89,20 @@ async function processIndex(job: AiJob, deps: AiWorkerDeps): Promise<void> {
 }
 
 async function handleFailure(job: AiJob, error: unknown, org: { id: string | null }, deps: AiWorkerDeps): Promise<void> {
-  if (isLostClaim(error)) { log("claim_lost", { jobId: job.jobId, code: LOST_CLAIM }); return; }
+  if (isLostClaim(error)) { log(deps, "claim_lost", { jobId: job.jobId, code: LOST_CLAIM }); return; }
   try {
     if (error instanceof AIProviderError) {
-      log("provider_error", { jobId: job.jobId, kind: job.kind, code: error.code });
+      log(deps, "provider_error", { jobId: job.jobId, kind: job.kind, code: error.code });
       if (error.code === "not_configured" && job.kind === "reply") {
         const handoff = await deps.handoffJob(job.jobId, job.claimToken, "not_configured");
         await sendIntents(handoff.intentIds, org.id, deps);
       } else await deps.failJob(job.jobId, job.claimToken, error.code, error.retryable);
     } else {
-      log("worker_error", { jobId: job.jobId, kind: job.kind });
+      log(deps, "worker_error", { jobId: job.jobId, kind: job.kind });
       await deps.failJob(job.jobId, job.claimToken, "worker_error", true);
     }
   } catch (inner) {
-    log("failure_not_recorded", { jobId: job.jobId, code: inner instanceof DbError ? inner.code : null });
+    log(deps, "failure_not_recorded", { jobId: job.jobId, code: inner instanceof DbError ? inner.code : null });
   }
 }
 
@@ -111,7 +115,7 @@ export async function processAiJob(job: AiJob, deps: AiWorkerDeps): Promise<void
 }
 
 export async function drainAiJobs(deps: AiWorkerDeps): Promise<number> {
-  const deadline = deps.now().getTime() + (deps.deadlineMs ?? AI_WORKER_BUDGET_MS);
+  const deadline = deps.now().getTime() + (deps.deadlineMs ?? AI_WORKER_BUDGET_MS) - IN_FLIGHT_MARGIN_MS;
   let processed = 0;
   while (deps.now().getTime() < deadline) {
     const batch = await deps.claimJobs(AI_WORKER_CONCURRENCY);

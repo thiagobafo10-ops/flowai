@@ -20,6 +20,7 @@ export function fakeEmbedding(text: string): number[] {
   return v.map((x) => x / norm);
 }
 
+// Depends on the knowledge block format of packages/core/src/ai/prompt.ts (knowledgeBlock): "[id] title" then the content on the next line.
 function firstHit(system: string): { id: string; content: string } | null {
   const block = /<knowledge>\n([\s\S]*?)\n<\/knowledge>/.exec(system)?.[1] ?? "";
   const match = /^\[([^\]]+)\] [^\n]*\n([^\n]*)/.exec(block);

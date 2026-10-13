@@ -193,7 +193,7 @@ select pg_temp.ingest('q1','+5511900000004','Oi') as mq \gset
 select pg_temp.conv_of(:'mq') as cq \gset
 select pg_temp.claim(:'cq','00000000-0000-0000-0000-0000000038b1') as jq \gset
 insert into private.ai_limit_overrides(organization_id,daily_replies) values (:'oa',4);
-select is(public.prepare_ai_reply(:'jq','00000000-0000-0000-0000-0000000038b1'),'{"action":"handoff","reason":"quota_exceeded","intentIds":[]}'::jsonb,'cota esgotada no prepare: quota_exceeded');
+select is(public.prepare_ai_reply(:'jq','00000000-0000-0000-0000-0000000038b1'),format('{"action":"handoff","reason":"quota_exceeded","organizationId":"%s","intentIds":[]}',:'oa')::jsonb,'cota esgotada no prepare: quota_exceeded com organizationId');
 select is((select status::text||'/'||handled_by::text||'/'||handoff_reason from public.conversations where id=:'cq'),'pending_human/human/quota_exceeded','cota esgotada transfere');
 select is((select state from public.ai_jobs where id=:'jq'),'done','tarefa de cota esgotada termina done');
 select is((select count(*)::int from public.ai_classifications where conversation_id=:'cq'),0,'cota esgotada: sem classificação');

@@ -32,19 +32,26 @@ export function createOpenAIProvider(opts: OpenAIOptions): AIProvider {
   // deno-lint-ignore no-explicit-any
   async function post(path: string, body: unknown): Promise<any> {
     if (!opts.apiKey) throw new AIProviderError("not_configured");
+    const signal = AbortSignal.timeout(opts.timeoutMs ?? 30_000);
     let response: Response;
     try {
       response = await opts.fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+        signal,
       });
     } catch { throw new AIProviderError("unavailable"); }
     if (response.status === 429) throw new AIProviderError("rate_limited");
     if (response.status >= 500) throw new AIProviderError("unavailable");
     if (!response.ok) throw new AIProviderError("rejected");
-    try { return await response.json(); } catch { throw new AIProviderError("invalid_response"); }
+    try {
+      const aborted = new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new AIProviderError("unavailable")), { once: true }));
+      return await Promise.race([response.json(), aborted]);
+    } catch (error) {
+      if (error instanceof AIProviderError) throw error;
+      throw new AIProviderError(signal.aborted ? "unavailable" : "invalid_response");
+    }
   }
 
   function chatBody(messages: ChatMessage[], o: ChatOptions | undefined, extra: Record<string, unknown> = {}) {

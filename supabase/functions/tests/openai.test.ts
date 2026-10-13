@@ -62,3 +62,8 @@ Deno.test("embed returns vectors in index order", async () => {
   const again = await p.embed(["gato"]); assert(again[0].join() === out[0].join());
   assert(f.calls[0].body.model === "text-embedding-3-small");
 });
+Deno.test("timeout while reading the body is unavailable", async () => {
+  const hang = (async () => new Response(new ReadableStream({ start() { /* never closes */ } }), { status: 200 })) as typeof fetch;
+  const p = createOpenAIProvider({ apiKey: "k", fetch: hang, timeoutMs: 20 });
+  assert((await code(p.chat(msgs))).code === "unavailable");
+});

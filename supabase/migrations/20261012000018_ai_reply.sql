@@ -261,7 +261,7 @@ begin
   if not private.ai_reply_quota_left(conv.organization_id) then
     v_intents := private.ai_handoff(conv.id, 'quota_exceeded', null);
     update public.ai_jobs set state = 'done', claim_token = null, claimed_until = null, last_error = null where id = job.id;
-    return jsonb_build_object('action', 'handoff', 'reason', 'quota_exceeded', 'intentIds', to_jsonb(v_intents));
+    return jsonb_build_object('action', 'handoff', 'reason', 'quota_exceeded', 'organizationId', conv.organization_id, 'intentIds', to_jsonb(v_intents));
   end if;
 
   select ch.type into v_type from public.channels ch where ch.id = conv.channel_id;

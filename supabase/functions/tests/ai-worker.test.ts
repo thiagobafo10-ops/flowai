@@ -17,7 +17,8 @@ function run(text: string, overrides: Partial<Extract<PreparedReply, { action: "
   };
 }
 
-function fixture(opts: { jobs?: AiJob[]; prepared?: PreparedReply; hits?: boolean; apiKey?: string; script?: FakeScript } = {}) {
+function fixture(opts: { jobs?: AiJob[]; prepared?: PreparedReply; hits?: boolean; apiKey?: string; script?: FakeScript; secretsOrg?: string; now?: () => Date; deadlineMs?: number } = {}) {
+  const logs: string[] = [];
   const queue = [...(opts.jobs ?? [{ jobId: "job1", kind: "reply" as const, claimToken: "tok" }])];
   const calls: Record<string, unknown[][]> = {};
   const rec = (name: string, ...args: unknown[]) => { (calls[name] ??= []).push(args); };
@@ -35,13 +36,13 @@ function fixture(opts: { jobs?: AiJob[]; prepared?: PreparedReply; hits?: boolea
     searchKnowledge: async () => opts.hits === false ? [] : [{ id: CHUNK_ID, documentTitle: "Horarios", content: KNOWLEDGE, similarity: 0.9 }],
     claimSend: async (id) => { rec("claimSend", id); return { intentId: id, connectionId: "conn", channelId: "channel", kind: "direct", text: "ola", recipientExternalId: "900", commentId: null, claimToken: "claim" }; },
     complete: async (...a) => { rec("complete", ...a); },
-    readConnectionSecrets: async () => ({ connectionId: "conn", organizationId: "org", appId: "123", apiVersion: "v26.0", generation: 1, disconnected: false, appSecret: "app", verifyToken: "verify", channels: [{ channelId: "channel", accountId: "789", accessToken: "token", status: "active" }] }),
+    readConnectionSecrets: async () => ({ connectionId: "conn", organizationId: opts.secretsOrg ?? "org", appId: "123", apiVersion: "v26.0", generation: 1, disconnected: false, appSecret: "app", verifyToken: "verify", channels: [{ channelId: "channel", accountId: "789", accessToken: "token", status: "active" }] }),
     fetch: async (input) => { graphCalls.push(String(input)); return Response.json({ message_id: "out", recipient_id: "900" }); },
-    now: () => new Date(),
+    now: opts.now ?? (() => new Date()), log: (...args) => { logs.push(args.join(" ")); }, deadlineMs: opts.deadlineMs,
     provider: createOpenAIProvider({ apiKey: "apiKey" in opts ? opts.apiKey : "key", fetch: openai }),
     chatModel: "test-model",
   };
-  return { deps, calls, openai, graphCalls };
+  return { deps, calls, openai, graphCalls, logs };
 }
 
 Deno.test("wrong worker secret is 401", async () => {
@@ -101,7 +102,7 @@ Deno.test("lost claim (42501) is not retried or failed", async () => {
   assert(!f.calls.failJob && !f.calls.claimSend);
 });
 Deno.test("prepare handoff sends the returned intents; skip does nothing", async () => {
-  const f = fixture({ prepared: { action: "handoff", reason: "quota_exceeded", intentIds: ["i1", "i2"] } });
+  const f = fixture({ prepared: { action: "handoff", reason: "quota_exceeded", organizationId: "org", intentIds: ["i1", "i2"] } });
   await handleAiWorker(request(), f.deps);
   assert(f.calls.claimSend.length === 2 && f.graphCalls.length === 2 && f.openai.calls.length === 0);
   const g = fixture({ prepared: { action: "skip" } }); await handleAiWorker(request(), g.deps);
@@ -121,16 +122,68 @@ Deno.test("index_document without key fails not_configured non-retryable", async
   assert(JSON.stringify(f.calls.failJob[0]) === '["idx","tok","not_configured",false]');
 });
 Deno.test("logs never contain message text", async () => {
-  const original = { error: console.error, log: console.log, warn: console.warn, info: console.info };
-  const seen: string[] = [];
-  const spy = (...args: unknown[]) => { seen.push(args.map((a) => typeof a === "string" ? a : JSON.stringify(a)).join(" ")); };
-  console.error = spy; console.log = spy; console.warn = spy; console.info = spy;
-  try {
-    const f = fixture({ prepared: run(SECRET_TEXT), script: { onCall: () => ({ status: 503 }) } });
-    await handleAiWorker(request(), f.deps);
-    const g = fixture({ prepared: run(SECRET_TEXT) }); g.deps.completeReply = async () => { throw new Error(SECRET_TEXT); };
-    await handleAiWorker(request(), g.deps);
-    assert(seen.length > 0, "expected some logs");
-  } finally { Object.assign(console, original); }
+  const f = fixture({ prepared: run(SECRET_TEXT), script: { onCall: () => ({ status: 503 }) } });
+  await handleAiWorker(request(), f.deps);
+  const g = fixture({ prepared: run(SECRET_TEXT) }); g.deps.completeReply = async () => { throw new Error(SECRET_TEXT); };
+  await handleAiWorker(request(), g.deps);
+  const seen = [...f.logs, ...g.logs];
+  assert(seen.length > 0, "expected some logs");
   assert(!seen.some((line) => line.includes(SECRET_TEXT) || line.includes(KNOWLEDGE)));
+});
+Deno.test("prepare handoff sends with the returned organization", async () => {
+  const f = fixture({ prepared: { action: "handoff", reason: "quota_exceeded", organizationId: "org", intentIds: ["i1"] } });
+  await handleAiWorker(request(), f.deps);
+  assert(f.graphCalls.length === 1 && f.calls.complete.length === 1);
+});
+Deno.test("organization mismatch in connection secrets never sends", async () => {
+  const f = fixture({ secretsOrg: "other", prepared: { action: "handoff", reason: "quota_exceeded", organizationId: "org", intentIds: ["i1"] } });
+  await handleAiWorker(request(), f.deps);
+  assert(f.graphCalls.length === 0);
+  assert((f.calls.complete[0][1] as any).state === "failed");
+});
+Deno.test("handoff without organizationId is not claimed", async () => {
+  const f = fixture({ prepared: { action: "handoff", reason: "quota_exceeded", intentIds: ["i1"] } as unknown as PreparedReply });
+  await handleAiWorker(request(), f.deps);
+  assert(!f.calls.claimSend && f.graphCalls.length === 0 && f.logs.length > 0);
+});
+Deno.test("not_configured handoff sends with the prepared organization", async () => {
+  const f = fixture({ apiKey: "", secretsOrg: "other" });
+  await handleAiWorker(request(), f.deps);
+  assert(f.graphCalls.length === 0 && f.calls.claimSend.length === 1);
+});
+Deno.test("claims several batches of 3 until the queue is empty", async () => {
+  const jobs = Array.from({ length: 7 }, (_, n) => ({ jobId: `j${n}`, kind: "reply" as const, claimToken: "t" }));
+  const f = fixture({ jobs }); const limits: number[] = []; const claim = f.deps.claimJobs;
+  f.deps.claimJobs = async (limit) => { limits.push(limit); return claim(limit); };
+  const body = await (await handleAiWorker(request(), f.deps)).json();
+  assert(body.processed === 7 && f.calls.completeReply.length === 7 && limits.join() === "3,3,3,3");
+});
+Deno.test("stops claiming new batches 45 s before the deadline", async () => {
+  let t = 0; const jobs = Array.from({ length: 9 }, (_, n) => ({ jobId: `j${n}`, kind: "reply" as const, claimToken: "t" }));
+  const f = fixture({ jobs, deadlineMs: 100_000, now: () => new Date(t) });
+  const claim = f.deps.claimJobs; f.deps.claimJobs = async (limit) => { const r = await claim(limit); t += 30_000; return r; };
+  const body = await (await handleAiWorker(request(), f.deps)).json();
+  assert(body.processed === 6, `processed ${body.processed}`); // claims at t=0 and t=30 s; 60 s > 55 s
+});
+Deno.test("claimJobs failure is 503, non-POST is 405", async () => {
+  const f = fixture(); f.deps.claimJobs = async () => { throw new Error("db"); };
+  assert((await handleAiWorker(request(), f.deps)).status === 503);
+  assert((await handleAiWorker(new Request("http://x", { method: "GET" }), f.deps)).status === 405);
+});
+Deno.test("one failing job does not affect the others in the batch", async () => {
+  const jobs = [1, 2, 3].map((n) => ({ jobId: `job${n}`, kind: "reply" as const, claimToken: "tok" }));
+  const f = fixture({ jobs }); const prepare = f.deps.prepareReply;
+  f.deps.prepareReply = async (id, tok) => { if (id === "job2") throw new Error("boom"); return prepare(id, tok); };
+  await handleAiWorker(request(), f.deps);
+  assert(f.calls.completeReply.length === 2 && f.calls.failJob.length === 1 && f.calls.failJob[0][0] === "job2");
+});
+Deno.test("completeReply with several intents sends all of them", async () => {
+  const f = fixture(); f.deps.completeReply = async () => ({ state: "sent", intentIds: ["a", "b", "c"] });
+  await handleAiWorker(request(), f.deps);
+  assert(f.calls.claimSend.length === 3 && f.graphCalls.length === 3);
+});
+Deno.test("handoffJob 42501 is a lost claim, not a failure", async () => {
+  const f = fixture({ apiKey: "" }); f.deps.handoffJob = async () => { throw new DbError("42501"); };
+  await handleAiWorker(request(), f.deps);
+  assert(!f.calls.failJob && !f.calls.claimSend);
 });
