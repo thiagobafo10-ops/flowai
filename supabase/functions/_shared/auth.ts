@@ -1,4 +1,4 @@
-export type Authorize = (request: Request, organizationId: string, minimumRole: "admin" | "agent") => Promise<{ userId: string } | null>;
+export type Authorize = (request: Request, organizationId: string, minimumRole: "admin" | "agent" | "viewer") => Promise<{ userId: string } | null>;
 export function createAuthorize(url: string, anonKey: string, fetcher: typeof fetch): Authorize {
   return async (request, organizationId, minimumRole) => {
     const authorization = request.headers.get("authorization");
@@ -14,7 +14,7 @@ export function createAuthorize(url: string, anonKey: string, fetcher: typeof fe
     const membershipResponse = await fetcher(`${url}/rest/v1/memberships?${params}`, { headers, signal: AbortSignal.timeout(10000) });
     if (!membershipResponse.ok) return null;
     const memberships = await membershipResponse.json();
-    const allowed = minimumRole === "admin" ? ["owner", "admin"] : ["owner", "admin", "agent"];
+    const allowed = minimumRole === "admin" ? ["owner", "admin"] : minimumRole === "agent" ? ["owner", "admin", "agent"] : ["owner", "admin", "agent", "viewer"];
     return Array.isArray(memberships) && memberships.some((item) => allowed.includes(item.role)) ? { userId: user.id } : null;
   };
 }
