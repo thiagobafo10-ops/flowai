@@ -129,14 +129,14 @@ test("ativar com problemas devolve-os e não chama a RPC", async () => {
   seedAutomation("draft", EMPTY_GRAPH);
   const r = await activateAutomation(ID);
   expect(r.ok).toBe(true);
-  if (r.ok) expect(r.data.issues.length).toBeGreaterThan(0);
+  if (r.ok) { expect(r.data.activated).toBe(false); expect(r.data.issues.length).toBeGreaterThan(0); }
   expect(state.rpcs).toHaveLength(0);
 });
 
 test("ativar uma automação válida chama a RPC", async () => {
   seedAutomation("draft", VALID_GRAPH);
   const r = await activateAutomation(ID);
-  expect(r).toEqual({ ok: true, data: { issues: [] } });
+  expect(r).toEqual({ ok: true, data: { activated: true, issues: [] } });
   expect(state.rpcs[0]).toEqual(["activate_automation", { p_id: ID }]);
 });
 
@@ -161,6 +161,8 @@ test("RPC 42501 vira permissão, P0002 vira inexistente", async () => {
   expect(await createAutomation({})).toEqual(FORBIDDEN);
   state.rpcError = { code: "P0002" };
   expect(await deleteAutomation(ID)).toEqual({ ok: false, error: "Esta automação não existe mais." });
+  state.rpcError = { code: "22023" };
+  expect(await createAutomation({ templateKey: "welcome_direct" })).toEqual({ ok: false, error: "Não foi possível criar a automação." });
 });
 
 test("pausar, duplicar e excluir chamam as RPCs", async () => {

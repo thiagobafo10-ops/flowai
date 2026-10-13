@@ -15,7 +15,7 @@ export type AutomationRow = {
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Lista com a contagem de execuções dos últimos 7 dias (uma consulta de execuções, agrupada aqui). */
+/** Lista com a contagem de execuções dos últimos 7 dias (RPC agrupada, sujeita ao RLS). */
 export async function listAutomations(orgId: string, now: Date = new Date()): Promise<AutomationRow[]> {
   const supabase = await createServerClient();
   const since = new Date(now.getTime() - WEEK_MS).toISOString();
@@ -25,12 +25,11 @@ export async function listAutomations(orgId: string, now: Date = new Date()): Pr
       .select("id, name, trigger_type, status, updated_at")
       .eq("organization_id", orgId)
       .order("updated_at", { ascending: false }),
-    supabase.from("automation_runs").select("automation_id").eq("organization_id", orgId).gte("created_at", since),
+    supabase.rpc("automation_run_counts", { p_org: orgId, p_since: since }),
   ]);
   if (automations.error) throw automations.error;
   if (runs.error) throw runs.error;
-  const counts = new Map<string, number>();
-  for (const r of runs.data ?? []) counts.set(r.automation_id, (counts.get(r.automation_id) ?? 0) + 1);
+  const counts = new Map<string, number>((runs.data ?? []).map((r) => [r.automation_id, Number(r.runs)]));
   return (automations.data ?? []).map((a) => ({
     id: a.id,
     name: a.name,

@@ -19,6 +19,7 @@ import { loadAutomation, loadGraphRefs } from "./queries";
 import {
   AUTOMATION_ACTIVATE_WITH_ISSUES,
   AUTOMATION_ACTIVE_WITH_ISSUES,
+  AUTOMATION_CREATE_FAILED,
   AUTOMATION_FORBIDDEN,
   AUTOMATION_GONE,
   AUTOMATION_INVALID,
@@ -101,7 +102,7 @@ export async function createAutomation(input: { templateKey?: TemplateKey; name?
     p_trigger_config: triggerConfig as never,
     p_graph: graph as never,
   });
-  if (error) return dbError("create automation failed", error, AUTOMATION_INVALID_NAME);
+  if (error) return dbError("create automation failed", error, AUTOMATION_CREATE_FAILED);
   return { ok: true, data: { id: data as string } };
 }
 
@@ -120,6 +121,8 @@ export async function saveAutomation(input: SaveInput): Promise<ActionResult<{ i
 
   let issues: GraphIssue[];
   try {
+    // O status é lido antes da validação; uma ativação concorrente entre a leitura e a gravação é rara
+    // e, nesse caso, o rascunho recém-ativado é salvo sem a recusa acima (sem mudança de SQL).
     const current = await c.supabase.from("automations").select("status").eq("organization_id", c.orgId).eq("id", id.data).maybeSingle();
     if (current.error) throw current.error;
     if (!current.data) return { ok: false, error: AUTOMATION_GONE };
@@ -141,7 +144,11 @@ export async function saveAutomation(input: SaveInput): Promise<ActionResult<{ i
   return { ok: true, data: { issues } };
 }
 
-export async function activateAutomation(id: string): Promise<ActionResult<{ issues: GraphIssue[] }>> {
+/**
+ * Valida e ativa. `activated` é false (sem chamar a RPC) quando o grafo tem problemas:
+ * nesse caso `issues` traz a lista e o resultado continua `ok: true`.
+ */
+export async function activateAutomation(id: string): Promise<ActionResult<{ activated: boolean; issues: GraphIssue[] }>> {
   const c = await context(WRITE_ROLES);
   if (!("supabase" in c)) return c;
   if (!idSchema.safeParse(id).success) return { ok: false, error: AUTOMATION_INVALID };
@@ -154,10 +161,10 @@ export async function activateAutomation(id: string): Promise<ActionResult<{ iss
   } catch (error) {
     return unexpected("activate automation validation failed", error);
   }
-  if (issues.length > 0) return { ok: true, data: { issues } };
+  if (issues.length > 0) return { ok: true, data: { activated: false, issues } };
   const { error } = await c.supabase.rpc("activate_automation", { p_id: id });
   if (error) return dbError("activate automation failed", error, AUTOMATION_ACTIVATE_WITH_ISSUES);
-  return { ok: true, data: { issues: [] } };
+  return { ok: true, data: { activated: true, issues: [] } };
 }
 
 export async function pauseAutomation(id: string): Promise<ActionResult> {

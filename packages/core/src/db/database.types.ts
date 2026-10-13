@@ -959,6 +959,11 @@ isOneToOne: false
 "automation_button_payloads":
 { Args: { "p_node_id": string,"p_run": string,"p_token": string }; Returns: Json
                            },
+"automation_run_counts":
+{ Args: { "p_org": string,"p_since": string }; Returns: {
+              "automation_id": string,"runs": number
+            }[]
+                           },
 "check_auth_rate_limit":
 { Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },

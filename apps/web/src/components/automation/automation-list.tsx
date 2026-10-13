@@ -10,7 +10,9 @@ import { automationTemplates } from "@flowai/core";
 import {
   activateAutomation, createAutomation, deleteAutomation, duplicateAutomation, pauseAutomation,
 } from "@/lib/automation/actions";
-import { AUTOMATION_STATUS_LABEL, AUTOMATION_TRIGGER_LABEL, TEMPLATE_DESCRIPTIONS } from "@/lib/automation/messages";
+import {
+  AUTOMATION_ACTIVATED, AUTOMATION_DELETED, AUTOMATION_DUPLICATED, AUTOMATION_PAUSED, AUTOMATION_STATUS_LABEL, AUTOMATION_TRIGGER_LABEL, TEMPLATE_DESCRIPTIONS, automationActivateBlocked,
+} from "@/lib/automation/messages";
 import type { AutomationRow } from "@/lib/automation/queries";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,12 +77,12 @@ export function AutomationList({ orgId }: { orgId: string }) {
       if (a.status === "active") {
         const result = await pauseAutomation(a.id);
         if (!result.ok) toast.error(result.error);
-        else toast.success("Automação pausada.");
+        else toast.success(AUTOMATION_PAUSED);
       } else {
         const result = await activateAutomation(a.id);
         if (!result.ok) toast.error(result.error);
-        else if (result.data.issues.length > 0) toast.error("Corrija os erros no editor antes de ativar a automação.");
-        else toast.success("Automação ativada.");
+        else if (!result.data.activated) toast.error(automationActivateBlocked(result.data.issues.length));
+        else toast.success(AUTOMATION_ACTIVATED);
       }
       refresh();
     });
@@ -89,7 +91,7 @@ export function AutomationList({ orgId }: { orgId: string }) {
     startTransition(async () => {
       const result = await duplicateAutomation(a.id);
       if (!result.ok) toast.error(result.error);
-      else toast.success("Automação duplicada.");
+      else toast.success(AUTOMATION_DUPLICATED);
       refresh();
     });
   }
@@ -105,7 +107,7 @@ export function AutomationList({ orgId }: { orgId: string }) {
         refresh();
         return;
       }
-      toast.success("Automação excluída.");
+      toast.success(AUTOMATION_DELETED);
       setDeleting(null);
       refresh();
     });
@@ -184,7 +186,7 @@ export function AutomationList({ orgId }: { orgId: string }) {
                           {a.status === "active" ? <PauseIcon /> : <PlayIcon />}
                           {a.status === "active" ? "Pausar" : "Ativar"}
                         </Button>
-                        <Button type="button" variant="outline" size="sm" aria-label={`Excluir ${a.name}`} onClick={() => { setDeleteError(null); setDeleting(a); }}>
+                        <Button type="button" variant="outline" size="sm" aria-label={`Excluir ${a.name}`} disabled={pending} onClick={() => { setDeleteError(null); setDeleting(a); }}>
                           <Trash2Icon />
                           Excluir
                         </Button>

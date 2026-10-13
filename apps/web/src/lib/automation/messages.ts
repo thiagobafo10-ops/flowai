@@ -31,3 +31,10 @@ export const TEMPLATE_DESCRIPTIONS: Record<string, string> = {
   welcome_direct: "Envia uma mensagem de boas-vindas na primeira conversa.",
   qualify_buttons: "Pergunta com respostas rápidas e transfere quem tem interesse.",
 };
+export const AUTOMATION_CREATE_FAILED = "Não foi possível criar a automação.";
+export const automationActivateBlocked = (count: number) =>
+  count === 1 ? "Corrija 1 erro no editor antes de ativar a automação." : `Corrija ${count} erros no editor antes de ativar a automação.`;
+export const AUTOMATION_ACTIVATED = "Automação ativada.";
+export const AUTOMATION_PAUSED = "Automação pausada.";
+export const AUTOMATION_DUPLICATED = "Automação duplicada.";
+export const AUTOMATION_DELETED = "Automação excluída.";
