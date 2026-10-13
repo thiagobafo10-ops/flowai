@@ -693,14 +693,14 @@ isOneToOne: false
                   ]
                 },"knowledge_documents": {
                   Row: {
-                    "content": string,"created_at": string,"error": string | null,"id": string,"organization_id": string,"status": Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at": string
+                    "chunk_count": number,"content": string,"created_at": string,"error": string | null,"generation": number,"id": string,"organization_id": string,"status": Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "content": string,"created_at"?: string,"error"?: string | null,"id"?: string,"organization_id": string,"status"?: Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at"?: string
+                    "chunk_count"?: number,"content": string,"created_at"?: string,"error"?: string | null,"generation"?: number,"id"?: string,"organization_id": string,"status"?: Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at"?: string
                   }
                   Update: {
-                    "content"?: string,"created_at"?: string,"error"?: string | null,"id"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["knowledge_status"],"title"?: string,"updated_at"?: string
+                    "chunk_count"?: number,"content"?: string,"created_at"?: string,"error"?: string | null,"generation"?: number,"id"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["knowledge_status"],"title"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -927,6 +927,9 @@ isOneToOne: false
 "cleanup_instagram_events":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"complete_index_document":
+{ Args: { "p_chunks": Json,"p_job": string,"p_token": string }; Returns: string
+                           },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
                            },
@@ -1010,6 +1013,14 @@ isOneToOne: false
 "mark_conversation_read":
 { Args: { "p_conversation": string }; Returns: undefined
                            },
+"match_knowledge_chunks":
+{ Args: { "p_embedding": string,"p_k"?: number,"p_min_similarity"?: number,"p_org": string }; Returns: {
+              "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
+            }[]
+                           },
+"prepare_index_document":
+{ Args: { "p_job": string,"p_token": string }; Returns: Json
+                           },
 "prepare_instagram_comment_send":
 { Args: { "p_event_id": string }; Returns: Json
                            },
@@ -1034,6 +1045,9 @@ isOneToOne: false
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
                            },
+"reprocess_knowledge_document":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
 "reselect_instagram_comment_rule":
 { Args: { "p_comment_at": string,"p_event_id": string }; Returns: Json
                            },
@@ -1054,6 +1068,9 @@ isOneToOne: false
                            },
 "save_instagram_contact_name":
 { Args: { "p_event_id": string,"p_name": string }; Returns: undefined
+                           },
+"save_knowledge_document":
+{ Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
                            },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {

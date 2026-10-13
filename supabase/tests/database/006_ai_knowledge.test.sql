@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(45);
 
 select tests.create_user('a@t.test') as ua \gset
 select tests.create_user('b@t.test') as ub \gset
@@ -71,17 +71,18 @@ select is((select count(*)::int from public.ai_agents where organization_id = :'
 select tests.authenticate_as(:'uagent');
 select throws_ok(format($$insert into public.knowledge_documents(organization_id, title, content) values (%L, 't', 'c')$$, :'org_a'), '42501', null, 'agent não insere documento');
 select tests.authenticate_as(:'uadmin');
-select lives_ok(format($$insert into public.knowledge_documents(organization_id, title, content) values (%L, 'Novo', 'texto')$$, :'org_a'), 'admin insere documento');
+select throws_ok(format($$insert into public.knowledge_documents(organization_id, title, content) values (%L, 'Novo', 'texto')$$, :'org_a'), '42501', null, 'admin não insere direto na tabela');
+select lives_ok(format($$select public.save_knowledge_document(%L, null, 'Novo', 'texto')$$, :'org_a'), 'admin cria documento por save_knowledge_document');
 select throws_ok(format($$insert into public.knowledge_documents(organization_id, title, content, status) values (%L, 't', 'c', 'ready')$$, :'org_a'), '42501', null, 'admin não define status na criação');
-select throws_ok(format($$insert into public.knowledge_documents(organization_id, title, content) values (%L, repeat('x', 201), 'c')$$, :'org_a'), '23514', null, 'title > 200 chars falha');
-select throws_ok(format($$insert into public.knowledge_documents(organization_id, title, content) values (%L, 't', repeat('x', 200001))$$, :'org_a'), '23514', null, 'content > 200000 chars falha');
-select lives_ok($$update public.knowledge_documents set title = 'Novo 2', content = 'texto 2' where title like 'Novo%'$$, 'admin edita título e conteúdo');
+select throws_ok(format($$select public.save_knowledge_document(%L, null, repeat('x', 201), 'c')$$, :'org_a'), '22023', null, 'title > 200 chars falha');
+select throws_ok(format($$select public.save_knowledge_document(%L, null, 't', repeat('x', 200001))$$, :'org_a'), '22023', null, 'content > 200000 chars falha');
+select lives_ok(format($$select public.save_knowledge_document(%L, (select id from public.knowledge_documents where title like 'Novo%%'), 'Novo 2', 'texto 2')$$, :'org_a'), 'admin edita título e conteúdo por save_knowledge_document');
 select throws_ok($$update public.knowledge_documents set status = 'ready' where title like 'Novo%'$$, '42501', null, 'admin não altera status (worker)');
 select throws_ok($$update public.knowledge_documents set error = 'x' where title like 'Novo%'$$, '42501', null, 'admin não altera error (worker)');
 select tests.clear_authentication();
 select is((select status::text from public.knowledge_documents where title like 'Novo%'), 'processing', 'status padrão processing');
 select tests.authenticate_as(:'uagent');
-update public.knowledge_documents set title = 'Hack' where title like 'Novo%';
+select throws_ok($$update public.knowledge_documents set title = 'Hack' where title like 'Novo%'$$, '42501', null, 'agent não edita documento direto');
 select tests.clear_authentication();
 select is((select title from public.knowledge_documents where title like 'Novo%'), 'Novo 2', 'agent não edita documento');
 select tests.authenticate_as(:'uview');
