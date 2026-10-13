@@ -143,6 +143,50 @@ select is(private.automation_render_null_name(E'Oi, {nome}!\n{primeiro_nome} olÃ
 delete from public.contacts where organization_id=:'oa' and instagram_id='944';
 select is((select payload from public.instagram_events where id=:'buttonid'),'{"purged":true}'::jsonb,'contact deletion purges button raw payload');
 select is((select status::text from public.automation_runs where id=:'run'),'cancelled','contact deletion cancels frozen comment execution');
+-- Deterministic A -> stop -> B transition: A's signed title must never resume B.
+select (select conversation_id from public.automation_runs where id=(select automation_run_id from public.instagram_send_intents where id=:'si')) as scopeconv \gset
+select tests.authenticate_as(:'ua');
+select public.stop_automation(:'scopeconv');
+select tests.clear_authentication();
+select pg_temp.comment_intent(:'conn','scopeB42','952') as bi \gset
+select public.claim_instagram_send(:'bi') as bc \gset
+select public.complete_instagram_send(:'bi',jsonb_build_object('claimToken',:'bc'::jsonb->>'claimToken','state','sent','externalId','privateScopeB42','recipientId','952'));
+select (select automation_run_id from public.instagram_send_intents where id=:'bi') as brun \gset
+select is(public.ingest_inbound_message(:'chan','stale7arg42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'7-arg stale A payload rejected while B waits');
+select is((select input from public.automation_runs where id=:'brun'),null::jsonb,'stale signed A title does not resume B');
+select is((select count(*)::int from public.messages where external_id='stale7arg42'),0,'rejected stale context creates no inbound');
+select is(public.ingest_inbound_message(:'chan','forged7arg42','952',null,'Sim',now(),'{"origin":"quick_reply","payload":"forged"}'),null::uuid,'7-arg forged quick-reply title rejected');
+select is((select input from public.automation_runs where id=:'brun'),null::jsonb,'forged context does not resume B');
+insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,external_id,context)
+ values(:'oa',:'scopeconv',:'chan','inbound','contact','Sim','delivered','rawStale42',jsonb_build_object('origin','button','payload',:'spayload'));
+select is((select input from public.automation_runs where id=:'brun'),null::jsonb,'shared trigger independently rejects stale A payload while B waits');
+select public.ingest_inbound_message(:'chan','typedB42','952',null,'Sim',now(),'{}');
+select is((select input->>'text' from public.automation_runs where id=:'brun'),'Sim','ordinary typed title still resumes B');
+select is((select input->>'optionId' from public.automation_runs where id=:'brun'),null::text,'ordinary typed title remains a text reply');
+select tests.authenticate_as(:'ua');
+select public.stop_automation(:'scopeconv');
+select tests.clear_authentication();
+insert into public.ai_agents(organization_id,name,personality,objective,tone,system_prompt,is_active,auto_reply)
+  values(:'oa','AI','Cordiale','Atender','cordial','Responda',true,true);
+update public.conversations set handled_by='ai' where id=:'scopeconv';
+insert into public.automations(organization_id,name,status,trigger_type,trigger_config,current_version,activated_at)
+ values(:'oa','Other flow','active','keyword_detected','{"keywords":["Sim"],"mode":"equals"}',1,now()) returning id as otherflow \gset
+insert into public.automation_versions(organization_id,automation_id,version,trigger_type,trigger_config,graph)
+ values(:'oa',:'otherflow',1,'keyword_detected','{"keywords":["Sim"],"mode":"equals"}','{"nodes":[{"id":"00000000-0000-4000-8000-000000004251","type":"trigger","config":{}}],"edges":[]}');
+select is(public.ingest_inbound_message(:'chan','staleNoRun42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'stale context with no waiting run is ignored');
+select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),0,'stale context cannot trigger another keyword flow');
+select is((select count(*)::int from public.ai_jobs where conversation_id=:'scopeconv'),0,'stale context cannot enqueue AI');
+insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,external_id,context)
+ values(:'oa',:'scopeconv',:'chan','inbound','contact','Sim','delivered','rawForged42','{"origin":"button","payload":"forged"}');
+select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),0,'shared trigger cannot dispatch keyword flow for invalid supplied context');
+select is((select count(*)::int from public.ai_jobs where conversation_id=:'scopeconv'),0,'AI trigger independently ignores invalid supplied context');
+insert into public.automations(organization_id,name,status,trigger_type,current_version,activated_at)
+ values(:'oa','Contact flow','active','contact_created',1,now()) returning id as contactflow \gset
+insert into public.automation_versions(organization_id,automation_id,version,trigger_type,graph)
+ values(:'oa',:'contactflow',1,'contact_created','{"nodes":[{"id":"00000000-0000-4000-8000-000000004252","type":"trigger","config":{}}],"edges":[]}');
+select is(public.ingest_inbound_message(:'chan','newForged42','989',null,'Sim',now(),'{"origin":"button","payload":"forged"}'),null::uuid,'forged context for unknown sender ignored before contact creation');
+select is((select count(*)::int from public.contacts where organization_id=:'oa' and instagram_id='989'),0,'forged context creates no contact');
+select is((select count(*)::int from public.automation_runs where automation_id=:'contactflow'),0,'forged context cannot trigger CRM flow');
 select tests.authenticate_as(:'ua');
 select throws_ok(format('insert into public.instagram_comment_rules(organization_id,channel_id,keyword,reply_text) values(%L,%L,''x'',''x'')',:'oa',:'chan'),'42501',null,'legacy insert actually denied');
 select throws_ok(format('update public.instagram_comment_rules set active=false where id=%L',:'auto'),'42501',null,'legacy update actually denied');

@@ -31,7 +31,7 @@ language plpgsql as $$
 declare g jsonb := jsonb_build_object(
   'nodes', jsonb_build_array(
     jsonb_build_object('id', pg_temp.nid(p_id,'t'), 'type','trigger','config','{}'::jsonb,'position','{"x":0,"y":0}'::jsonb),
-    jsonb_build_object('id', pg_temp.nid(p_id,'w'), 'type','message','config','{"mode":"text","text":"Oi"}'::jsonb,'position','{"x":0,"y":0}'::jsonb)),
+    jsonb_build_object('id', pg_temp.nid(p_id,'w'), 'type','message','config','{"mode":"text","text":"Oi","quickReplies":[{"id":"sim","title":"Sim"}]}'::jsonb,'position','{"x":0,"y":0}'::jsonb)),
   'edges', jsonb_build_array(jsonb_build_object('id', pg_temp.nid(p_id,'e'), 'source', pg_temp.nid(p_id,'t'),
     'target', pg_temp.nid(p_id,'w'), 'sourceHandle','default')));
 begin
@@ -136,13 +136,13 @@ select pg_temp.ingest('t1','+5540000000030','promoção') as mt1 \gset
 select pg_temp.run_of(pg_temp.conv_of(:'mt1')) as rt1 \gset
 select pg_temp.wait(:'rt1');
 select pg_temp.ingest('t1b','+5540000000030','Sim',jsonb_build_object('payload',left(:'pay', length(:'pay')-1) || 'x'));
-select is((select input from public.automation_runs where id=:'rt1'),'{"text": "Sim", "optionId": null}'::jsonb,'payload adulterado: optionId null');
+select is((select input from public.automation_runs where id=:'rt1'),null::jsonb,'payload adulterado: não retoma por título');
 select pg_temp.wait(:'rt1');
 select pg_temp.ingest('t1c','+5540000000030','Sim',jsonb_build_object('payload',:'pay'));
-select is((select input->'optionId' from public.automation_runs where id=:'rt1'),'null'::jsonb,'payload de outra execução: optionId null');
+select is((select input from public.automation_runs where id=:'rt1'),null::jsonb,'payload de outra execução: ignorado');
 select pg_temp.wait(:'rt1');
 select pg_temp.ingest('t1d','+5540000000030','Sim',jsonb_build_object('payload',private.automation_payload(:'rt1', pg_temp.nid(:'k1','t'), 'sim')));
-select is((select input->'optionId' from public.automation_runs where id=:'rt1'),'null'::jsonb,'payload de outro nó: optionId null');
+select is((select input from public.automation_runs where id=:'rt1'),null::jsonb,'payload de outro nó: ignorado');
 select pg_temp.wait(:'rt1');
 select pg_temp.ingest('t1e','+5540000000030','Sim',jsonb_build_object('payload',private.automation_payload(:'rt1', pg_temp.nid(:'k1','w'), 'sim')));
 select is((select input->>'optionId' from public.automation_runs where id=:'rt1'),'sim','payload da própria execução: optionId resolvido');
