@@ -1,7 +1,10 @@
 // Targets that mean the assistant's own prompt/instructions (not e.g. "instrucoes de montagem").
 const OWN = String.raw`(?:(?:seu|sua|suas|seus|your|its)\s+(?:system\s+|initial\s+|original\s+)?(?:prompt|instrucoes|regras|instructions|rules)|(?:o\s+|the\s+)?(?:system|initial|original)\s+(?:prompt|instructions)|(?:as\s+)?instrucoes\s+(?:do\s+sistema|iniciais|internas)|(?:o\s+)?prompt(?:\s+do\s+sistema)?)\b`;
 // Same idea for ignore/forget/disregard: the object must be the assistant's own rules.
-const RULES_OBJ = String.raw`(?:(?:(?:as|os|all|any|the)\s+)*(?:suas|seus|sua|seu|your)\s+(?:instrucoes|regras|diretrizes|ordens|prompt|instructions|rules|guidelines)|(?:(?:as|os|all|any|the)\s+)*(?:instrucoes|regras|diretrizes|ordens)\s+(?:anteriores|acima|do\s+sistema|iniciais|internas)|(?:(?:all|any|the)\s+)*(?:previous|prior|above|earlier|system)\s+(?:instructions|rules|prompts?|guidelines)|(?:all\s+)?(?:instructions|rules)\s+(?:above|before)|(?:o\s+)?(?:system\s+prompt|prompt\s+do\s+sistema))`;
+const Q = String.raw`(?:(?:todas|todos|all)\s+)?(?:(?:as|os|of|the|any)\s+)*`;
+const NOUN = String.raw`(?:instrucoes|regras|diretrizes|ordens|prompts?|instructions|rules|guidelines)`;
+const MOD = String.raw`(?:(?:previous|prior|earlier|above|anteriores|anterior)\s+)?`;
+const RULES_OBJ = String.raw`(?:${Q}(?:suas|seus|sua|seu|your)\s+${MOD}${NOUN}|${Q}(?:previous|prior|earlier|above|system)\s+${NOUN}|${Q}${NOUN}\s+(?:anteriores|acima|above|do\s+sistema|iniciais|internas)|(?:everything|tudo)\s+(?:above|acima|anterior)|tudo\s+o\s+que\s+(?:te\s+)?(?:disseram|falaram|disse|falei)\s+antes|(?:todas|todos|all)\s+(?:(?:as|os|of\s+the|the)\s+)?(?:instrucoes|regras|instructions|rules)|(?:o\s+)?(?:system\s+prompt|prompt\s+do\s+sistema))`;
 const NOT_QUESTION = String.raw`(?![^.!\n]*\?)`;
 
 const ZERO_WIDTH = new RegExp(`[${String.fromCharCode(0x200b)}-${String.fromCharCode(0x200d)}${String.fromCharCode(0xfeff)}]`, "g");
