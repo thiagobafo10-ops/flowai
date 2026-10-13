@@ -381,6 +381,44 @@ begin
   return null;
 end $$;
 
+-- ---------------------------------------------------------------- anti-loop de eventos de CRM
+-- O apply_automation_step (Task 7) liga `flowai.automation_actor` (set_config(..., 'on', true)) na
+-- transação em que aplica um passo; eventos emitidos nela ficam com actor_type='automation' e o
+-- disparo (automation_crm_event) os ignora.
+create function private.automation_actor_on() returns boolean
+language sql stable set search_path = '' as $$
+  select coalesce(current_setting('flowai.automation_actor', true), '') = 'on';
+$$;
+
+create or replace function public.emit_event(
+  p_org uuid,
+  p_type text,
+  p_conversation_id uuid,
+  p_contact_id uuid,
+  p_deal_id uuid,
+  p_payload jsonb default '{}'
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_automation boolean := private.automation_actor_on();
+begin
+  insert into public.events (
+    organization_id, type, conversation_id, contact_id, deal_id,
+    actor_type, actor_id, payload
+  ) values (
+    p_org, p_type, p_conversation_id, p_contact_id, p_deal_id,
+    case when v_automation then 'automation' when v_uid is null then 'system' else 'user' end,
+    case when v_automation then null else v_uid end,
+    coalesce(p_payload, '{}'::jsonb)
+  );
+end;
+$$;
+
 -- ---------------------------------------------------------------- evento tag_added
 create function public.trg_contact_tags_emit_tag_added() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -502,6 +540,14 @@ begin
              or v.trigger_config ->> v_key = v_value)
       order by a.activated_at nulls last, a.id
   loop
+    -- uma execução ativa por conversa: com a conversa ocupada, nada é registrado
+    if v_conv is not null and exists (select 1 from public.automation_runs r
+        join public.conversations c on c.id = v_conv
+        where r.organization_id = new.organization_id
+          and (r.conversation_id = v_conv or r.id = c.automation_run_id)
+          and r.status in ('pending', 'running', 'waiting')) then
+      continue;
+    end if;
     v_run := private.automation_start_run(auto, new.id, v_conv, new.contact_id);
     if v_run is not null and v_conv is not null then
       perform private.automation_link_run(v_conv, v_run);
@@ -511,7 +557,8 @@ begin
 end $$;
 
 create trigger automation_crm_event after insert on public.events
-  for each row when (new.type in ('contact_created', 'tag_added', 'deal_created', 'deal_stage_changed'))
+  for each row when (new.type in ('contact_created', 'tag_added', 'deal_created', 'deal_stage_changed')
+    and new.actor_type <> 'automation')
   execute function private.automation_crm_event();
 
 -- ---------------------------------------------------------------- cancelamento
@@ -575,6 +622,7 @@ end $$;
 -- ---------------------------------------------------------------- grants
 revoke all on function
   private.automation_normalize(text),
+  private.automation_actor_on(),
   private.automation_keyword_matches(text, jsonb),
   private.automation_payload(uuid, uuid, text),
   private.automation_verify_payload(text),

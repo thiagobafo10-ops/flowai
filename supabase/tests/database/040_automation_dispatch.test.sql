@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(92);
+select plan(102);
 select tests.create_user('owner40@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent40@t.test','Beto Agente') as uag \gset
 select tests.create_user('viewer40@t.test','Vera Viewer') as uv \gset
@@ -302,6 +302,37 @@ select is((select count(*)::int from public.messages where conversation_id=:'cx1
   and content='Automação interrompida por Beto Agente'),1,'mensagem de sistema com o nome do agente');
 select pg_temp.ingest('x2','+5540000000091','oi');
 select is(pg_temp.jobs(:'cx1'),1,'depois de parar, a IA volta a responder');
+
+-- =============================================================== uma execução ativa por conversa (CRM)
+select pg_temp.pause_all();
+select pg_temp.mk('00000000-0000-0000-0000-0000000040a9',:'oa','keyword_detected','{"keywords":["ocupado"],"mode":"contains"}') as busy \gset
+select pg_temp.ingest('b1','+5540000000095','estou ocupado') as mb1 \gset
+select pg_temp.conv_of(:'mb1') as cb1 \gset
+select contact_id as kb1 from public.conversations where id=:'cb1' \gset
+select pg_temp.mk('00000000-0000-0000-0000-0000000040b1',:'oa','tag_added','{"tagId":null}') as tany1 \gset
+select pg_temp.mk('00000000-0000-0000-0000-0000000040b2',:'oa','tag_added','{"tagId":null}') as tany2 \gset
+insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa',:'kb1','00000000-0000-0000-0000-000000004011');
+select is((select count(*)::int from public.automation_runs where automation_id in (:'tany1',:'tany2')),0,'CRM: conversa com execução ativa não ganha outra execução');
+select is(pg_temp.runs(:'cb1'),1,'CRM: continua uma execução ativa na conversa');
+update public.automation_runs set status='completed' where conversation_id=:'cb1';
+update public.conversations set automation_run_id=null where id=:'cb1';
+insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa',:'kb1','00000000-0000-0000-0000-000000004012');
+select is((select count(*)::int from public.automation_runs where automation_id in (:'tany1',:'tany2') and conversation_id=:'cb1'),1,'CRM: conversa livre ganha só uma execução (a mais antiga)');
+select is((select automation_id from public.automation_runs where conversation_id=:'cb1' and status='pending'),:'tany1'::uuid,'CRM: a automação de menor id vence o empate');
+insert into public.contacts(id,organization_id,name) values ('00000000-0000-0000-0000-000000004033',:'oa','Sem conversa');
+insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa','00000000-0000-0000-0000-000000004033','00000000-0000-0000-0000-000000004011');
+select is((select count(*)::int from public.automation_runs where contact_id='00000000-0000-0000-0000-000000004033' and conversation_id is null),2,'CRM: sem conversa, todas as automações casadas criam execução');
+
+-- =============================================================== anti-loop de eventos de CRM
+select ok(not private.automation_actor_on(),'automation_actor desligado por padrão');
+select set_config('flowai.automation_actor','on',true);
+select ok(private.automation_actor_on(),'automation_actor ligado');
+insert into public.contacts(id,organization_id,name) values ('00000000-0000-0000-0000-000000004034',:'oa','Loop');
+insert into public.contact_tags(organization_id,contact_id,tag_id) values (:'oa','00000000-0000-0000-0000-000000004034','00000000-0000-0000-0000-000000004011');
+select is((select actor_type from public.events where type='tag_added' and contact_id='00000000-0000-0000-0000-000000004034'),'automation','evento emitido sob automação tem actor_type automation');
+select is((select count(*)::int from public.automation_runs where contact_id='00000000-0000-0000-0000-000000004034'),0,'evento de automação não dispara automações');
+select set_config('flowai.automation_actor','',true);
+select ok(not private.automation_actor_on(),'automation_actor desligado de novo');
 
 select * from finish();
 rollback;
