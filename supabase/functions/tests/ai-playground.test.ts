@@ -93,3 +93,65 @@ Deno.test("provider failure is ai_failure", async () => {
   const response = await handleAiPlayground(f.request(test()), f.deps);
   assert(response.status === 200); assert((await response.json()).error === "ai_failure");
 });
+
+Deno.test("null agent is agent_not_configured without quota or provider", async () => {
+  const f = fixture(); f.deps.prepare = async () => { f.calls.prepare++; return { agent: null, company: "x", stages: [] } as never; };
+  const response = await handleAiPlayground(f.request(test()), f.deps);
+  assert(response.status === 200); assert((await response.json()).error === "agent_not_configured");
+  assert(f.calls.consume === 0 && f.openai.calls.length === 0);
+});
+
+Deno.test("null company defaults to empty and still runs", async () => {
+  const f = fixture(); const base = f.deps.prepare;
+  f.deps.prepare = async () => ({ ...(await base("x"))!, company: null as never });
+  const response = await handleAiPlayground(f.request(test()), f.deps);
+  assert(response.status === 200); assert((await response.json()).decision.handoff === false);
+});
+
+Deno.test("pipeline gets the fixed test contact and the simulator channel", async () => {
+  const f = fixture(); await handleAiPlayground(f.request(test()), f.deps);
+  const system = JSON.stringify(f.openai.calls.filter((c) => c.path === "/chat/completions").map((c) => c.body.messages[0].content));
+  assert(system.includes("Nome: Contato de teste") && system.includes("Tags: nenhuma") && system.includes("Etapa atual: nenhuma") && system.includes("Lead score: n/d"));
+  assert(system.includes("até 4000 caracteres"));
+});
+
+Deno.test("42501 from prepare or consume is 403", async () => {
+  const a = fixture(); a.deps.prepare = async () => { throw Object.assign(new Error("x"), { code: "42501" }); };
+  assert((await handleAiPlayground(a.request(test()), a.deps)).status === 403);
+  const b = fixture(); b.deps.consumeTest = async () => { throw Object.assign(new Error("x"), { code: "42501" }); };
+  assert((await handleAiPlayground(b.request(test()), b.deps)).status === 403);
+});
+
+Deno.test("prepare null is 403", async () => {
+  const f = fixture(); f.deps.prepare = async () => null;
+  assert((await handleAiPlayground(f.request(test()), f.deps)).status === 403); assert(f.calls.consume === 0);
+});
+
+Deno.test("non-POST is 405", async () => {
+  const f = fixture();
+  assert((await handleAiPlayground(new Request("http://x/", { method: "GET" }), f.deps)).status === 405);
+});
+
+Deno.test("oversized body is 413", async () => {
+  const f = fixture();
+  const response = await handleAiPlayground(new Request("http://x/", { method: "POST", headers: { Authorization: "Bearer jwt" }, body: "x".repeat(70000) }), f.deps);
+  assert(response.status === 413);
+});
+
+Deno.test("invalid action and invalid organizationId are 400", async () => {
+  const f = fixture();
+  assert((await handleAiPlayground(f.request({ action: "nope" }), f.deps)).status === 400);
+  assert((await handleAiPlayground(f.request({ action: "status", organizationId: "not-a-uuid" }), f.deps)).status === 400);
+});
+
+Deno.test("1001-char message is 400", async () => {
+  const f = fixture();
+  const response = await handleAiPlayground(f.request(test("a".repeat(1001))), f.deps);
+  assert(response.status === 400); assert(f.calls.consume === 0);
+});
+
+Deno.test("provider failure consumed quota exactly once", async () => {
+  const f = fixture(); f.deps.provider = createOpenAIProvider({ apiKey: "key", fetch: createFakeOpenAIFetch({ onCall: () => ({ status: 500 }) }) });
+  await handleAiPlayground(f.request(test()), f.deps);
+  assert(f.calls.consume === 1);
+});

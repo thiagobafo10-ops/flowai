@@ -3,8 +3,8 @@ import { BodyTooLarge, readLimitedBody } from "../_shared/http.ts";
 import { AIProviderError, HANDOFF_LABELS, playgroundInputSchema, runReplyPipeline, type AIProvider, type KnowledgeHit } from "../../../packages/core/src/ai/index.ts";
 
 export type PlaygroundContext = {
-  agent: { name: string; personality: string; objective: string; tone: string; systemPrompt: string; humanHandoff?: boolean };
-  company: string;
+  agent: { name: string; personality: string; objective: string; tone: string; systemPrompt: string; humanHandoff?: boolean } | null;
+  company: string | null;
   stages: string[];
 };
 export type AiPlaygroundDeps = {
@@ -28,6 +28,7 @@ export async function handleAiPlayground(request: Request, deps: AiPlaygroundDep
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   if (!request.headers.get("authorization")?.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
   try {
+    // The body is parsed before auth because authorize needs the organizationId from it.
     let input: Record<string, unknown>;
     try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(request, 65536))); }
     catch (error) { return error instanceof BodyTooLarge ? json({ error: "body_too_large" }, 413) : json({ error: "invalid_input" }, 400); }
@@ -44,14 +45,15 @@ export async function handleAiPlayground(request: Request, deps: AiPlaygroundDep
     if (!deps.configured) return json({ error: "not_configured" });
     const context = await deps.prepare(orgId);
     if (!context) return json({ error: "forbidden" }, 403);
+    if (!context.agent) return json({ error: "agent_not_configured" });
     if (!await deps.consumeTest(orgId)) return json({ error: "quota_exceeded" });
     try {
       const result = await runReplyPipeline(
-        { agent: context.agent, company: context.company, contact: { name: "Contato de teste", tags: [], stage: null, leadScore: null }, stages: context.stages, conversation: parsed.data.messages.map((m) => ({ role: m.role, text: m.text })), channelType: "simulator" },
+        { agent: context.agent, company: context.company ?? "", contact: { name: "Contato de teste", tags: [], stage: null, leadScore: null }, stages: context.stages, conversation: parsed.data.messages.map((m) => ({ role: m.role, text: m.text })), channelType: "simulator" },
         { provider: deps.provider, chatModel: deps.chatModel, searchKnowledge: (embedding) => deps.searchKnowledge(orgId, embedding) },
       );
       const decision = result.decision.handoff
-        ? { handoff: true, reason: result.decision.reason, label: HANDOFF_LABELS[result.decision.reason], ...(result.decision.detail ? { detail: result.decision.detail } : {}) }
+        ? { handoff: true, reason: result.decision.reason, label: HANDOFF_LABELS[result.decision.reason] ?? result.decision.reason, ...(result.decision.detail ? { detail: result.decision.detail } : {}) }
         : { handoff: false };
       return json({ reply: result.reply, classification: result.classification, hits: result.hits, usedChunkIds: result.usedChunkIds, factCheck: result.factCheck, decision });
     } catch (error) {
