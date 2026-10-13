@@ -15,13 +15,14 @@ import {
 import { activateAutomation, pauseAutomation, saveAutomation } from "@/lib/automation/actions";
 import {
   AUTOMATION_ACTIVATED, AUTOMATION_ACTIVE_WITH_ISSUES, AUTOMATION_GONE, AUTOMATION_LOAD_FAILED, AUTOMATION_PAUSED, AUTOMATION_SAVED,
-  AUTOMATION_STATUS_LABEL, automationActivateBlocked,
+  AUTOMATION_REFRESH_FAILED, AUTOMATION_STATUS_LABEL, automationActivateBlocked,
 } from "@/lib/automation/messages";
 import type { AutomationStatus, EditorRefs } from "@/lib/automation/queries";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { connectEdge, fromFlow, pruneEdges, setNodeConfig, toFlow, type FlowEdge, type FlowNode } from "./graph-mapping";
+import { editorView } from "./editor-view";
 import { presentIssues } from "./issue-copy";
 import { NodePanel } from "./node-panel";
 import { PALETTE_MIME, Palette } from "./palette";
@@ -76,10 +77,11 @@ export function AutomationEditor({ orgId, id }: { orgId: string; id: string }) {
     retry: (count, error) => !(error instanceof NotFoundError) && count < 2,
   });
 
-  if (query.isPending) {
+  const view = editorView({ data: query.data, isError: query.isError });
+  if (view === "loading") {
     return <div aria-busy="true" aria-label="Carregando automação" className="h-[calc(100dvh-3.5rem)] animate-pulse bg-muted/40" />;
   }
-  if (query.isError) {
+  if (view === "error" || query.data === undefined) {
     const gone = query.error instanceof NotFoundError;
     return (
       <div role="alert" className="m-6 flex flex-col items-start gap-3 rounded-xl border p-6">
@@ -211,7 +213,10 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ["automations", orgId] });
     // Atualiza versão/refs exibidas; o grafo local não é sobrescrito (o estado é copiado só na montagem).
-    void client.invalidateQueries({ queryKey: ["automation", orgId, automation.id] });
+    // Se a recarga falhar, o editor continua com os dados que tem (ver editorView); só avisamos.
+    client
+      .invalidateQueries({ queryKey: ["automation", orgId, automation.id] }, { throwOnError: true })
+      .catch(() => toast.error(AUTOMATION_REFRESH_FAILED));
   };
   async function persist(): Promise<boolean> {
     const at = current;
