@@ -56,6 +56,12 @@ isOneToOne: true
                   }
                   Relationships: [
                     {
+      foreignKeyName: "ai_classifications_message_conversation_fk"
+      columns: ["organization_id","conversation_id","message_id"]
+isOneToOne: false
+      referencedRelation: "messages"
+      referencedColumns: ["organization_id","conversation_id","id"]
+    },{
       foreignKeyName: "ai_classifications_organization_id_conversation_id_fkey"
       columns: ["organization_id","conversation_id"]
 isOneToOne: false
@@ -73,6 +79,58 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "messages"
       referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"ai_jobs": {
+                  Row: {
+                    "attempts": number,"claim_token": string | null,"claimed_until": string | null,"conversation_id": string | null,"created_at": string,"document_generation": number | null,"document_id": string | null,"id": string,"kind": string,"last_error": string | null,"organization_id": string,"run_after": string,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"claim_token"?: string | null,"claimed_until"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"document_generation"?: number | null,"document_id"?: string | null,"id"?: string,"kind": string,"last_error"?: string | null,"organization_id": string,"run_after"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "attempts"?: number,"claim_token"?: string | null,"claimed_until"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"document_generation"?: number | null,"document_id"?: string | null,"id"?: string,"kind"?: string,"last_error"?: string | null,"organization_id"?: string,"run_after"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_jobs_organization_id_conversation_id_fkey"
+      columns: ["organization_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "ai_jobs_organization_id_document_id_fkey"
+      columns: ["organization_id","document_id"]
+isOneToOne: false
+      referencedRelation: "knowledge_documents"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "ai_jobs_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ai_usage_daily": {
+                  Row: {
+                    "day": string,"organization_id": string,"replies": number,"tests": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "day": string,"organization_id": string,"replies"?: number,"tests"?: number
+                  }
+                  Update: {
+                    "day"?: string,"organization_id"?: string,"replies"?: number,"tests"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_usage_daily_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
     }
                   ]
                 },"audit_logs": {
@@ -373,14 +431,14 @@ isOneToOne: false
                   ]
                 },"conversations": {
                   Row: {
-                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
+                    "assigned_to": string | null,"channel_id": string,"closed_at": string | null,"contact_id": string,"created_at": string,"handled_by": Database["public"]['Enums']["handler_type"],"handoff_reason": string | null,"id": string,"intent": string | null,"last_message_at": string,"last_read_at": string | null,"organization_id": string,"sentiment": string | null,"status": Database["public"]['Enums']["conversation_status"],"summary": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id": string,"closed_at"?: string | null,"contact_id": string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id": string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
+                    "assigned_to"?: string | null,"channel_id"?: string,"closed_at"?: string | null,"contact_id"?: string,"created_at"?: string,"handled_by"?: Database["public"]['Enums']["handler_type"],"handoff_reason"?: string | null,"id"?: string,"intent"?: string | null,"last_message_at"?: string,"last_read_at"?: string | null,"organization_id"?: string,"sentiment"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"summary"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -641,14 +699,14 @@ isOneToOne: false
                   ]
                 },"knowledge_documents": {
                   Row: {
-                    "content": string,"created_at": string,"error": string | null,"id": string,"organization_id": string,"status": Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at": string
+                    "chunk_count": number,"content": string,"created_at": string,"error": string | null,"generation": number,"id": string,"organization_id": string,"status": Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "content": string,"created_at"?: string,"error"?: string | null,"id"?: string,"organization_id": string,"status"?: Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at"?: string
+                    "chunk_count"?: number,"content": string,"created_at"?: string,"error"?: string | null,"generation"?: number,"id"?: string,"organization_id": string,"status"?: Database["public"]['Enums']["knowledge_status"],"title": string,"updated_at"?: string
                   }
                   Update: {
-                    "content"?: string,"created_at"?: string,"error"?: string | null,"id"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["knowledge_status"],"title"?: string,"updated_at"?: string
+                    "chunk_count"?: number,"content"?: string,"created_at"?: string,"error"?: string | null,"generation"?: number,"id"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["knowledge_status"],"title"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -687,14 +745,14 @@ isOneToOne: false
                   ]
                 },"messages": {
                   Row: {
-                    "channel_id": string,"content": string,"content_type": string,"context": NonNullable<Json>,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
+                    "ai_metadata": Json | null,"channel_id": string,"content": string,"content_type": string,"context": NonNullable<Json>,"conversation_id": string,"created_at": string,"direction": Database["public"]['Enums']["message_direction"],"error": string | null,"external_id": string | null,"id": string,"is_internal_note": boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id": string | null,"status": Database["public"]['Enums']["message_status"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "channel_id": string,"content": string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "ai_metadata"?: Json | null,"channel_id": string,"content": string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"direction": Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id": string,"sender_type": Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Update: {
-                    "channel_id"?: string,"content"?: string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
+                    "ai_metadata"?: Json | null,"channel_id"?: string,"content"?: string,"content_type"?: string,"context"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"direction"?: Database["public"]['Enums']["message_direction"],"error"?: string | null,"external_id"?: string | null,"id"?: string,"is_internal_note"?: boolean,"organization_id"?: string,"sender_type"?: Database["public"]['Enums']["sender_type"],"sender_user_id"?: string | null,"status"?: Database["public"]['Enums']["message_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -857,11 +915,17 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "check_auth_rate_limit":
+            "ai_quota":
+{ Args: { "p_org": string }; Returns: Json
+                           },
+"check_auth_rate_limit":
 { Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },
 "check_rate_limit":
 { Args: { "p_key": string,"p_limit": number,"p_window_seconds": number }; Returns: boolean
+                           },
+"claim_ai_jobs":
+{ Args: { "p_limit": number }; Returns: Json
                            },
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
@@ -869,11 +933,23 @@ isOneToOne: false
 "cleanup_instagram_events":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"complete_ai_reply":
+{ Args: { "p_job": string,"p_result": Json,"p_token": string }; Returns: Json
+                           },
+"complete_index_document":
+{ Args: { "p_chunks": Json,"p_job": string,"p_token": string }; Returns: string
+                           },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
                            },
+"configure_ai_worker":
+{ Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
+                           },
 "configure_instagram_worker":
 { Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
+                           },
+"consume_ai_quota":
+{ Args: { "p_kind": string,"p_org": string }; Returns: boolean
                            },
 "create_instagram_send_intent":
 { Args: { "p_conversation_id": string,"p_request_id": string,"p_text": string }; Returns: string
@@ -893,14 +969,23 @@ isOneToOne: false
 "disconnect_instagram_connection":
 { Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: undefined
                            },
+"dispatch_ai_worker":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
                            },
+"fail_ai_job":
+{ Args: { "p_error_code": string,"p_job": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
+                           },
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
+                           },
+"handoff_ai_job":
+{ Args: { "p_job": string,"p_reason": string,"p_token": string }; Returns: Json
                            },
 "has_role":
 { Args: { "p_min": Database["public"]['Enums']["org_role"],"p_org": string }; Returns: boolean
@@ -940,11 +1025,28 @@ isOneToOne: false
 "mark_conversation_read":
 { Args: { "p_conversation": string }; Returns: undefined
                            },
+"match_knowledge_chunks":
+{ Args: { "p_embedding": string,"p_k"?: number,"p_min_similarity"?: number,"p_org": string }; Returns: {
+              "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
+            }[]
+                           },
+"prepare_ai_playground":
+{ Args: { "p_org": string }; Returns: Json
+                           },
+"prepare_ai_reply":
+{ Args: { "p_job": string,"p_token": string }; Returns: Json
+                           },
+"prepare_index_document":
+{ Args: { "p_job": string,"p_token": string }; Returns: Json
+                           },
 "prepare_instagram_comment_send":
 { Args: { "p_event_id": string }; Returns: Json
                            },
 "prepare_instagram_profile":
 { Args: { "p_event_id": string }; Returns: Json
+                           },
+"read_ai_worker_config":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "read_instagram_work":
 { Args: { "p_limit": number }; Returns: Json
@@ -961,11 +1063,17 @@ isOneToOne: false
 "reorder_stages":
 { Args: { "p_pipeline": string,"p_stage_ids": (string)[] }; Returns: undefined
                            },
+"reprocess_knowledge_document":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
 "reselect_instagram_comment_rule":
 { Args: { "p_comment_at": string,"p_event_id": string }; Returns: Json
                            },
 "retry_instagram_send_intent":
 { Args: { "p_message_id": string }; Returns: string
+                           },
+"return_to_ai":
+{ Args: { "p_conversation": string }; Returns: undefined
                            },
 "role_rank":
 { Args: { "r": Database["public"]['Enums']["org_role"] }; Returns: number
@@ -981,6 +1089,9 @@ isOneToOne: false
                            },
 "save_instagram_contact_name":
 { Args: { "p_event_id": string,"p_name": string }; Returns: undefined
+                           },
+"save_knowledge_document":
+{ Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
                            },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
@@ -998,6 +1109,9 @@ isOneToOne: false
                            },
 "slugify":
 { Args: { "p": string }; Returns: string
+                           },
+"sweep_ai_jobs":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "sweep_instagram_send_intents":
 { Args: Record<PropertyKey, never>; Returns: undefined

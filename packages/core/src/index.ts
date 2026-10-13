@@ -14,3 +14,4 @@ export * from "./crm/deal.ts";
 export * from "./crm/kanban.ts";
 export * from "./channels/index.ts";
 export * from "./inbox/index.ts";
+export * from "./ai/index.ts";

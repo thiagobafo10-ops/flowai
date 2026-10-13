@@ -15,6 +15,8 @@ const MSG_MESSAGE_GONE = "Esta mensagem não existe mais.";
 const MSG_SEND_FAILED = "Não foi possível enviar a mensagem.";
 const MSG_ASSIGNEE_GONE = "O responsável não existe mais.";
 const MSG_INSTAGRAM_WINDOW = INSTAGRAM_WINDOW_CLOSED;
+const MSG_AI_INACTIVE = "Ative o agente de IA com resposta automática para devolver a conversa.";
+const MSG_AI_CHANNEL = "A IA não atende conversas deste canal.";
 const WRITE_ROLES = ["agent", "admin", "owner"];
 
 type Supabase = Awaited<ReturnType<typeof createServerClient>>;
@@ -275,6 +277,20 @@ export async function takeOver(conversationId: string): Promise<ActionResult> {
   });
   if (!updated.ok) return updated;
   await logSystem(c, conv.id, "assumed");
+  return { ok: true, data: undefined };
+}
+
+export async function returnToAi(conversationId: string): Promise<ActionResult> {
+  const c = await context(true);
+  if (isFail(c)) return c;
+  if (!z.uuid().safeParse(conversationId).success) return { ok: false, error: MSG_GONE };
+  const { error } = await c.supabase.rpc("return_to_ai", { p_conversation: conversationId });
+  if (error) {
+    // 22023 cobre várias validações; as mensagens fixas do servidor as distinguem.
+    if (error.code === "22023" && error.message === "ai inactive") return { ok: false, error: MSG_AI_INACTIVE };
+    if (error.code === "22023" && error.message === "ai unsupported channel") return { ok: false, error: MSG_AI_CHANNEL };
+    return dbError("return to AI failed", { code: error.code });
+  }
   return { ok: true, data: undefined };
 }
 

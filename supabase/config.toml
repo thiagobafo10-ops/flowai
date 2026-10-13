@@ -8,6 +8,10 @@ project_id = "flowai"
 verify_jwt = true
 import_map = "./functions/deno.json"
 
+[functions.ai-playground]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
 [functions.meta-webhook]
 verify_jwt = false
 import_map = "./functions/deno.json"
@@ -17,6 +21,10 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 
 [functions.instagram-worker]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.ai-worker]
 verify_jwt = true
 import_map = "./functions/deno.json"
 

@@ -36,6 +36,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | `npm test` | Testes unitários (Vitest) do domínio e das ações/consultas do app web |
 | `npm run test:edge` | Testes das Edge Functions com contratos/transportes injetados |
 | `npm run test:instagram:e2e` | Suíte completa de navegador com Graph injetada somente no proxy local de testes |
+| `npm run test:ai:e2e` | Suíte de navegador da IA com stub local da OpenAI e cron pausado/restaurado; nenhuma chamada real à OpenAI |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
@@ -58,6 +59,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Fase 3 (CRM: contatos, tags, pipeline): spec [`docs/superpowers/specs/2026-10-09-fase-3-crm-design.md`](docs/superpowers/specs/2026-10-09-fase-3-crm-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-3-crm.md`](docs/superpowers/plans/2026-10-10-fase-3-crm.md)
 - Fase 4 (Inbox, conversas e Simulador): spec [`docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md`](docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-4-inbox.md`](docs/superpowers/plans/2026-10-10-fase-4-inbox.md)
 - Fase 5 (Instagram primeiro): [design](docs/superpowers/specs/2026-10-12-fase-5-meta-design.md), [plano](docs/superpowers/plans/2026-10-12-fase-5-instagram.md), [configuração e testes](docs/superpowers/instagram-setup.md). WhatsApp adiado; validação ao vivo com Meta ainda pendente.
+- Fase 6 (IA com base de conhecimento): [design](docs/superpowers/specs/2026-10-12-fase-6-ia-design.md), [plano](docs/superpowers/plans/2026-10-12-fase-6-ia.md), [configuração](docs/superpowers/ai-setup.md), [pendências e evidências](docs/superpowers/fase-6-pendencias.md). Validação ao vivo com OpenAI ainda pendente.
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança
@@ -75,6 +77,8 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
   - **Rate limits do webhook:** limite grosso por IP (último hop de `X-Forwarded-For` ou `cf-connecting-ip`, nunca o primeiro hop, que o cliente controla) antes da verificação; limite por conexão (3000/min) contado só depois de assinatura válida.
   - **Worker** (`instagram-worker`): chamado pelo `pg_cron` via `pg_net` com segredo próprio (`X-FlowAI-Worker`, comparado em tempo constante) guardado no Vault; configuração em schema `private`.
   - Posse de app/conta vale só para conexões **verificadas**; claims não verificados expiram em 24h e cedem a um dono verificado. Canais Instagram só são criados/apagados por funções de serviço.
+
+- **IA (Fase 6):** `OPENAI_API_KEY` existe **somente** nos secrets das Edge Functions (`ai-worker`, `ai-playground`); nunca em `apps/web`, em `NEXT_PUBLIC_*` ou no repositório. Limites diários, filas e configuração do worker ficam em schema `private`; veja [ai-setup.md](docs/superpowers/ai-setup.md).
 
 ## Convenções do app
 
