@@ -13,9 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { moveDeal } from "@/lib/crm/deal-actions";
 import { updateContactLeadScore } from "@/lib/inbox/contact-actions";
+import { sentimentLabel } from "@/lib/inbox/ai-display";
 import type { ContactPanelData } from "@/lib/inbox/contact-queries";
-
-const SENTIMENT_LABELS: Record<string, string> = { positive: "Positivo", neutral: "Neutro", negative: "Negativo" };
 
 type Props = { orgId: string; contactId: string; conversationId: string; canEdit: boolean; canDelete?: boolean; onClose?: () => void };
 
@@ -99,7 +98,7 @@ function ContactPanelContent({ orgId, contactId, conversationId, canEdit, canDel
     <section className="space-y-3 rounded-lg border p-3">
       <h3 className="font-medium">IA</h3>
       <div className="space-y-2"><Label htmlFor={`score-${contactId}`}>Lead score</Label>{canEdit ? <><Input id={`score-${contactId}`} type="number" min={0} max={100} step={1} value={score} onChange={(e) => { setScore(e.target.value); setScoreDirty(e.target.value !== String(data.contact.leadScore)); }} disabled={pending} /><Button variant="outline" size="sm" disabled={pending} onClick={saveScore}>Salvar lead score</Button></> : <p className="text-sm">{data.contact.leadScore}</p>}</div>
-      {([ ["Intenção", data.intelligence.intent], ["Sentimento", data.intelligence.sentiment ? SENTIMENT_LABELS[data.intelligence.sentiment] ?? data.intelligence.sentiment : null], ["Resumo da conversa", data.intelligence.summary] ] as const).map(([label, value]) => <div key={label}><p className="text-sm font-medium">{label}</p><p className="whitespace-pre-wrap text-sm text-muted-foreground">{value || "Aguardando IA"}</p></div>)}
+      {([ ["Intenção", data.intelligence.intent], ["Sentimento", sentimentLabel(data.intelligence.sentiment)], ["Resumo da conversa", data.intelligence.summary] ] as const).map(([label, value]) => <div key={label}><p className="text-sm font-medium">{label}</p><p className="whitespace-pre-wrap text-sm text-muted-foreground">{value || "Aguardando IA"}</p></div>)}
     </section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <DealDialog state={dialog} onClose={() => setDialog(null)} onChanged={refresh} stages={data.stages} members={data.members} canWrite={canEdit} canDelete={canDelete} />

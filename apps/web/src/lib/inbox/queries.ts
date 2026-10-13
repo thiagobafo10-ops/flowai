@@ -60,13 +60,10 @@ export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInb
   closedAt: string | null;
   /** Código da transferência feita pela IA (rótulo em HANDOFF_LABELS). */
   handoffReason: string | null;
-  intent: string | null;
-  sentiment: string | null;
-  summary: string | null;
 };
 
 const CONVERSATION_COLUMNS =
-  "id, status, handled_by, assigned_to, last_message_at, last_read_at, closed_at, handoff_reason, intent, sentiment, summary, " +
+  "id, status, handled_by, assigned_to, last_message_at, last_read_at, closed_at, handoff_reason, " +
   "contacts(id, name, phone, email), channels(id, type, name)";
 
 type ConversationRow = {
@@ -78,9 +75,6 @@ type ConversationRow = {
   last_read_at: string | null;
   closed_at: string | null;
   handoff_reason: string | null;
-  intent: string | null;
-  sentiment: string | null;
-  summary: string | null;
   contacts: { id: string; name: string | null; phone: string | null; email: string | null } | null;
   channels: { id: string; type: ChannelType; name: string } | null;
 };
@@ -197,9 +191,6 @@ export async function getConversation(
       closedAt: r.closed_at,
       handoffReason: r.handoff_reason,
       lastInboundAt: inbound[0]?.created_at ?? null,
-      intent: r.intent,
-      sentiment: r.sentiment,
-      summary: r.summary,
     },
     messages,
     hasMore: msgs.length > PAGE_SIZE,

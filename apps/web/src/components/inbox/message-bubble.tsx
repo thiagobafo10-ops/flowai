@@ -11,7 +11,7 @@ export function MessageBubble({ message, userId, timezone, canWrite, busy, onRet
 }) {
   if (message.senderType === "system") return <p data-testid="system-message" className="my-4 text-center text-xs text-muted-foreground">{message.text}</p>;
   const own = message.senderUserId === userId;
-  const author = message.senderType === "ai" ? "IA" : message.senderType === "automation" ? "Automação" : own ? "Você" : message.senderName;
+  const author = message.senderType === "ai" ? null : message.senderType === "automation" ? "Automação" : own ? "Você" : message.senderName;
   return (
     <article data-testid="message-bubble" className={cn("max-w-[85%] space-y-1 rounded-xl border px-3 py-2 text-sm", message.direction === "inbound" ? "mr-auto bg-background" : "ml-auto bg-primary/8", message.isInternalNote && "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950")}>
       {message.isInternalNote && <span className="block text-xs font-medium text-amber-800 dark:text-amber-200">Nota interna</span>}
