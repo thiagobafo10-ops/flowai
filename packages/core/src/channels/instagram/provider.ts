@@ -46,8 +46,8 @@ export class InstagramProvider implements ChannelProvider {
     return { externalId: result.message_id as string };
   }
 
-  async sendPrivateReply(commentId: string, text: string): Promise<{ externalId: string; recipientId: string }> {
-    const result = await this.send({ comment_id: commentId }, text);
+  async sendPrivateReply(commentId: string, text: string, instagram?: Record<string, unknown>): Promise<{ externalId: string; recipientId: string }> {
+    const result = await this.send({ comment_id: commentId }, text, instagram);
     if (typeof result.recipient_id !== "string" || !result.recipient_id) throw new InstagramError("invalid_response", "uncertain");
     return { externalId: result.message_id as string, recipientId: result.recipient_id };
   }

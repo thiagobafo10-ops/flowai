@@ -56,6 +56,22 @@ describe("Instagram Send API", () => {
     expect(await p.sendPrivateReply("c1", "Seu guia")).toEqual({ externalId: "out2", recipientId: "9001" });
     expect(body).toEqual({ recipient: { comment_id: "c1" }, message: { text: "Seu guia" } });
   });
+  it("sends a private reply template unchanged to comment_id", async () => {
+    let body: unknown;
+    const p = provider(async (_input, init) => { body = JSON.parse(String(init?.body)); return Response.json({ recipient_id: "9001", message_id: "out2" }); });
+    const message = { attachment: { type: "template", payload: { template_type: "button", text: "Quer seu guia?", buttons: [{ type: "postback", title: "Quero", payload: "signed-a1" }] } } };
+    expect(await p.sendPrivateReply("c1", "Fallback", message)).toEqual({ externalId: "out2", recipientId: "9001" });
+    expect(body).toEqual({ recipient: { comment_id: "c1" }, message });
+  });
+  it("validates private reply body text and UTF-8 limit before sending", async () => {
+    let calls = 0;
+    const p = provider(async () => { calls++; return Response.json({ recipient_id: "9001", message_id: "out2" }); });
+    for (const message of [{ text: "á".repeat(501) }, { attachment: { payload: { text: "á".repeat(501) } } }, { quick_replies: [] }]) {
+      await expect(p.sendPrivateReply("c1", "Curto", message)).rejects.toMatchObject({ code: "invalid_content", certainty: "rejected" });
+    }
+    expect(calls).toBe(0);
+    await expect(p.sendPrivateReply("c1", "á".repeat(501), { text: "á".repeat(500) })).resolves.toEqual({ externalId: "out2", recipientId: "9001" });
+  });
   it("enforces 1000 UTF-8 bytes rather than 1000 characters before making a request", async () => {
     let calls = 0;
     const p = provider(async () => { calls++; return Response.json({ message_id: "out1" }); });

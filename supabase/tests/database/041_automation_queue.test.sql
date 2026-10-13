@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(174);
+select plan(175);
 select tests.create_user('owner41@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent41@t.test','Beto Agente') as uag \gset
 select tests.create_user('out41@t.test','Fora') as uout \gset
@@ -267,6 +267,8 @@ select is(:'s6'::jsonb->>'state','waiting','Instagram: aguarda resposta');
 select is(public.apply_automation_step(:'r6', :'t6', :'st6'::jsonb),:'s6'::jsonb,'replay Instagram devolve intentIds e payloads gravados');
 select is((select count(*)::int from public.instagram_send_intents where conversation_id=:'c6'),1,'replay Instagram não cria intent');
 select is((select count(*)::int from public.messages where conversation_id=:'c6' and direction='outbound'),1,'replay Instagram não cria mensagem');
+select is(public.claim_instagram_send((:'s6'::jsonb->'intentIds'->>0)::uuid)->'messagePayload',
+  (:'st6'::jsonb->'effects'->0->'instagram'),'claim de envio devolve o corpo completo com respostas rápidas');
 
 -- texto acima de 1000 bytes no Instagram → reply_too_long, execução concluída, nada enviado
 select pg_temp.contact('19', null, 'ig19') as k19 \gset

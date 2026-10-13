@@ -4,7 +4,7 @@ import type { MetaSecrets, MetaConnectionRepository } from "../_shared/meta-repo
 import type { Authorize } from "../_shared/auth.ts";
 import { BodyTooLarge, readLimitedBody } from "../_shared/http.ts";
 
-export type SendClaim = { intentId: string; connectionId: string; channelId: string; kind: "direct" | "private_reply"; text: string; recipientExternalId: string | null; commentId: string | null; claimToken: string };
+export type SendClaim = { intentId: string; connectionId: string; channelId: string; kind: "direct" | "private_reply"; text: string; messagePayload?: Record<string, unknown> | null; recipientExternalId: string | null; commentId: string | null; claimToken: string };
 export type SendResult = { state: "sent" | "failed" | "uncertain"; claimToken: string; externalId?: string; recipientId?: string; errorCode?: string };
 export type SendIntent = { id: string; organizationId: string; actorId: string | null; messageId: string | null; state: string; kind: string };
 export type SendDeps = {
@@ -26,8 +26,8 @@ export async function sendClaimedInstagram(claim: SendClaim, organizationId: str
     if (!channel) throw new InstagramError("invalid_config", "rejected");
     const provider = new InstagramProvider({ accountId: channel.accountId, accessToken: channel.accessToken, apiVersion: secrets.apiVersion, fetch: deps.fetch, now: deps.now });
     const sent = claim.kind === "private_reply"
-      ? await provider.sendPrivateReply(claim.commentId ?? "", claim.text)
-      : await provider.sendMessage({ externalId: claim.recipientExternalId ?? "" }, { text: claim.text });
+      ? await provider.sendPrivateReply(claim.commentId ?? "", claim.text, claim.messagePayload ?? undefined)
+      : await provider.sendMessage({ externalId: claim.recipientExternalId ?? "" }, { text: claim.text, instagram: claim.messagePayload ?? undefined });
     result = { state: "sent", claimToken: claim.claimToken, externalId: sent.externalId, ...("recipientId" in sent && typeof sent.recipientId === "string" ? { recipientId: sent.recipientId } : {}) };
   } catch (error) {
     if (error instanceof InstagramError && error.code === "invalid_token" && secrets && deps.verifyConnection) {
