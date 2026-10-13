@@ -71,16 +71,23 @@ language sql stable security definer set search_path = '' as $$
                 where a.organization_id = p_conv.organization_id and a.is_active and a.auto_reply), false);
 $$;
 
--- Ainda há resposta disponível hoje (sem consumir).
+-- Dia (fuso da organização) e limite diário de respostas, com o mesmo cálculo de consume_ai_quota/ai_quota.
+create function private.ai_reply_limit(p_org uuid, out day date, out daily_limit int)
+language sql stable security definer set search_path = '' as $$
+  select (select (now() at time zone o.timezone)::date from public.organizations o where o.id = p_org),
+    (select coalesce(ov.daily_replies, s.daily_replies)
+       from private.ai_settings s left join private.ai_limit_overrides ov on ov.organization_id = p_org);
+$$;
+
+-- Ainda há resposta disponível hoje (sem consumir). Mesmas regras de consume_ai_quota(p_org, 'reply').
 create function private.ai_reply_quota_left(p_org uuid) returns boolean
 language plpgsql stable security definer set search_path = '' as $$
-declare v_day date; v_limit int; v_used int;
+declare v_limit record; v_used int;
 begin
-  select (now() at time zone o.timezone)::date into v_day from public.organizations o where o.id = p_org;
-  select coalesce(ov.daily_replies, s.daily_replies) into v_limit
-    from private.ai_settings s left join private.ai_limit_overrides ov on ov.organization_id = p_org;
-  select u.replies into v_used from public.ai_usage_daily u where u.organization_id = p_org and u.day = v_day;
-  return coalesce(v_used, 0) < coalesce(v_limit, 0);
+  select * into v_limit from private.ai_reply_limit(p_org);
+  if v_limit.day is null or coalesce(v_limit.daily_limit, 0) <= 0 then return false; end if;
+  select u.replies into v_used from public.ai_usage_daily u where u.organization_id = p_org and u.day = v_limit.day;
+  return coalesce(v_used, 0) < v_limit.daily_limit;
 end $$;
 
 create function private.ai_default_pipeline(p_org uuid) returns uuid
@@ -147,7 +154,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- transferência
-create function private.ai_handoff(p_conversation uuid, p_reason text, p_detail text) returns uuid[]
+-- p_notify = false (desistência do worker): só transfere, sem aviso de transição ao cliente.
+create function private.ai_handoff(p_conversation uuid, p_reason text, p_detail text, p_notify boolean default true) returns uuid[]
 language plpgsql security definer set search_path = '' as $$
 declare conv public.conversations; v_label text := private.ai_handoff_label(p_reason); v_notice boolean;
   v_type public.channel_type; v_intent uuid; v_intents uuid[] := '{}';
@@ -163,7 +171,7 @@ begin
       'IA transferiu para atendimento humano: ' || v_label
         || coalesce(' — ' || left(nullif(btrim(p_detail), ''), 200), ''), 'delivered');
   select a.human_handoff into v_notice from public.ai_agents a where a.organization_id = conv.organization_id;
-  if coalesce(v_notice, false) then
+  if p_notify and coalesce(v_notice, false) then
     select ch.type into v_type from public.channels ch where ch.id = conv.channel_id;
     if v_type = 'simulator' or (v_type = 'instagram' and private.ai_instagram_blocker(conv) is null) then
       v_intent := private.ai_deliver(conv, 'Vou te encaminhar para um atendente, só um instante.', null, null);
@@ -215,6 +223,18 @@ end $$;
 create trigger ai_cancel_on_human after update of handled_by on public.conversations
   for each row when (new.handled_by = 'human' and old.handled_by is distinct from 'human')
   execute function public.ai_cancel_on_human();
+
+-- Conversa fechada que reabre (por qualquer caminho) não carrega o motivo de transferência antigo.
+create function public.ai_clear_handoff_on_reopen() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.handoff_reason := null;
+  return new;
+end $$;
+
+create trigger ai_clear_handoff_on_reopen before update of status on public.conversations
+  for each row when (old.status = 'closed' and new.status <> 'closed')
+  execute function public.ai_clear_handoff_on_reopen();
 
 -- ---------------------------------------------------------------- worker: preparar
 create function public.prepare_ai_reply(p_job uuid, p_token uuid) returns jsonb
@@ -379,8 +399,8 @@ begin
   v_handoff := nullif(p_result->'handoff', 'null'::jsonb);
 
   select * into job from public.ai_jobs where id = p_job for update;
-  -- Conversa apagada durante a geração: a tarefa sumiu por cascata.
-  if not found then return '{"state":"skipped","intentIds":[]}'::jsonb; end if;
+  -- Conversa apagada durante a geração (a tarefa sumiu por cascata) ou devolvida para a IA (tarefa cancelada).
+  if not found or job.state = 'cancelled' then return '{"state":"skipped","intentIds":[]}'::jsonb; end if;
   if job.kind <> 'reply' or job.state <> 'running' or p_token is null or job.claim_token is distinct from p_token then
     raise exception 'invalid claim' using errcode = '42501';
   end if;
@@ -447,7 +467,7 @@ declare job public.ai_jobs; conv public.conversations; v_intents uuid[];
 begin
   if private.ai_handoff_label(p_reason) is null then raise exception 'invalid handoff reason' using errcode = '22023'; end if;
   select * into job from public.ai_jobs where id = p_job for update;
-  if not found then return '{"state":"skipped","intentIds":[]}'::jsonb; end if;
+  if not found or job.state = 'cancelled' then return '{"state":"skipped","intentIds":[]}'::jsonb; end if;
   if job.kind <> 'reply' or job.state <> 'running' or p_token is null or job.claim_token is distinct from p_token then
     raise exception 'invalid claim' using errcode = '42501';
   end if;
@@ -481,7 +501,7 @@ begin
         for update;
       if found then
         perform private.ai_handoff(job.conversation_id,
-          case job.last_error when 'not_configured' then 'not_configured' else 'ai_failure' end, null);
+          case job.last_error when 'not_configured' then 'not_configured' else 'ai_failure' end, null, false);
       end if;
     end if;
   exception when others then
@@ -490,26 +510,38 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- devolver para a IA
+-- Nome do usuário atual, com a mesma resolução de log_conversation_system_message.
+create function private.ai_actor_name() returns text
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select nullif(btrim(p.full_name), '') from public.profiles p where p.id = auth.uid()), 'Alguém');
+$$;
+
 create function public.return_to_ai(p_conversation uuid) returns void
 language plpgsql security definer set search_path = '' as $$
-declare conv public.conversations; v_actor text;
+declare conv public.conversations;
 begin
   select * into conv from public.conversations where id = p_conversation for update;
   if not found or not public.has_role(conv.organization_id, 'agent') then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  if not exists (select 1 from public.channels ch
+                 where ch.id = conv.channel_id and ch.type in ('simulator', 'instagram')) then
+    raise exception 'ai unsupported channel' using errcode = '22023';
+  end if;
   if not exists (select 1 from public.ai_agents a
                  where a.organization_id = conv.organization_id and a.is_active and a.auto_reply) then
     raise exception 'ai inactive' using errcode = '22023';
   end if;
+  -- Já está com a IA: nada a fazer (sem nota duplicada; a tarefa em curso continua válida).
+  if conv.handled_by = 'ai' and conv.status = 'open' then return; end if;
+  -- Uma resposta gerada antes da devolução não deve ser gravada depois dela.
+  update public.ai_jobs set state = 'cancelled', claim_token = null, claimed_until = null
+    where conversation_id = conv.id and kind = 'reply' and state = 'running';
   update public.conversations set handled_by = 'ai', status = 'open', handoff_reason = null, assigned_to = null
     where id = conv.id;
-  -- mesma resolução de nome de log_conversation_system_message
-  select coalesce(nullif(btrim(full_name), ''), 'Alguém') into v_actor from public.profiles where id = auth.uid();
-  v_actor := coalesce(v_actor, 'Alguém');
   insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, sender_user_id, content, status)
     values (conv.organization_id, conv.id, conv.channel_id, 'outbound', 'system', auth.uid(),
-      v_actor || ' devolveu a conversa para a IA', 'delivered');
+      private.ai_actor_name() || ' devolveu a conversa para a IA', 'delivered');
 end $$;
 
 -- ---------------------------------------------------------------- área de teste
@@ -524,18 +556,21 @@ $$;
 revoke all on function
   private.ai_handoff_label(text),
   private.ai_reply_eligible(public.conversations),
+  private.ai_reply_limit(uuid),
   private.ai_reply_quota_left(uuid),
+  private.ai_actor_name(),
   private.ai_default_pipeline(uuid),
   private.ai_open_stages(uuid),
   private.ai_agent_json(uuid),
   private.ai_instagram_blocker(public.conversations),
   private.ai_deliver(public.conversations, text, jsonb, uuid),
-  private.ai_handoff(uuid, text, text),
+  private.ai_handoff(uuid, text, text, boolean),
   private.ai_validate_reply_result(jsonb),
   private.ai_apply_classification(public.conversations, uuid, jsonb),
   public.ai_enqueue_reply(),
   public.ai_human_takes_over(),
   public.ai_cancel_on_human(),
+  public.ai_clear_handoff_on_reopen(),
   public.prepare_ai_reply(uuid, uuid),
   public.complete_ai_reply(uuid, uuid, jsonb),
   public.handoff_ai_job(uuid, uuid, text),

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(135);
+select plan(153);
 select tests.create_user('owner38@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent38@t.test','Beto Agente') as uag \gset
 select tests.create_user('viewer38@t.test','Vera Viewer') as uv \gset
@@ -345,6 +345,59 @@ select (select conversation_id from public.messages where id=(:'ev3'::jsonb->>'m
 select private.ai_handoff(:'cih','needs_human',null) as hint \gset
 select is((select text||'/'||coalesce(actor_id::text,'null') from public.instagram_send_intents where id=(:'hint'::uuid[])[1]),
   'Vou te encaminhar para um atendente, só um instante./null','transição no Instagram vira intent');
+
+-- =============================================================== desistência não envia aviso de transição
+select is((select count(*)::int from public.messages where conversation_id=:'ct5' and sender_type='ai'),0,'desistência no Simulador não envia aviso');
+select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','message','accountId','78938','externalId','dm38g1','senderExternalId','93806','senderName','G1','text','Oi','occurredAt',now())) as evg1 \gset
+select (select conversation_id from public.messages where id=(:'evg1'::jsonb->>'messageId')::uuid) as cg1 \gset
+select pg_temp.claim(:'cg1','00000000-0000-0000-0000-0000000038f1') as jg1 \gset
+update public.ai_jobs set attempts=3 where id=:'jg1';
+select count(*)::int as hev_g1 from public.events where type='handoff' and conversation_id=:'cg1' \gset
+select public.fail_ai_job(:'jg1','00000000-0000-0000-0000-0000000038f1','rate_limited',true);
+select is((select status::text||'/'||handled_by::text||'/'||handoff_reason from public.conversations where id=:'cg1'),'pending_human/human/ai_failure','desistência no Instagram transfere com ai_failure');
+select is((select count(*)::int from public.instagram_send_intents where conversation_id=:'cg1'),0,'desistência no Instagram não cria intent');
+select is((select count(*)::int from public.messages where conversation_id=:'cg1' and sender_type='ai'),0,'desistência no Instagram não grava mensagem da IA');
+select is((select count(*)::int from public.messages where conversation_id=:'cg1' and sender_type='system' and content='IA transferiu para atendimento humano: Falha temporária da IA'),1,'desistência grava a nota de sistema');
+select is((select count(*)::int from public.events where type='handoff' and conversation_id=:'cg1'),:hev_g1 + 1,'desistência emite handoff');
+select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','message','accountId','78938','externalId','dm38g2','senderExternalId','93807','senderName','G2','text','Oi','occurredAt',now())) as evg2 \gset
+select (select conversation_id from public.messages where id=(:'evg2'::jsonb->>'messageId')::uuid) as cg2 \gset
+select pg_temp.claim(:'cg2','00000000-0000-0000-0000-0000000038f2') as jg2 \gset
+update public.ai_jobs set attempts=3, claimed_until=now()-interval '1 second' where id=:'jg2';
+select public.sweep_ai_jobs();
+select is((select handoff_reason from public.conversations where id=:'cg2'),'ai_failure','varredura esgotada transfere com ai_failure');
+select is((select count(*)::int from public.instagram_send_intents where conversation_id=:'cg2'),0,'varredura esgotada não cria intent');
+select is((select count(*)::int from public.messages where conversation_id=:'cg2' and sender_type='ai'),0,'varredura esgotada não grava mensagem da IA');
+
+-- =============================================================== return_to_ai: guardas
+insert into public.channels(id,organization_id,type,name,status) values ('00000000-0000-0000-0000-000000003822',:'oa','whatsapp','WA38','active');
+insert into public.contacts(id,organization_id,name) values ('00000000-0000-0000-0000-000000003832',:'oa','Zap');
+insert into public.conversations(id,organization_id,contact_id,channel_id,status,handled_by) values
+  ('00000000-0000-0000-0000-000000003841',:'oa','00000000-0000-0000-0000-000000003832','00000000-0000-0000-0000-000000003822','pending_human','human');
+select tests.authenticate_as(:'uag');
+select throws_ok($$select public.return_to_ai('00000000-0000-0000-0000-000000003841')$$,'22023','ai unsupported channel','canal sem IA: 22023');
+select tests.clear_authentication();
+select pg_temp.ingest('r1','+5511900000013','Oi') as mr \gset
+select pg_temp.conv_of(:'mr') as crn \gset
+select tests.authenticate_as(:'uag');
+select public.return_to_ai(:'crn');
+select tests.clear_authentication();
+select is((select count(*)::int from public.messages where conversation_id=:'crn' and sender_type='system'),0,'já com a IA: return_to_ai não grava nota');
+select is((select count(*)::int from public.ai_jobs where conversation_id=:'crn' and state='pending'),1,'já com a IA: tarefa pendente intacta');
+select pg_temp.claim(:'crn','00000000-0000-0000-0000-0000000038f3') as jrn \gset
+update public.conversations set handled_by='human' where id=:'crn';
+select tests.authenticate_as(:'uag');
+select public.return_to_ai(:'crn');
+select tests.clear_authentication();
+select is((select state from public.ai_jobs where id=:'jrn'),'cancelled','return_to_ai cancela a tarefa em execução');
+select is((select count(*)::int from public.messages where conversation_id=:'crn' and sender_type='system' and content='Beto Agente devolveu a conversa para a IA'),1,'devolução grava a nota uma vez');
+select is(public.complete_ai_reply(:'jrn','00000000-0000-0000-0000-0000000038f3',pg_temp.res('tarde')),'{"state":"skipped","intentIds":[]}'::jsonb,'complete de tarefa cancelada: skipped');
+select is(public.handoff_ai_job(:'jrn','00000000-0000-0000-0000-0000000038f3','needs_human'),'{"state":"skipped","intentIds":[]}'::jsonb,'handoff_ai_job de tarefa cancelada: skipped');
+select is((select count(*)::int from public.messages where conversation_id=:'crn' and sender_type='ai'),0,'tarefa cancelada não grava resposta');
+
+-- =============================================================== reabrir limpa o motivo
+update public.conversations set status='closed' where id=:'ct2';
+select pg_temp.ingest('t10','+5511900000006','Voltei de novo');
+select is((select status::text||'/'||coalesce(handoff_reason,'null') from public.conversations where id=:'ct2'),'open/null','reabrir conversa fechada limpa handoff_reason');
 
 -- =============================================================== integridade e playground
 select throws_ok(format($$update public.conversations set handoff_reason='boom' where id=%L$$,:'c1'),'23514',null,'handoff_reason aceita só os códigos');
