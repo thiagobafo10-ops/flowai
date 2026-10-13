@@ -3,7 +3,7 @@ import { decideHandoff, type HandoffDecision } from "./handoff.ts";
 import { detectInjection } from "./injection.ts";
 import { buildClassificationMessages, buildReplyMessages, type PromptInput } from "./prompt.ts";
 import { classificationSchema, replyOutputSchema, type Classification, type ReplyOutput } from "./schemas.ts";
-import type { AIProvider, KnowledgeHit } from "./types.ts";
+import { AIProviderError, type AIProvider, type KnowledgeHit } from "./types.ts";
 
 export type PipelineInput = PromptInput & { channelType: "simulator" | "instagram" };
 export type PipelineDeps = {
@@ -46,9 +46,10 @@ export async function runReplyPipeline(input: PipelineInput, deps: PipelineDeps)
 
   const query = contactTexts.slice(-EMBED_CONTACT_TURNS).join("\n") || (lastTurn?.text ?? "");
   const [embedding] = await deps.provider.embed([query]);
-  const hits = embedding ? await deps.searchKnowledge(embedding) : [];
+  if (!embedding || embedding.length === 0) throw new AIProviderError("invalid_response");
+  const hits = await deps.searchKnowledge(embedding);
 
-  const output: ReplyOutput = await deps.provider.structured(buildReplyMessages(input, hits), replyOutputSchema, {
+  const output: ReplyOutput = await deps.provider.structured(buildReplyMessages(input, hits, input.channelType), replyOutputSchema, {
     name: "reply",
     model: deps.chatModel,
     temperature: 0.2,

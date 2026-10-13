@@ -109,3 +109,52 @@ describe("runReplyPipeline", () => {
     await expect(runReplyPipeline(base, deps(p))).rejects.toBeInstanceOf(AIProviderError);
   });
 });
+
+describe("runReplyPipeline extra", () => {
+  const okReply = { reply: "ok", used_chunk_ids: [], needs_human: false, handoff_reason: null };
+
+  it("empty hits + reply needs_human -> no_knowledge", async () => {
+    const p = new FakeProvider({
+      classification: cls,
+      reply: { reply: "", used_chunk_ids: [], needs_human: true, handoff_reason: "sem info" },
+    });
+    const r = await runReplyPipeline(base, deps(p, []));
+    expect(r.decision).toMatchObject({ handoff: true, reason: "no_knowledge" });
+  });
+
+  it("classification needs_human -> needs_human", async () => {
+    const p = new FakeProvider({ classification: { ...cls, needs_human: true }, reply: okReply });
+    const r = await runReplyPipeline(base, deps(p));
+    expect(r.decision).toMatchObject({ handoff: true, reason: "needs_human" });
+  });
+
+  it("embed AIProviderError propagates", async () => {
+    const p = new FakeProvider({ classification: cls });
+    p.embed = async () => { throw new AIProviderError("rate_limited"); };
+    await expect(runReplyPipeline(base, deps(p))).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
+  it("empty embedding -> invalid_response", async () => {
+    const p = new FakeProvider({ classification: cls });
+    p.embed = async () => [];
+    await expect(runReplyPipeline(base, deps(p))).rejects.toMatchObject({ code: "invalid_response" });
+    p.embed = async () => [[]];
+    await expect(runReplyPipeline(base, deps(p))).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  it("multibyte reply over 1000 bytes on Instagram -> reply_too_long", async () => {
+    const p = new FakeProvider({
+      classification: cls,
+      reply: { ...okReply, reply: "ã".repeat(501) },
+    });
+    const r = await runReplyPipeline(base, deps(p));
+    expect(r.decision).toMatchObject({ handoff: true, reason: "reply_too_long" });
+  });
+
+  it("searchKnowledge receives the embedding from embed", async () => {
+    const p = new FakeProvider({ classification: cls, reply: okReply });
+    let got: number[] | undefined;
+    await runReplyPipeline(base, { provider: p, chatModel: "m", searchKnowledge: async (e) => { got = e; return []; } });
+    expect(got).toEqual([0.1, 0.2]);
+  });
+});
