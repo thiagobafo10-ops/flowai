@@ -1,6 +1,7 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -21,6 +22,8 @@ function sql(text) {
 const jobs = ["flowai-ai-worker", "flowai-instagram-worker"];
 const previousActive = new Map();
 let proxy; let test;
+// Only the last stderr lines, with anything that looks like a key or JWT masked.
+const sanitize = (text) => text.split("\n").slice(-12).join("\n").replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, "[jwt]").replace(/[A-Fa-f0-9]{32,}/g, "[hex]");
 async function cleanup() {
   if (proxy && !proxy.killed) proxy.kill();
   for (const [job, active] of previousActive) {
@@ -40,19 +43,22 @@ try {
   }
   const key = status.SERVICE_ROLE_KEY.replaceAll("'", "''");
   sql(`select public.configure_ai_worker('http://supabase_kong_flowai:8000','${key}','${randomBytes(32).toString("hex")}');`);
+  const inUse = await new Promise((resolve) => { const probe = net.connect(54327, "127.0.0.1"); probe.once("connect", () => { probe.destroy(); resolve(true); }); probe.once("error", () => resolve(false)); });
+  if (inUse) throw new Error("A porta 54327 já está em uso.");
   proxy = spawn(deno, ["run", "--config", "supabase/functions/deno.json", "--allow-net", "--allow-env", "--allow-read", "supabase/functions/tests/serve-ai-e2e.ts"], { cwd: root, env: { ...env, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, SUPABASE_ANON_KEY: status.ANON_KEY }, stdio: ["ignore", "ignore", "pipe"], shell: false });
   let proxyError = false;
   proxy.on("error", () => { proxyError = true; });
   // Do not print process environment or database statements containing secrets.
-  proxy.stderr.on("data", () => {});
+  let stderrTail = "";
+  proxy.stderr.on("data", (chunk) => { stderrTail = (stderrTail + chunk).slice(-4000); });
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (proxyError || proxy.exitCode !== null) throw new Error("Não foi possível iniciar o proxy Deno de testes.");
+    if (proxyError || proxy.exitCode !== null) throw new Error(`Não foi possível iniciar o proxy Deno de testes.\n${sanitize(stderrTail)}`);
     try { ready = (await fetch("http://127.0.0.1:54327/__test__/openai-calls")).ok; } catch { /* process starting */ }
     if (ready) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  if (!ready) throw new Error("O proxy de testes não iniciou.");
+  if (!ready) throw new Error(`O proxy de testes não iniciou.\n${sanitize(stderrTail)}`);
   const cli = path.join(path.dirname(require.resolve("@playwright/test/package.json")), "cli.js");
   test = spawn(process.execPath, [cli, "test", "--config", "playwright.ai.config.ts", ...process.argv.slice(2)], { cwd: path.join(root, "apps/web"), env, stdio: "inherit", shell: false });
   process.exitCode = await new Promise((resolve) => { test.on("error", () => resolve(1)); test.on("exit", (code) => resolve(code ?? 1)); });

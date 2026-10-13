@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { newEmail, signUpWithOrg } from "./support/auth";
 import { gotoReady } from "./support/nav";
-import { clearRateLimits, psql, simulateInboundSql } from "./support/local-db";
-import { DEBOUNCE_MS, openAiCalls, runAiWorker } from "./support/ai";
+import { clearRateLimits, simulateInboundSql } from "./support/local-db";
+import { aiJobStates, aiMessageCount, chatCompletionCount, drainAiJobs } from "./support/ai";
 
 const AI_TEXT = "Frete grátis para compras acima de R$ 200.";
 const HANDOFF_TEXT = "Vou te encaminhar para um atendente, só um instante.";
@@ -17,8 +17,8 @@ async function createDocument(page: Page) {
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await expect(page.getByRole("row", { name: /Frete/ })).toContainText("Processando");
 }
-async function indexDocument(page: Page) {
-  await runAiWorker();
+async function indexDocument(page: Page, email: string) {
+  await drainAiJobs(email);
   await expect(async () => {
     await page.reload();
     await expect(page.getByRole("row", { name: /Frete/ })).toContainText("Pronto", { timeout: 2_000 });
@@ -32,51 +32,46 @@ async function enableAgent(page: Page) {
   await page.getByRole("button", { name: "Salvar", exact: true }).first().click();
   await expect(page.getByText("Agente salvo.").first()).toBeVisible();
 }
-/** Simulates an inbound message and opens its conversation in the Inbox. Returns the instant it was received. */
-async function inbound(page: Page, email: string, text: string): Promise<number> {
-  const at = Date.now();
+/** Simulates an inbound message and opens its conversation in the Inbox. */
+async function inbound(page: Page, email: string, text: string): Promise<void> {
   simulateInboundSql(email, { name: "Carla", phone: "5511988887777", text });
   await gotoReady(page, "/inbox");
   await page.getByText(text, { exact: true }).first().click();
   await expect(page.getByTestId("message-bubble").filter({ hasText: text })).toBeVisible();
-  return at;
-}
-async function runAfterDebounce(since: number) {
-  const wait = since + DEBOUNCE_MS - Date.now();
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-  await runAiWorker();
 }
 async function readyKnowledge(page: Page, email: string) {
   await signUpWithOrg(page, email, "IA E2E");
   await createDocument(page);
-  await indexDocument(page);
+  await indexDocument(page, email);
 }
 
 test("IA: documento é indexado e fica pronto com um trecho", async ({ page }) => {
-  await signUpWithOrg(page, newEmail(), "IA E2E");
+  const email = newEmail();
+  await signUpWithOrg(page, email, "IA E2E");
   await createDocument(page);
-  await indexDocument(page);
+  await indexDocument(page, email);
 });
 
 test("IA: responde com base no documento e conta o uso", async ({ page }) => {
   const email = newEmail();
   await readyKnowledge(page, email);
   await enableAgent(page);
-  const at = await inbound(page, email, "Qual o valor do frete grátis?");
-  await runAfterDebounce(at);
+  const callsBefore = await chatCompletionCount();
+  await inbound(page, email, "Qual o valor do frete grátis?");
+  await drainAiJobs(email);
   const reply = page.getByTestId("message-bubble").filter({ has: page.getByTestId("ai-badge") });
   await expect(reply).toContainText("R$ 200", { timeout: 20_000 });
   await gotoReady(page, "/ia");
   await expect(page.getByText("1 de 300 respostas")).toBeVisible();
-  expect((await openAiCalls()).some((call) => call.path === "/chat/completions")).toBe(true);
+  expect(await chatCompletionCount()).toBeGreaterThan(callsBefore);
 });
 
 test("IA: sem informação na base transfere para um atendente", async ({ page }) => {
   const email = newEmail();
   await signUpWithOrg(page, email, "IA E2E");
   await enableAgent(page);
-  const at = await inbound(page, email, "Vocês aceitam bitcoin?");
-  await runAfterDebounce(at);
+  await inbound(page, email, "Vocês aceitam bitcoin?");
+  await drainAiJobs(email);
   await expect(page.getByText("Transferida pela IA: IA sem informação na base de conhecimento")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("message-bubble").filter({ hasText: HANDOFF_TEXT })).toBeVisible();
 });
@@ -85,8 +80,8 @@ test("IA: devolver para IA remove o aviso e registra a mensagem de sistema", asy
   const email = newEmail();
   await signUpWithOrg(page, email, "IA E2E");
   await enableAgent(page);
-  const at = await inbound(page, email, "Vocês aceitam bitcoin?");
-  await runAfterDebounce(at);
+  await inbound(page, email, "Vocês aceitam bitcoin?");
+  await drainAiJobs(email);
   const banner = page.getByText("Transferida pela IA: IA sem informação na base de conhecimento");
   await expect(banner).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Devolver para IA" }).click();
@@ -111,11 +106,16 @@ test("IA: quando o atendente responde antes, a IA não envia nada", async ({ pag
   const email = newEmail();
   await readyKnowledge(page, email);
   await enableAgent(page);
-  const at = await inbound(page, email, "Qual o valor do frete grátis?");
+  await inbound(page, email, "Qual o valor do frete grátis?");
   await page.getByLabel("Escreva sua mensagem").fill("Já te respondo por aqui");
   await page.getByRole("button", { name: "Enviar", exact: true }).click();
   await expect(page.getByTestId("message-bubble").filter({ hasText: "Já te respondo por aqui" })).toBeVisible();
-  await runAfterDebounce(at);
-  await expect.poll(() => psql(`select count(*) from public.messages m where m.sender_type='ai' and m.organization_id=(select organization_id from public.memberships ms join auth.users u on u.id=ms.user_id where u.email='${email}' limit 1)`), { timeout: 5_000 }).toBe("0");
+  // The human reply must cancel the pending reply task; the worker then evaluates and skips it.
+  await expect.poll(() => aiJobStates(email).filter((state) => state.startsWith("reply:")), { timeout: 10_000 }).toEqual(["reply:cancelled"]);
+  const callsBefore = await chatCompletionCount();
+  await drainAiJobs(email);
+  expect(aiJobStates(email).filter((state) => state.startsWith("reply:"))).toEqual(["reply:cancelled"]);
+  expect(await chatCompletionCount()).toBe(callsBefore);
+  expect(aiMessageCount(email)).toBe(0);
   await expect(page.getByTestId("ai-badge")).toHaveCount(0);
 });

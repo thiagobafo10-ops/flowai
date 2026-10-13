@@ -32,7 +32,7 @@ const searchKnowledge = async (org: string, embedding: number[]): Promise<Knowle
   const rows = await rpc<MatchRow[]>("match_knowledge_chunks", { p_org: org, p_embedding: `[${embedding.join(",")}]`, p_k: 5, p_min_similarity: 0.3 });
   return rows.map((row) => ({ id: row.id, documentTitle: row.document_title, content: row.content, similarity: row.similarity }));
 };
-const noExternalFetch: typeof fetch = () => { throw new Error("Unexpected external call in test"); };
+const noExternalFetch: typeof fetch = () => Promise.reject(new Error("Unexpected external call in test"));
 const workerDeps = {
   readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_ai_worker_config", {}))?.workerSecret ?? null,
   claimJobs: (limit: number) => rpc<AiJob[]>("claim_ai_jobs", { p_limit: limit }),
