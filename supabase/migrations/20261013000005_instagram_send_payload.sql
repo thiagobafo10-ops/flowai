@@ -24,3 +24,20 @@ begin
 end $$;
 revoke all on function public.claim_instagram_send(uuid) from public, anon, authenticated;
 grant execute on function public.claim_instagram_send(uuid) to service_role;
+
+-- Returning work at a budget boundary is scheduling, not failure. Undo this
+-- claim's attempts increment, retaining earlier genuine failures and progress.
+-- Use the same conversation→run lock order as apply/fail/stop.
+create function public.yield_automation_run(p_run uuid, p_token uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare run public.automation_runs;
+begin
+  run := private.automation_lock_run(p_run);
+  if run.id is null or run.status<>'running' or p_token is null or run.claim_token is distinct from p_token then
+    raise exception 'invalid claim' using errcode='42501';
+  end if;
+  update public.automation_runs set status='pending', resume_at=now(), claim_token=null, claimed_until=null,
+    attempts=greatest(attempts-1,0) where id=run.id;
+end $$;
+revoke all on function public.yield_automation_run(uuid,uuid) from public, anon, authenticated;
+grant execute on function public.yield_automation_run(uuid,uuid) to service_role;

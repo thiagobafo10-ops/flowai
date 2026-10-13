@@ -35,6 +35,7 @@ Deno.serve((request) => handleAutomationWorker(request, {
   buttonPayloads: (run, token, node) => rpc<Record<string, string>>("automation_button_payloads", { p_run: run, p_token: token, p_node_id: node }),
   applyStep: (run, token, step) => rpc<AppliedStep>("apply_automation_step", { p_run: run, p_token: token, p_step: step }),
   failRun: (run, token, code, retryable) => rpc<void>("fail_automation_run", { p_run: run, p_token: token, p_error_code: code, p_retryable: retryable }),
+  yieldRun: (run, token) => rpc<void>("yield_automation_run", { p_run: run, p_token: token }),
   searchKnowledge: async (org, embedding): Promise<KnowledgeHit[]> => {
     const rows = await rpc<MatchRow[]>("match_knowledge_chunks", { p_org: org, p_embedding: `[${embedding.join(",")}]`, p_k: 5, p_min_similarity: 0.3 });
     return rows.map((row) => ({ id: row.id, documentTitle: row.document_title, content: row.content, similarity: row.similarity }));

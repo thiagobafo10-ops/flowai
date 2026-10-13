@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(175);
+select plan(189);
 select tests.create_user('owner41@t.test','Dona Ana') as ua \gset
 select tests.create_user('agent41@t.test','Beto Agente') as uag \gset
 select tests.create_user('out41@t.test','Fora') as uout \gset
@@ -523,5 +523,39 @@ select lives_ok($$select public.sweep_automation_runs()$$,'sweep sobrevive a lin
 select is(pg_temp.st(:'r14'),'running','linha com erro permanece como estava');
 select is((select status::text||'/'||error from public.automation_runs where id=:'r15'),'pending/claim_expired','reserva vencida vira falha retentável');
 
+-- Budget yield is not a failed attempt; preserve prior genuine failures and all progress.
+select has_function('public','yield_automation_run',array['uuid','uuid'],'yield RPC existe');
+select ok(not coalesce(has_function_privilege('anon',to_regprocedure('public.yield_automation_run(uuid,uuid)'),'execute'),true),'anon não executa yield');
+select ok(not coalesce(has_function_privilege('authenticated',to_regprocedure('public.yield_automation_run(uuid,uuid)'),'execute'),true),'authenticated não executa yield');
+select ok(coalesce(has_function_privilege('service_role',to_regprocedure('public.yield_automation_run(uuid,uuid)'),'execute'),false),'service_role executa yield');
+select ok(coalesce((select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p
+  where p.oid=to_regprocedure('public.yield_automation_run(uuid,uuid)')),false),'yield definer com search_path vazio');
+select pg_temp.contact('25', '+5541000000025') as k25 \gset
+select pg_temp.conv('25', '00000000-0000-0000-0000-000000004101') as c25 \gset
+select pg_temp.run('25', :'c25', :'k25', :'nm') as r25 \gset
+update public.automation_runs set attempts=1, step_count=17, iteration=3, waiting_for='reply', wait_node_id=:'nm',
+  input='{"optionId":"a1","text":null}'::jsonb, error='webhook_timeout' where id=:'r25';
+create function pg_temp.claim_for(p_run uuid) returns uuid language sql as $$
+  select (x->>'claimToken')::uuid from jsonb_array_elements(public.claim_automation_runs(50)) x where x->>'runId'=p_run::text $$;
+select pg_temp.claim_for(:'r25') as t25 \gset
+select throws_ok(format($$select public.yield_automation_run(%L, gen_random_uuid())$$, :'r25'),'42501',null,'yield token antigo: reserva perdida');
+select is((select status::text||'/'||attempts from public.automation_runs where id=:'r25'),'running/2','token antigo mantém status e tentativas');
+select throws_ok(format($$select public.yield_automation_run(%L, null)$$, :'r25'),'42501',null,'yield token nulo: reserva perdida');
+select lives_ok(format($body$do $yield$ declare t uuid := %L; i int; begin
+  for i in 1..4 loop
+    perform public.yield_automation_run(%L, t);
+    if not exists(select 1 from public.automation_runs where id=%L and status='pending' and attempts=1
+        and resume_at<=now() and claim_token is null and claimed_until is null) then raise exception 'yield charged failure'; end if;
+    t := pg_temp.claim_for(%L);
+    if t is null then raise exception 'yield not immediately reclaimable'; end if;
+  end loop;
+end; $yield$;$body$, :'t25', :'r25', :'r25', :'r25'),'quatro yields e claims sem gastar tentativas');
+select is((select current_node_id::text||'/'||step_count||'/'||iteration||'/'||waiting_for::text||'/'||wait_node_id::text||'/'||(input->>'optionId')
+  from public.automation_runs where id=:'r25'),:'nm'||'/17/3/reply/'||:'nm'||'/a1','yield preserva nó, contador, iteração e entrada/espera');
+select is(pg_temp.link(:'c25'),:'r25'::uuid,'yield preserva vínculo da conversa');
+select public.fail_automation_run(:'r25', (select claim_token from public.automation_runs where id=:'r25'), 'webhook_timeout', true);
+select is((select status::text||'/'||attempts||'/'||error from public.automation_runs where id=:'r25'),'pending/2/webhook_timeout','falha real após yields mantém contagem correta');
+select ok((select resume_at between now()+interval '29 seconds' and now()+interval '31 seconds' from public.automation_runs where id=:'r25'),'falha real continua backoff de segunda tentativa');
+select throws_ok(format($$select public.yield_automation_run(%L, %L)$$, :'r25', :'t25'),'42501',null,'yield não libera execução sem reserva running');
 select * from finish();
 rollback;

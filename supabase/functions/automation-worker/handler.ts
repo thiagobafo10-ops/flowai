@@ -26,6 +26,7 @@ export type AutomationWorkerDeps = SendDeps & {
   buttonPayloads(run: string, token: string, node: string): Promise<Record<string, string>>;
   applyStep(run: string, token: string, step: AutomationStep): Promise<AppliedStep>;
   failRun(run: string, token: string, code: string, retryable: boolean): Promise<void>;
+  yieldRun(run: string, token: string): Promise<void>;
   claimSend(intent: string): Promise<SendClaim | null>;
   searchKnowledge(org: string, embedding: number[]): Promise<KnowledgeHit[]>;
   provider: AIProvider; chatModel: string; resolve?: Resolver; deadlineMs?: number;
@@ -114,16 +115,19 @@ async function processRun(run: RunClaim, deps: AutomationWorkerDeps, deadline: n
   try {
     let currentNodeId: string | null = null;
     for (let count = 0; count < MAX_STEPS; count++) {
-      // Stop only between persisted steps. The existing expiry sweep will reclaim
-      // this run at its saved node, without charging a failure here.
-      if (deps.now().getTime() >= deadline) { log(deps, "budget_reached", { runId: run.runId }); return; }
+      // Yield only between persisted steps, releasing the claim without spending
+      // an error attempt. Never interrupt an external effect before its apply.
+      if (deps.now().getTime() >= deadline) { await deps.yieldRun(run.runId, run.claimToken); log(deps, "budget_reached", { runId: run.runId }); return; }
       // Refresh CRM state and fetch AI context for the current node, including after a resume.
       const prepared = await deps.prepareRun(run.runId, run.claimToken);
       if (prepared.action === "skip") return;
       const parsed = automationGraphSchema.safeParse(prepared.graph);
       if (!parsed.success) throw new RunError("invalid_graph");
       currentNodeId ??= prepared.currentNodeId;
-      if (deps.now().getTime() >= deadline) { log(deps, "budget_reached", { runId: run.runId }); return; }
+      if (deps.now().getTime() >= deadline) { await deps.yieldRun(run.runId, run.claimToken); log(deps, "budget_reached", { runId: run.runId }); return; }
+      // The persisted run limit applies before network effects, across claims.
+      // A wait resume only closes an existing step and is still allowed at 50.
+      if (!prepared.waitingFor && prepared.stepCount >= MAX_STEPS) throw new RunError("max_steps");
       const step = await buildStep(run, prepared, parsed.data, currentNodeId, deps);
       const applied = await deps.applyStep(run.runId, run.claimToken, step);
       await sendIntents(applied.intentIds, prepared.organizationId, deps);

@@ -1203,6 +1203,9 @@ isOneToOne: false
                            },
 "write_audit_log":
 { Args: { "p_action": string,"p_entity_id": string,"p_entity_type": string,"p_ip"?: unknown,"p_metadata"?: Json,"p_org": string }; Returns: undefined
+                           },
+"yield_automation_run":
+{ Args: { "p_run": string,"p_token": string }; Returns: undefined
                            }
           }
           Enums: {

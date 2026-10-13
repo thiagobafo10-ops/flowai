@@ -15,7 +15,7 @@ const graph = (nodes = [node("t", "trigger"), textNode(), node("e", "end")], edg
 const request = (secret = "worker-secret") => new Request("http://x/automation-worker", { method: "POST", headers: { "x-flowai-worker": secret } });
 
 function fixture(overrides: Partial<Extract<PreparedRun, { action: "run" }>> = {}, opts: { hits?: boolean; apiKey?: string } = {}) {
-  const steps: AutomationStep[] = [], failures: { code: string; retryable: boolean }[] = [], sends: Record<string, unknown>[] = [], logs: string[] = [], payloadNodes: string[] = [];
+  const steps: AutomationStep[] = [], failures: { code: string; retryable: boolean }[] = [], sends: Record<string, unknown>[] = [], logs: string[] = [], payloadNodes: string[] = [], yields: string[] = [];
   const prepared: Extract<PreparedRun, { action: "run" }> = {
     action: "run", runId: "run", organizationId: "org", conversationId: "conv", channelType: "instagram", currentNodeId: "m", input: null, waitingFor: null, stepCount: 0, iteration: 2, version: 1, graph: graph(),
     context: { contact: { name: "Maria Silva", tagIds: [], stageId: null, leadScore: null }, lastInboundText: "Qual o horario?", lastIntent: null, now: "2026-10-13T12:00:00Z", timezone: "America/Sao_Paulo", channelType: "instagram" },
@@ -30,12 +30,15 @@ function fixture(overrides: Partial<Extract<PreparedRun, { action: "run" }>> = {
     prepareRun: async () => { prepares++; return prepared; },
     buttonPayloads: async (_run, _token, id) => { payloadNodes.push(id); return { a1: "signed-a1" }; },
     applyStep: async (run, token, step) => {
-      assert(run === "run" && token === "token"); steps.push(step); prepared.waitingFor = null; prepared.input = null; prepared.stepCount++;
+      assert(run === "run" && token === "token"); steps.push(step);
+      if (!prepared.waitingFor) prepared.stepCount++;
+      prepared.waitingFor = null; prepared.input = null;
       const currentNodeId = "next" in step.route ? step.route.next : step.nodeId;
       prepared.currentNodeId = currentNodeId;
       return { state: "waitReply" in step.route || "waitDelay" in step.route ? "waiting" : "end" in step.route ? "completed" : "running", intentIds: step.effects.some((e) => e.type === "send_text") || step.aiReply ? ["intent"] : [], payloads: {}, result: null, currentNodeId };
     },
     failRun: async (_run, _token, code, retryable) => { failures.push({ code, retryable }); },
+    yieldRun: async (run, token) => { yields.push(`${run}/${token}`); },
     searchKnowledge: async () => opts.hits === false ? [] : [{ id: CHUNK, documentTitle: "Horarios", content: "O horario de funcionamento e das 9h as 18h. Fechamos aos domingos.", similarity: 0.9 }],
     provider: createOpenAIProvider({ apiKey: opts.apiKey ?? "key", fetch: openai }), chatModel: "test-model",
     claimSend: async (id) => ({ intentId: id, connectionId: "conn", channelId: "channel", kind: "direct", text: MESSAGE, messagePayload: steps.flatMap((s) => s.effects).find((e) => e.type === "send_text")?.instagram, recipientExternalId: "900", commentId: null, claimToken: "send-token" }),
@@ -44,7 +47,7 @@ function fixture(overrides: Partial<Extract<PreparedRun, { action: "run" }>> = {
     fetch: async (_url, init) => { sends.push(JSON.parse(String(init?.body))); return Response.json({ message_id: "out", recipient_id: "900" }); },
     resolve: async () => ["93.184.215.14"], now: () => new Date("2026-10-13T12:00:00Z"), log: (...args) => { logs.push(args.join(" ")); },
   };
-  return { deps, prepared, steps, failures, sends, logs, payloadNodes, openai, prepares: () => prepares };
+  return { deps, prepared, steps, failures, sends, logs, payloadNodes, openai, yields, prepares: () => prepares };
 }
 
 Deno.test("message flow applies text and end, sends intent and keeps iteration", async () => {
@@ -172,7 +175,7 @@ Deno.test("invocation budget stops before next effect without failing or interru
   const apply = f.deps.applyStep;
   f.deps.applyStep = async (...args) => { const result = await apply(...args); clock = new Date("2026-10-13T12:01:41Z"); return result; };
   await handleAutomationWorker(request(), f.deps);
-  assert(f.steps.length === 1 && f.sends.length === 1 && f.failures.length === 0);
+  assert(f.steps.length === 1 && f.sends.length === 1 && f.failures.length === 0 && f.yields.join() === "run/token");
   assert(f.prepared.currentNodeId === "m2");
 });
 for (const mode of ["quota_exhausted", "no_agent"] as const) {
@@ -184,3 +187,33 @@ for (const mode of ["quota_exhausted", "no_agent"] as const) {
     assert(f.steps[0]?.handle === "handoff" && !f.steps[0].aiReply && f.steps[1].nodeId === "h" && f.failures.length === 0 && f.openai.calls.length === 0);
   });
 }
+for (const mode of ["webhook", "ai"] as const) {
+  for (const startingCount of [49, 50]) {
+    Deno.test(`persisted count ${startingCount} blocks new ${mode} effects beyond 50`, async () => {
+      const w = node("w", "webhook", { url: "https://example.test/hook" });
+      const a = node("a", "message", { mode: "ai" });
+      const f = fixture({ currentNodeId: "w", stepCount: startingCount, graph: graph([w, a, node("e", "end")], [edge("w", "a"), edge("a", "e", "sent")]) });
+      if (mode === "ai") f.prepared.currentNodeId = "a";
+      let hooks = 0;
+      const transport = f.deps.fetch; f.deps.fetch = async (url, init) => { if (String(url).includes("example.test")) { hooks++; return new Response(null, { status: 204 }); } return transport(url, init); };
+      await handleAutomationWorker(request(), f.deps);
+      assert(f.failures[0]?.code === "max_steps" && !f.failures[0].retryable);
+      assert(f.steps.length === (startingCount === 49 ? 1 : 0));
+      assert(hooks === (mode === "webhook" && startingCount === 49 ? 1 : 0));
+      assert(f.openai.calls.length === (mode === "ai" && startingCount === 49 ? 3 : 0));
+    });
+  }
+}
+Deno.test("effect-free wait resume remains allowed at persisted count 50", async () => {
+  const f = fixture({ stepCount: 50, waitingFor: "reply", input: { optionId: "a1", text: null }, graph: graph([choice(), node("e", "end")], [edge("m", "e", "opt:a1")]) });
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.steps.length === 1 && f.steps[0].handle === "opt:a1" && f.steps[0].effects.length === 0);
+  assert(f.failures[0]?.code === "max_steps" && f.sends.length === 0 && f.openai.calls.length === 0);
+});
+Deno.test("lost claim during budget yield does not fail or retry run", async () => {
+  const f = fixture(); let clock = new Date("2026-10-13T12:00:00Z"); f.deps.now = () => clock;
+  const prepare = f.deps.prepareRun; f.deps.prepareRun = async (...args) => { const p = await prepare(...args); clock = new Date("2026-10-13T12:01:41Z"); return p; };
+  f.deps.yieldRun = async () => { throw new DbError("42501"); };
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.steps.length === 0 && f.failures.length === 0 && f.logs.some((l) => l.includes("claim_lost")));
+});
