@@ -41,3 +41,14 @@ export const AUTOMATION_DELETED = "Automação excluída.";
 export const AUTOMATION_SAVED = "Automação salva.";
 export const AUTOMATION_LOAD_FAILED = "Não foi possível carregar a automação.";
 export const AUTOMATION_REFRESH_FAILED = "Não foi possível atualizar os dados da automação.";
+export const AUTOMATION_RUNS_LOAD_FAILED = "Não foi possível carregar as execuções.";
+export const AUTOMATION_RERUN_STARTED = "Execução reiniciada a partir do passo.";
+
+export const RUN_STATUS_LABEL: Record<string, string> = {
+  pending: "Na fila",
+  running: "Executando",
+  waiting: "Aguardando",
+  completed: "Concluída",
+  failed: "Falhou",
+  cancelled: "Cancelada",
+};

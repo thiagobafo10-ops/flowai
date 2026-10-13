@@ -5,6 +5,7 @@ import { providerFor, replySchema, instagramTextSchema, type ChannelType } from 
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { INSTAGRAM_WINDOW_CLOSED } from "@/lib/inbox/instagram-window";
+import { AUTOMATION_BUTTON_GONE, AUTOMATION_SIMULATOR_ONLY } from "@/lib/inbox/automation-display";
 import { createServerClient } from "@/lib/supabase/server";
 
 const MSG_FORBIDDEN = "Você não tem permissão para esta ação.";
@@ -363,6 +364,23 @@ export async function closeConversation(id: string): Promise<ActionResult> {
 
 export async function reopenConversation(id: string): Promise<ActionResult> {
   return setClosed(id, false);
+}
+
+/** Clique simulado em um botão/resposta rápida de automação (agent+, só no Simulador). */
+export async function clickAutomationButton(messageId: string, optionId: string): Promise<ActionResult> {
+  const c = await context(true);
+  if (isFail(c)) return c;
+  if (!z.uuid().safeParse(messageId).success || !/^[a-z0-9]{1,12}$/.test(optionId)) {
+    return { ok: false, error: AUTOMATION_BUTTON_GONE };
+  }
+  const { error } = await c.supabase.rpc("click_automation_button", { p_message_id: messageId, p_option_id: optionId });
+  if (error) {
+    // 22023 cobre as validações do clique; as mensagens fixas do servidor as distinguem.
+    if (error.code === "22023" && error.message === "not_simulator") return { ok: false, error: AUTOMATION_SIMULATOR_ONLY };
+    if (error.code === "22023") return { ok: false, error: AUTOMATION_BUTTON_GONE };
+    return dbError("click automation button failed", { code: error.code });
+  }
+  return { ok: true, data: undefined };
 }
 
 export async function markRead(id: string): Promise<ActionResult> {

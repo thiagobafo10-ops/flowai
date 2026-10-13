@@ -54,10 +54,14 @@ export async function revealInstagramVerifyToken(id: string): Promise<ActionResu
   const result = await invoke(c, { action: "reveal_verify_token", connectionId: id });
   return result.ok && typeof result.data.verifyToken === "string" ? { ok: true, data: { token: result.data.verifyToken } } : result.ok ? { ok: false, error: "Não foi possível obter o verify token." } : result;
 }
+// A tela de Canais não chama mais estas ações (regras de comentário viraram automações); elas continuam
+// respondendo com o aviso para clientes antigos ainda abertos.
 const RULES_MOVED = "As regras de comentário agora são automações.";
-export async function saveCommentRule(_input: unknown): Promise<ActionResult> {
+export async function saveCommentRule(input: unknown): Promise<ActionResult> {
+  void input;
   return { ok: false, error: RULES_MOVED };
 }
-export async function setCommentRuleActive(_id: string, _active: boolean): Promise<ActionResult> {
+export async function setCommentRuleActive(id: string, active: boolean): Promise<ActionResult> {
+  void id; void active;
   return { ok: false, error: RULES_MOVED };
 }

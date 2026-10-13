@@ -74,7 +74,7 @@ export function ChannelsSettings({ channels, instagram }: { channels: ChannelRow
         )}
       </section>
 
-      <InstagramSettings connections={instagram.connections} rules={instagram.rules} />
+      <InstagramSettings connections={instagram.connections} />
       <section aria-labelledby="social-heading" className="space-y-2 rounded-lg border p-4">
         <h2 id="social-heading" className="text-lg font-medium">
           WhatsApp

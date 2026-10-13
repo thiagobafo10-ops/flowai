@@ -603,17 +603,23 @@ isOneToOne: false
                   ]
                 },"instagram_events": {
                   Row: {
-                    "attempts": number,"channel_id": string,"created_at": string,"external_id": string,"id": string,"kind": string,"last_error": string | null,"message_id": string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id": string | null,"rule_version": number | null,"state": string
+                    "attempts": number,"automation_activated_at": string | null,"automation_id": string | null,"automation_run_id": string | null,"automation_version": number | null,"channel_id": string,"created_at": string,"external_id": string,"id": string,"kind": string,"last_error": string | null,"message_id": string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id": string | null,"rule_version": number | null,"state": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "attempts"?: number,"channel_id": string,"created_at"?: string,"external_id": string,"id"?: string,"kind": string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
+                    "attempts"?: number,"automation_activated_at"?: string | null,"automation_id"?: string | null,"automation_run_id"?: string | null,"automation_version"?: number | null,"channel_id": string,"created_at"?: string,"external_id": string,"id"?: string,"kind": string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at": string,"organization_id": string,"payload": NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
                   }
                   Update: {
-                    "attempts"?: number,"channel_id"?: string,"created_at"?: string,"external_id"?: string,"id"?: string,"kind"?: string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at"?: string,"organization_id"?: string,"payload"?: NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
+                    "attempts"?: number,"automation_activated_at"?: string | null,"automation_id"?: string | null,"automation_run_id"?: string | null,"automation_version"?: number | null,"channel_id"?: string,"created_at"?: string,"external_id"?: string,"id"?: string,"kind"?: string,"last_error"?: string | null,"message_id"?: string | null,"occurred_at"?: string,"organization_id"?: string,"payload"?: NonNullable<Json>,"rule_id"?: string | null,"rule_version"?: number | null,"state"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "instagram_events_automation_fk"
+      columns: ["organization_id","automation_id"]
+isOneToOne: false
+      referencedRelation: "automations"
+      referencedColumns: ["organization_id","id"]
+    },{
       foreignKeyName: "instagram_events_organization_id_channel_id_fkey"
       columns: ["organization_id","channel_id"]
 isOneToOne: false
@@ -981,6 +987,9 @@ isOneToOne: false
                            },
 "cleanup_instagram_events":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"click_automation_button":
+{ Args: { "p_message_id": string,"p_option_id": string }; Returns: string
                            },
 "complete_ai_reply":
 { Args: { "p_job": string,"p_result": Json,"p_token": string }; Returns: Json

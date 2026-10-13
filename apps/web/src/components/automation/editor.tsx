@@ -25,6 +25,7 @@ import { connectEdge, fromFlow, pruneEdges, setNodeConfig, toFlow, type FlowEdge
 import { editorView } from "./editor-view";
 import { presentIssues } from "./issue-copy";
 import { NodePanel } from "./node-panel";
+import { AutomationRuns } from "./runs";
 import { PALETTE_MIME, Palette } from "./palette";
 import { placeholderIssues } from "@/lib/automation/placeholders";
 import { EditorContext, type EditorContextValue } from "./nodes/context";
@@ -119,6 +120,8 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
     snapshot(automation.name, automation.triggerType, automation.triggerConfig, fromFlow(initial.nodes, initial.edges)),
   );
   const [issuesOpen, setIssuesOpen] = useState(true);
+  // O fluxo continua montado na aba "Execuções" (oculto) para não perder alterações não salvas.
+  const [tab, setTab] = useState<"flow" | "runs">("flow");
 
   const graph = useMemo(() => fromFlow(nodes, edges), [nodes, edges]);
   const current = snapshot(name, triggerType, triggerConfig, graph);
@@ -285,6 +288,20 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_CLASS[status])}>{AUTOMATION_STATUS_LABEL[status] ?? status}</span>
         {automation.currentVersion > 0 && <span className="text-xs text-muted-foreground">Versão {automation.currentVersion}</span>}
         {dirty && <span className="text-xs text-muted-foreground">Alterações não salvas</span>}
+        <div role="tablist" aria-label="Seções da automação" className="flex rounded-lg border p-0.5">
+          {([["flow", "Fluxo"], ["runs", "Execuções"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => setTab(value)}
+              className={cn("rounded-md px-3 py-1 text-sm", tab === value ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
             {saveBlocked && <span className="text-xs text-destructive">{AUTOMATION_ACTIVE_WITH_ISSUES}</span>}
@@ -312,7 +329,8 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {tab === "runs" && <AutomationRuns orgId={orgId} automationId={automation.id} />}
+      <div className={cn("flex min-h-0 flex-1", tab !== "flow" && "hidden")}>
         {!readOnly && <Palette onAdd={addAtCenter} />}
         <div ref={wrapper} className="relative min-w-0 flex-1" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
           <EditorContext.Provider value={context}>
@@ -327,7 +345,7 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
               nodesDraggable={!readOnly}
               nodesConnectable={!readOnly}
               edgesFocusable={!readOnly}
-              deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
+              deleteKeyCode={readOnly || tab !== "flow" ? null : ["Backspace", "Delete"]}
               colorMode="system"
               fitView
               fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
