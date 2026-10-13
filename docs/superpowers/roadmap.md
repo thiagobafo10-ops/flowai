@@ -13,3 +13,9 @@ O MVP original é "ManyChat + CRM de vendas". Para alcançar paridade com o Many
 - **Fase extra após a 10:** mídia e anexos; modelos aprovados do WhatsApp; integrações prontas (Google Sheets e Shopify primeiro); galeria de modelos de fluxos; avaliar Facebook Messenger.
 
 Diferenciais já planejados sobre o ManyChat: pipeline de vendas com deals e conversão; IA com RAG e proteções contra invenção de informações; criação de automações por linguagem natural com aprovação; Inbox de equipe em tempo real; isolamento multiempresa com auditoria.
+
+## Candidatos futuros da IA (após a Fase 6)
+
+- **Sugestão de resposta ao atendente:** a IA propõe um rascunho no compositor do Inbox; o atendente edita e envia.
+- **Resumo sob demanda:** resumo da conversa a pedido do atendente (útil em transferências longas).
+- **PDF e site na base de conhecimento:** importar PDF e páginas de site (hoje só texto colado e arquivos `.txt`/`.md`).
