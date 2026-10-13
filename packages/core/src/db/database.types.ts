@@ -953,6 +953,12 @@ isOneToOne: false
 "ai_quota":
 { Args: { "p_org": string }; Returns: Json
                            },
+"apply_automation_step":
+{ Args: { "p_run": string,"p_step": Json,"p_token": string }; Returns: Json
+                           },
+"automation_button_payloads":
+{ Args: { "p_node_id": string,"p_run": string,"p_token": string }; Returns: Json
+                           },
 "check_auth_rate_limit":
 { Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },
@@ -960,6 +966,9 @@ isOneToOne: false
 { Args: { "p_key": string,"p_limit": number,"p_window_seconds": number }; Returns: boolean
                            },
 "claim_ai_jobs":
+{ Args: { "p_limit": number }; Returns: Json
+                           },
+"claim_automation_runs":
 { Args: { "p_limit": number }; Returns: Json
                            },
 "claim_instagram_send":
@@ -978,6 +987,9 @@ isOneToOne: false
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
                            },
 "configure_ai_worker":
+{ Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
+                           },
+"configure_automation_worker":
 { Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
                            },
 "configure_instagram_worker":
@@ -1010,6 +1022,9 @@ isOneToOne: false
 "dispatch_ai_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"dispatch_automation_worker":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -1021,6 +1036,9 @@ isOneToOne: false
                            },
 "fail_ai_job":
 { Args: { "p_error_code": string,"p_job": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
+                           },
+"fail_automation_run":
+{ Args: { "p_code": string,"p_retryable": boolean,"p_run": string,"p_token": string }; Returns: undefined
                            },
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
@@ -1082,6 +1100,9 @@ isOneToOne: false
 "prepare_ai_reply":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
                            },
+"prepare_automation_run":
+{ Args: { "p_run": string,"p_token": string }; Returns: Json
+                           },
 "prepare_index_document":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
                            },
@@ -1092,6 +1113,9 @@ isOneToOne: false
 { Args: { "p_event_id": string }; Returns: Json
                            },
 "read_ai_worker_config":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"read_automation_worker_config":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
 "read_instagram_work":
@@ -1111,6 +1135,9 @@ isOneToOne: false
                            },
 "reprocess_knowledge_document":
 { Args: { "p_id": string }; Returns: undefined
+                           },
+"rerun_automation_from":
+{ Args: { "p_node": string,"p_run": string }; Returns: number
                            },
 "reselect_instagram_comment_rule":
 { Args: { "p_comment_at": string,"p_event_id": string }; Returns: Json
@@ -1163,6 +1190,9 @@ isOneToOne: false
 { Args: { "p_conversation": string }; Returns: undefined
                            },
 "sweep_ai_jobs":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"sweep_automation_runs":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "sweep_instagram_send_intents":
