@@ -28,7 +28,7 @@ function fakeClient() {
   };
 }
 vi.mock("@/lib/supabase/server", () => ({ createServerClient: async () => fakeClient() }));
-import { listAutomations, loadGraphRefs } from "./queries";
+import { listAutomations, loadAutomation, loadEditorRefs, loadGraphRefs } from "./queries";
 
 beforeEach(() => { state.tables = {}; state.calls = []; state.rpcs = []; state.counts = []; });
 
@@ -73,4 +73,34 @@ test("loadGraphRefs sem pipeline ou canal devolve padrões nulos", async () => {
   const { refs, defaults } = await loadGraphRefs(fakeClient() as never, "org-1");
   expect(refs).toEqual({ tagIds: [], stageIds: [], userIds: [], channelIds: [] });
   expect(defaults).toEqual({ channelId: null, tagId: null, stageId: null });
+});
+
+test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela organização", async () => {
+  state.tables = {
+    tags: [{ id: "t1", name: "Lead" }],
+    pipelines: [{ id: "p1" }],
+    pipeline_stages: [{ id: "s1", name: "Novo" }],
+    memberships: [{ user_id: "u1", profiles: { full_name: " Ana " } }, { user_id: "u2", profiles: null }],
+    channels: [{ id: "c1", name: "Loja", type: "instagram" }],
+  };
+  const refs = await loadEditorRefs(fakeClient() as never, "org-1");
+  expect(refs).toEqual({
+    tags: [{ id: "t1", name: "Lead" }],
+    stages: [{ id: "s1", name: "Novo" }],
+    members: [{ id: "u1", name: "Ana" }, { id: "u2", name: "Sem nome" }],
+    channels: [{ id: "c1", name: "Loja", type: "instagram" }],
+  });
+  for (const call of state.calls) expect(call.filters).toContainEqual(["organization_id", "org-1"]);
+  expect(state.calls.find((c) => c.table === "pipelines")!.filters).toContainEqual(["is_default", true]);
+  expect(state.calls.find((c) => c.table === "pipeline_stages")!.filters).toContainEqual(["pipeline_id", "p1"]);
+});
+
+test("loadAutomation inclui a versão atual", async () => {
+  state.tables = {
+    automations: [{ id: "a1", name: "Um", status: "draft", trigger_type: "contact_created", trigger_config: {}, current_version: 3 }],
+    automation_nodes: [{ id: "n1", type: "trigger", config: {}, position: { x: 1, y: 2 } }],
+    automation_edges: [],
+  };
+  const a = await loadAutomation(fakeClient() as never, "org-1", "a1");
+  expect(a).toMatchObject({ id: "a1", currentVersion: 3, graph: { nodes: [{ id: "n1", position: { x: 1, y: 2 } }], edges: [] } });
 });

@@ -82,19 +82,58 @@ export async function loadGraphRefs(supabase: Supabase, orgId: string): Promise<
   };
 }
 
+export type RefOption = { id: string; name: string };
+export type EditorRefs = {
+  tags: RefOption[];
+  stages: RefOption[];
+  members: RefOption[];
+  channels: (RefOption & { type: string })[];
+};
+
+/** Opções nomeadas para os seletores do editor (etiquetas, etapas do funil padrão, membros e canais). */
+export async function loadEditorRefs(supabase: Supabase, orgId: string): Promise<EditorRefs> {
+  const [tags, pipeline, members, channels] = await Promise.all([
+    supabase.from("tags").select("id, name").eq("organization_id", orgId).order("name"),
+    supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("is_default", true).maybeSingle(),
+    supabase.from("memberships").select("user_id, profiles(full_name)").eq("organization_id", orgId),
+    supabase.from("channels").select("id, name, type").eq("organization_id", orgId).order("created_at"),
+  ]);
+  for (const r of [tags, pipeline, members, channels]) if (r.error) throw r.error;
+  let stages: RefOption[] = [];
+  if (pipeline.data) {
+    const res = await supabase
+      .from("pipeline_stages")
+      .select("id, name")
+      .eq("organization_id", orgId)
+      .eq("pipeline_id", pipeline.data.id)
+      .order("position");
+    if (res.error) throw res.error;
+    stages = (res.data ?? []).map((s) => ({ id: s.id, name: s.name }));
+  }
+  return {
+    tags: (tags.data ?? []).map((t) => ({ id: t.id, name: t.name })),
+    stages,
+    members: (members.data ?? [])
+      .map((m) => ({ id: m.user_id, name: m.profiles?.full_name?.trim() || "Sem nome" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    channels: (channels.data ?? []).map((c) => ({ id: c.id, name: c.name, type: c.type as string })),
+  };
+}
+
 export type LoadedAutomation = {
   id: string;
   name: string;
   status: AutomationStatus;
   triggerType: TriggerType;
   triggerConfig: unknown;
+  currentVersion: number;
   graph: AutomationGraph;
 };
 
 /** Automação completa (gatilho + grafo) da organização; null quando não existe. */
 export async function loadAutomation(supabase: Supabase, orgId: string, id: string): Promise<LoadedAutomation | null> {
   const [automation, nodes, edges] = await Promise.all([
-    supabase.from("automations").select("id, name, status, trigger_type, trigger_config").eq("organization_id", orgId).eq("id", id).maybeSingle(),
+    supabase.from("automations").select("id, name, status, trigger_type, trigger_config, current_version").eq("organization_id", orgId).eq("id", id).maybeSingle(),
     supabase.from("automation_nodes").select("id, type, config, position").eq("organization_id", orgId).eq("automation_id", id).order("created_at"),
     supabase.from("automation_edges").select("id, source_node_id, target_node_id, source_handle").eq("organization_id", orgId).eq("automation_id", id).order("created_at"),
   ]);
@@ -109,6 +148,7 @@ export async function loadAutomation(supabase: Supabase, orgId: string, id: stri
     status: a.status as AutomationStatus,
     triggerType: a.trigger_type as TriggerType,
     triggerConfig: a.trigger_config,
+    currentVersion: a.current_version,
     graph: {
       nodes: (nodes.data ?? []).map((n) => ({
         id: n.id,

@@ -38,3 +38,5 @@ export const AUTOMATION_ACTIVATED = "Automação ativada.";
 export const AUTOMATION_PAUSED = "Automação pausada.";
 export const AUTOMATION_DUPLICATED = "Automação duplicada.";
 export const AUTOMATION_DELETED = "Automação excluída.";
+export const AUTOMATION_SAVED = "Automação salva.";
+export const AUTOMATION_LOAD_FAILED = "Não foi possível carregar a automação.";
