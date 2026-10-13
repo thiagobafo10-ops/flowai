@@ -5,8 +5,10 @@ export type FakeScript = { onCall?(index: number, path: string, body: any): Fake
 export type FakeOpenAIFetch = typeof fetch & { calls: { path: string; body: any }[] };
 
 const DIMS = 1536;
+// Portuguese function words carry no topic; dropping them keeps the fake similarity close to a real embedding's.
+const STOPWORDS = new Set(["a", "o", "as", "os", "um", "uma", "de", "do", "da", "dos", "das", "em", "no", "na", "para", "por", "com", "e", "que", "qual", "quais", "quanto"]);
 function words(text: string): string[] {
-  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((w) => w && !STOPWORDS.has(w));
 }
 function hash(word: string): number {
   let h = 2166136261;
