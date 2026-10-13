@@ -61,6 +61,11 @@ describe("renderTemplate", () => {
     expect(r("{primeiro_nome} {nome}")).toBe("Ana Ana Souza");
     expect(r("Tchau {nome}")).toBe("Tchau Ana Souza");
   });
+  it("nomes com s minúsculo e espaços duplos", () => {
+    expect(renderTemplate("{primeiro_nome}", { name: "Marcos  Silva" })).toBe("Marcos");
+    expect(renderTemplate("{nome}", { name: "Marcos  Silva" })).toBe("Marcos Silva");
+    expect(renderTemplate("{primeiro_nome}", { name: "José" })).toBe("José");
+  });
   it("nome completo", () => {
     expect(renderTemplate("Olá {nome}!", { name: "Ana Souza" })).toBe("Olá Ana Souza!");
   });

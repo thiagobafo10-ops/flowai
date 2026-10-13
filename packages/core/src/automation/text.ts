@@ -29,9 +29,9 @@ export function matchKeyword(text: string, keywords: string[], mode: KeywordMode
  * restante do texto (inclusive nas pontas) é preservado.
  */
 export function renderTemplate(text: string, contact: { name: string | null }): string {
-  const full = (contact.name ?? "").trim().replace(/s+/g, " ");
+  const full = (contact.name ?? "").trim().replace(/\s+/g, " ");
   const values: Record<string, string> = { primeiro_nome: full.split(" ")[0] ?? "", nome: full };
-  const re = /{(primeiro_nome|nome)}/;
+  const re = /\{(primeiro_nome|nome)\}/;
   let out = "";
   let rest = text;
   for (;;) {
