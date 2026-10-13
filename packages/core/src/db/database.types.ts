@@ -75,6 +75,58 @@ isOneToOne: false
       referencedColumns: ["organization_id","id"]
     }
                   ]
+                },"ai_jobs": {
+                  Row: {
+                    "attempts": number,"claim_token": string | null,"claimed_until": string | null,"conversation_id": string | null,"created_at": string,"document_generation": number | null,"document_id": string | null,"id": string,"kind": string,"last_error": string | null,"organization_id": string,"run_after": string,"state": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"claim_token"?: string | null,"claimed_until"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"document_generation"?: number | null,"document_id"?: string | null,"id"?: string,"kind": string,"last_error"?: string | null,"organization_id": string,"run_after"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "attempts"?: number,"claim_token"?: string | null,"claimed_until"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"document_generation"?: number | null,"document_id"?: string | null,"id"?: string,"kind"?: string,"last_error"?: string | null,"organization_id"?: string,"run_after"?: string,"state"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_jobs_organization_id_conversation_id_fkey"
+      columns: ["organization_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "ai_jobs_organization_id_document_id_fkey"
+      columns: ["organization_id","document_id"]
+isOneToOne: false
+      referencedRelation: "knowledge_documents"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "ai_jobs_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ai_usage_daily": {
+                  Row: {
+                    "day": string,"organization_id": string,"replies": number,"tests": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "day": string,"organization_id": string,"replies"?: number,"tests"?: number
+                  }
+                  Update: {
+                    "day"?: string,"organization_id"?: string,"replies"?: number,"tests"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_usage_daily_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"audit_logs": {
                   Row: {
                     "action": string,"actor_id": string | null,"created_at": string,"entity_id": string | null,"entity_type": string,"id": string,"ip": unknown,"metadata": NonNullable<Json>,"organization_id": string | null
@@ -857,11 +909,17 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "check_auth_rate_limit":
+            "ai_quota":
+{ Args: { "p_org": string }; Returns: Json
+                           },
+"check_auth_rate_limit":
 { Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },
 "check_rate_limit":
 { Args: { "p_key": string,"p_limit": number,"p_window_seconds": number }; Returns: boolean
+                           },
+"claim_ai_jobs":
+{ Args: { "p_limit": number }; Returns: Json
                            },
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
@@ -872,8 +930,14 @@ isOneToOne: false
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
                            },
+"configure_ai_worker":
+{ Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
+                           },
 "configure_instagram_worker":
 { Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
+                           },
+"consume_ai_quota":
+{ Args: { "p_kind": string,"p_org": string }; Returns: boolean
                            },
 "create_instagram_send_intent":
 { Args: { "p_conversation_id": string,"p_request_id": string,"p_text": string }; Returns: string
@@ -893,11 +957,17 @@ isOneToOne: false
 "disconnect_instagram_connection":
 { Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: undefined
                            },
+"dispatch_ai_worker":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
+                           },
+"fail_ai_job":
+{ Args: { "p_error_code": string,"p_job": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
                            },
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
@@ -945,6 +1015,9 @@ isOneToOne: false
                            },
 "prepare_instagram_profile":
 { Args: { "p_event_id": string }; Returns: Json
+                           },
+"read_ai_worker_config":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "read_instagram_work":
 { Args: { "p_limit": number }; Returns: Json
@@ -998,6 +1071,9 @@ isOneToOne: false
                            },
 "slugify":
 { Args: { "p": string }; Returns: string
+                           },
+"sweep_ai_jobs":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "sweep_instagram_send_intents":
 { Args: Record<PropertyKey, never>; Returns: undefined
