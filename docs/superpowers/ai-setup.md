@@ -7,7 +7,7 @@ A IA responde conversas (Simulador e Instagram) usando a base de conhecimento da
 | Variável | Padrão | Uso |
 |---|---|---|
 | `OPENAI_API_KEY` | (sem padrão) | Chave da OpenAI. Obrigatória para a IA responder. |
-| `AI_CHAT_MODEL` | `gpt-4.1-mini` | Modelo de classificação e resposta. O padrão ainda precisa ser validado com uma chave real. |
+| `AI_CHAT_MODEL` | `gpt-4.1-mini` | Modelo de classificação e resposta. O padrão ainda precisa ser validado com uma chave real. Precisa aceitar `temperature` e saída estruturada (`response_format` com `json_schema` estrito). |
 | `AI_EMBEDDING_MODEL` | `text-embedding-3-small` | Modelo de embeddings (1536 dimensões; a tabela da base espera esse tamanho). |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | URL base da API; útil para proxy ou para o stub local dos testes. |
 
@@ -37,6 +37,8 @@ npx supabase functions deploy ai-worker ai-playground
 ```
 
 Nunca coloque a chave em arquivo versionado, em log ou em mensagem de commit.
+
+> **Escolha do `AI_CHAT_MODEL`:** o worker envia `temperature` (0 na classificação, 0,2 na resposta), `max_tokens` (300 e 800) e `response_format` do tipo `json_schema` com `strict: true`. Um modelo que recuse algum desses parâmetros faz a OpenAI rejeitar **todas** as chamadas (`rejected`, sem nova tentativa) e cada conversa é transferida com "Falha temporária da IA". Confira no log do `ai-worker` (`provider_error` com `"code":"rejected"`) depois de trocar o modelo.
 
 ## Agendamento do worker
 
