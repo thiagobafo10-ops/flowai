@@ -35,7 +35,7 @@ const keywordsSchema = z
   .min(1, "Informe ao menos uma palavra-chave.")
   .max(20, "Máximo de 20 palavras-chave.");
 const uuid = z.string().uuid("Identificador inválido.");
-const httpsUrl = z
+export const httpsUrl = z
   .string()
   .trim()
   .max(2000, "URL muito longa.")
@@ -62,8 +62,8 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
   stage_changed: z.object({ stageId: uuid.nullable() }),
 };
 
-const optionId = z.string().regex(/^[a-z0-9]{1,12}$/, "Use de 1 a 12 letras minúsculas ou números.");
-const optionTitle = z.string().min(1, "Informe o título.").max(20, "O título deve ter no máximo 20 caracteres.");
+export const optionId = z.string().regex(/^[a-z0-9]{1,12}$/, "Use de 1 a 12 letras minúsculas ou números.");
+export const optionTitle = z.string().min(1, "Informe o título.").max(20, "O título deve ter no máximo 20 caracteres.");
 
 const buttonSchema = z
   .object({
@@ -97,7 +97,7 @@ const textMessageSchema = z
 
 const messageSchema = z.discriminatedUnion("mode", [textMessageSchema, z.object({ mode: z.literal("ai") })]);
 
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use o formato HH:MM.");
+export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use o formato HH:MM.");
 
 const conditionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("keyword"), keywords: keywordsSchema, mode: keywordModeSchema }),

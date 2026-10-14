@@ -16,3 +16,4 @@ export * from "./channels/index.ts";
 export * from "./inbox/index.ts";
 export * from "./ai/index.ts";
 export * from "./automation/index.ts";
+export * from "./growth/index.ts";
