@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "build": "npm run build -w apps/web",
     "test": "npm run test --workspaces --if-present",
     "test:edge": "node scripts/test-edge.mjs",
     "test:scripts": "node --test \"scripts/tests/*.test.mjs\"",
