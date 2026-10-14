@@ -7,6 +7,7 @@
     "test:edge": "node scripts/test-edge.mjs",
     "test:instagram:e2e": "node scripts/test-instagram-e2e.mjs",
     "test:ai:e2e": "node scripts/test-ai-e2e.mjs",
+    "test:automation:e2e": "node scripts/test-automation-e2e.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

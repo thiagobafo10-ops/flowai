@@ -37,6 +37,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | `npm run test:edge` | Testes das Edge Functions com contratos/transportes injetados |
 | `npm run test:instagram:e2e` | Suíte completa de navegador com Graph injetada somente no proxy local de testes |
 | `npm run test:ai:e2e` | Suíte de navegador da IA com stub local da OpenAI e cron pausado/restaurado; nenhuma chamada real à OpenAI |
+| `npm run test:automation:e2e` | Seis fluxos de automação no navegador (3103), Supabase local e Graph/OpenAI falsos (54328); restaura os três crons/configurações de workers |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
@@ -50,6 +51,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Fora do CI, um servidor já rodando na porta 3100 é reaproveitado (`reuseExistingServer`); se ele for de um build antigo, pare-o antes de rodar o e2e.
 - Após `npm run db:reset`, espere os containers do Supabase ficarem saudáveis antes do e2e.
 - Convenções dos testes: navegue com `gotoReady`/`reloadReady` (`e2e/support/nav.ts`), que esperam o marcador de hidratação `html[data-hydrated="1"]`; antes de recarregar ou navegar após uma ação otimista, espere o contêiner ficar com `aria-busy="false"` (`settled`). Cadastro e organização vêm de `e2e/support/auth.ts`.
+- Em host local com pouca memória, `FLOWAI_E2E_SLOW_HOST=1` aumenta o prazo global para 60 s e o de expectativas para 15 s, mantendo as verificações. Os prazos normais (30 s / 5 s) e de CI continuam iguais. Isso não corrige timeouts SQL causados por falta de recursos; libere memória antes de repetir a suíte. Rode as suítes sequencialmente.
 
 ## Arquitetura
 
@@ -60,6 +62,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Fase 4 (Inbox, conversas e Simulador): spec [`docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md`](docs/superpowers/specs/2026-10-10-fase-4-inbox-design.md), plano [`docs/superpowers/plans/2026-10-10-fase-4-inbox.md`](docs/superpowers/plans/2026-10-10-fase-4-inbox.md)
 - Fase 5 (Instagram primeiro): [design](docs/superpowers/specs/2026-10-12-fase-5-meta-design.md), [plano](docs/superpowers/plans/2026-10-12-fase-5-instagram.md), [configuração e testes](docs/superpowers/instagram-setup.md). WhatsApp adiado; validação ao vivo com Meta ainda pendente.
 - Fase 6 (IA com base de conhecimento): [design](docs/superpowers/specs/2026-10-12-fase-6-ia-design.md), [plano](docs/superpowers/plans/2026-10-12-fase-6-ia.md), [configuração](docs/superpowers/ai-setup.md), [pendências e evidências](docs/superpowers/fase-6-pendencias.md). Validação ao vivo com OpenAI ainda pendente.
+- Fase 7A (automações visuais): [design](docs/superpowers/specs/2026-10-13-fase-7a-automacoes-design.md), [plano](docs/superpowers/plans/2026-10-13-fase-7a-automacoes.md), [decisões, pendências e evidências](docs/superpowers/fase-7a-pendencias.md). Inclui modelos, botões, esperas, histórico e migração das regras de comentário. Validação ao vivo com Meta/OpenAI ainda pendente.
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança
@@ -79,6 +82,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
   - Posse de app/conta vale só para conexões **verificadas**; claims não verificados expiram em 24h e cedem a um dono verificado. Canais Instagram só são criados/apagados por funções de serviço.
 
 - **IA (Fase 6):** `OPENAI_API_KEY` existe **somente** nos secrets das Edge Functions (`ai-worker`, `ai-playground`); nunca em `apps/web`, em `NEXT_PUBLIC_*` ou no repositório. Limites diários, filas e configuração do worker ficam em schema `private`; veja [ai-setup.md](docs/superpowers/ai-setup.md).
+- **Automações (Fase 7A):** webhook de saída só permite HTTPS, resolve/verifica todos os IPs A/AAAA, bloqueia rede interna/especial, limita resposta a 64 KB e tempo a 10 s, sem redirecionamentos. A resolução seguida de fetch pela URL original mantém uma janela residual de DNS rebinding; veja [pendências](docs/superpowers/fase-7a-pendencias.md). Payloads de clique exigem HMAC e escopo da execução/canal/contato; inválidos são descartados.
 
 ## Convenções do app
 

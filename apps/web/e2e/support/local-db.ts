@@ -69,6 +69,15 @@ export function countAuditLogins(email: string): number {
   );
 }
 
+/**
+ * Idempotente: garante os grants padrão que breakMembershipsRead/breakDashboardRpc revogam.
+ * Uma execução interrompida pode pular o finally da fixture; o globalSetup restaura no início.
+ */
+export function ensureDefaultGrants(): void {
+  restoreMembershipsRead();
+  restoreDashboardRpc();
+}
+
 /** Simula falha do banco na leitura de memberships (somente Supabase local). */
 export function breakMembershipsRead(): void {
   psql("revoke select on public.memberships from authenticated");
