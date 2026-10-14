@@ -1201,6 +1201,9 @@ isOneToOne: false
 "ai_quota":
 { Args: { "p_org": string }; Returns: Json
                            },
+"analytics_metrics":
+{ Args: { "p_channel_id"?: string,"p_days": number,"p_org": string }; Returns: Json
+                           },
 "apply_automation_step":
 { Args: { "p_run": string,"p_step": Json,"p_token": string }; Returns: Json
                            },
