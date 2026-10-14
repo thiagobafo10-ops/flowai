@@ -1236,6 +1236,9 @@ isOneToOne: false
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
                            },
+"claim_outreach_deliveries":
+{ Args: { "p_limit": number }; Returns: Json
+                           },
 "cleanup_instagram_events":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -1250,6 +1253,9 @@ isOneToOne: false
                            },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
+                           },
+"complete_outreach_delivery":
+{ Args: { "p_id": string,"p_result": Json,"p_token": string }; Returns: Json
                            },
 "configure_ai_worker":
 { Args: { "p_base_url": string,"p_service_key": string,"p_worker_secret": string }; Returns: undefined
@@ -1313,6 +1319,9 @@ isOneToOne: false
                            },
 "fail_automation_run":
 { Args: { "p_code": string,"p_retryable": boolean,"p_run": string,"p_token": string }; Returns: undefined
+                           },
+"fail_outreach_delivery":
+{ Args: { "p_code": string,"p_id": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
                            },
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
@@ -1385,6 +1394,9 @@ isOneToOne: false
                            },
 "prepare_instagram_profile":
 { Args: { "p_event_id": string }; Returns: Json
+                           },
+"prepare_outreach_delivery":
+{ Args: { "p_id": string,"p_token": string }; Returns: Json
                            },
 "preview_campaign_audience":
 { Args: { "p_audience": Json,"p_org": string }; Returns: Json
@@ -1500,6 +1512,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "sweep_instagram_send_intents":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"sweep_outreach_deliveries":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "verify_instagram_media":
