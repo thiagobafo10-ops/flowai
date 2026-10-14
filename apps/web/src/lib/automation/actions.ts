@@ -107,6 +107,35 @@ export async function createAutomation(input: { templateKey?: TemplateKey; name?
   return { ok: true, data: { id: data as string } };
 }
 
+export type CreateFromGraphInput = {
+  name: string;
+  triggerType: TriggerType;
+  triggerConfig: unknown;
+  graph: AutomationGraph;
+};
+
+/** Cria uma nova automação a partir de um grafo customizado (usado pelo criador com IA). */
+export async function createAutomationFromGraph(input: CreateFromGraphInput): Promise<ActionResult<{ id: string }>> {
+  const c = await context(WRITE_ROLES);
+  if (!("supabase" in c)) return c;
+  const name = nameSchema.safeParse(input.name);
+  if (!name.success) return { ok: false, error: AUTOMATION_INVALID_NAME };
+  const trigger = triggerSchema.safeParse(input.triggerType);
+  const graph = automationGraphSchema.safeParse(input.graph);
+  if (!trigger.success || !graph.success) return { ok: false, error: AUTOMATION_INVALID_GRAPH };
+
+  const { data, error } = await c.supabase.rpc("save_automation", {
+    p_org: c.orgId,
+    p_id: null as unknown as string,
+    p_name: name.data,
+    p_trigger_type: trigger.data,
+    p_trigger_config: input.triggerConfig as never,
+    p_graph: graph.data as never,
+  });
+  if (error) return dbError("create automation from graph failed", error, AUTOMATION_CREATE_FAILED);
+  return { ok: true, data: { id: data as string } };
+}
+
 type SaveInput = { id: string; name: string; triggerType: TriggerType; triggerConfig: unknown; graph: AutomationGraph };
 
 export async function saveAutomation(input: SaveInput): Promise<ActionResult<{ issues: GraphIssue[] }>> {
