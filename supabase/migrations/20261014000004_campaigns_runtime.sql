@@ -109,20 +109,30 @@ declare
   v_spacing interval;
   v_base timestamptz;
   v_audience jsonb;
+  v_campaign_ids uuid[];
 begin
   select campaign_rate_per_minute into v_rate from private.outreach_settings where singleton;
   v_spacing := interval '1 minute' / v_rate;
-  for v_campaign in select * from public.campaigns where status = 'scheduled' and scheduled_at <= now()
-      order by scheduled_at, id for update skip locked loop
+  -- Claim the full due batch first, then lock its complete channel union in global UUID order.
+  -- Per-campaign sorting alone can reverse lock order across campaigns in the same transaction.
+  select coalesce(array_agg(due.id), '{}') into v_campaign_ids from (
+    select id from public.campaigns where status = 'scheduled' and scheduled_at <= now()
+      order by scheduled_at, id for update skip locked
+  ) due;
+  perform ch.id from public.channels ch where exists (
+    select 1 from public.campaigns c where c.id = any(v_campaign_ids) and c.organization_id = ch.organization_id
+      and c.audience -> 'channelIds' @> jsonb_build_array(ch.id)
+  ) order by ch.id for update;
+  for v_campaign in select * from public.campaigns where id = any(v_campaign_ids) order by scheduled_at, id loop
     update public.campaigns set status = 'sending', started_at = now() where id = v_campaign.id;
     -- Materialize once: every recipient and window decision belongs to the same snapshot.
     select coalesce(jsonb_agg(to_jsonb(a)), '[]') into v_audience
       from private.campaign_audience(v_campaign.organization_id, v_campaign.audience) a;
-    -- Serialize pacing across concurrent campaigns on a channel. Lock selected channels in UUID order.
+    -- The channel union is already locked, serializing pacing across concurrent campaigns.
     -- Pending/sending/sent CAMPAIGN deliveries reserve slots; future sequence steps do not.
     -- Sent slots preserve spacing between consecutive campaigns; cancellation frees unused slots.
     for v_channel in select ch.id from public.channels ch where ch.organization_id = v_campaign.organization_id
-        and v_campaign.audience -> 'channelIds' @> jsonb_build_array(ch.id) order by ch.id for update loop
+        and v_campaign.audience -> 'channelIds' @> jsonb_build_array(ch.id) order by ch.id loop
       select greatest(now(), max(d.run_after) + v_spacing) into v_base from public.outreach_deliveries d
         where d.organization_id = v_campaign.organization_id and d.channel_id = v_channel
           and d.source = 'campaign' and d.status in ('pending', 'sending', 'sent');
