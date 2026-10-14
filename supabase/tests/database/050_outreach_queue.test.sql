@@ -217,5 +217,32 @@ update public.sequence_steps set message='{"text":"Sem opção"}' where id=pg_te
 select is(private.automation_click_kind(:'oa',pg_temp.n('k4'),pg_temp.n('optconv'),private.outreach_payload(:'optd','go')),'stale','removed live sequence option becomes text');
 select private.ingest_inbound_core(:'oa',pg_temp.n('sim'),'simulator','fakeflag50','phone504',null,'Resposta',now(),'{"outreachClick":true}',pg_temp.n('k4'));
 select is((select status from public.sequence_enrollments where id=:'opten'),'exited','unverified outreach flag cannot bypass exitOnReply');
+-- Claim -> pause -> guard -> resume must retain the same unsent step and enrollment.
+insert into public.sequences(id,organization_id,name,status,settings) values(pg_temp.n('pauseguard'),:'oa','Pause guard50','active',jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('sim'))));
+insert into public.sequence_steps(id,organization_id,sequence_id,position,delay_minutes,message) values
+ (pg_temp.n('pauseguard1'),:'oa',pg_temp.n('pauseguard'),1,1,'{"text":"Primeiro reservado"}'),
+ (pg_temp.n('pauseguard2'),:'oa',pg_temp.n('pauseguard'),2,1,'{"text":"Segundo reservado"}');
+create temporary table pause_cases as select i,private.sequence_enroll(pg_temp.n('pauseguard'),pg_temp.n('k'||i),'system') en from generate_series(5,8) i;
+update public.outreach_deliveries set run_after=now() where enrollment_id in(select en from pause_cases);
+insert into claims select (x->>'deliveryId')::uuid,(x->>'claimToken')::uuid from jsonb_array_elements(public.claim_outreach_deliveries(50)) x;
+alter table pause_cases add column delivery uuid;
+update pause_cases p set delivery=(select id from public.outreach_deliveries where enrollment_id=p.en and step_id=pg_temp.n('pauseguard1'));
+select tests.authenticate_as(:'ua');
+select public.set_sequence_status(pg_temp.n('pauseguard'),'paused');
+select tests.clear_authentication();
+select is((public.prepare_outreach_delivery(p.delivery,c.token))->>'action','skip','paused claimed prepare skips') from pause_cases p join claims c on c.id=p.delivery where p.i=5;
+select is((public.complete_outreach_delivery(p.delivery,c.token,'{}'))->>'state','cancelled','paused claimed complete cancels') from pause_cases p join claims c on c.id=p.delivery where p.i=6;
+select public.fail_outreach_delivery(p.delivery,c.token,'network_error',true) from pause_cases p join claims c on c.id=p.delivery where p.i=7;
+update public.outreach_deliveries set claimed_until=now()-interval '1 second',attempts=3 where id=(select delivery from pause_cases where i=8);
+select public.sweep_outreach_deliveries();
+select ok((select bool_and(d.status='cancelled' and d.reason='paused' and e.status='active' and e.next_send_at is null) from pause_cases p join public.outreach_deliveries d on d.id=p.delivery join public.sequence_enrollments e on e.id=p.en),'all four paused guards preserve reusable paused reason and active enrollment');
+select tests.authenticate_as(:'ua');
+select public.set_sequence_status(pg_temp.n('pauseguard'),'active');
+select tests.clear_authentication();
+select ok((select bool_and(d.status='pending' and d.step_id=pg_temp.n('pauseguard1') and d.run_after=now()+interval '1 minute' and d.attempts=0 and d.claim_token is null) from pause_cases p join public.outreach_deliveries d on d.id=p.delivery),'resume reuses same delivery and same unsent first step with fresh delay');
+select is((select count(*)::int from public.outreach_deliveries where enrollment_id in(select en from pause_cases) and step_id=pg_temp.n('pauseguard2')),0,'pause guards never advance to second step');
+select is((select count(*)::int from public.messages where context#>>'{outreach,deliveryId}' in(select delivery::text from pause_cases)),0,'pause guards never send');
+select is((public.complete_outreach_delivery(p.delivery,c.token,'{}'))->>'state','pending','old token replay after resume cannot mutate delivery') from pause_cases p join claims c on c.id=p.delivery where p.i=6;
+select is((public.prepare_outreach_delivery(p.delivery,c.token))->>'action','skip','old prepare token after resume skipped') from pause_cases p join claims c on c.id=p.delivery where p.i=5;
 select * from finish();
 rollback;

@@ -1,15 +1,15 @@
 -- Fase 7B: reservation, atomic delivery, signed outreach clicks and cron dispatch.
 -- Cross-system lock order: contact KEY SHARE -> conversation -> sequence SHARE ->
 -- enrollment / campaign -> delivery. Never wait for a conversation while holding a delivery.
-create function private.outreach_lock_delivery(p_id uuid) returns public.outreach_deliveries
+-- The caller already owns the expected conversation (or resolved none). This helper
+-- never acquires a conversation, including when sweep holds earlier parent locks.
+create function private.outreach_lock_parent_delivery(p_id uuid,p_expected_conv uuid) returns public.outreach_deliveries
 language plpgsql security definer set search_path = '' as $$
-declare d public.outreach_deliveries; v_conv uuid; v_sequence uuid;
+declare d public.outreach_deliveries; v_sequence uuid;
 begin
   select * into d from public.outreach_deliveries where id=p_id;
   if not found then return null; end if;
-  perform 1 from public.contacts where id=d.contact_id and organization_id=d.organization_id for key share;
-  v_conv:=private.sequence_conversation(d.organization_id,d.contact_id,array[d.channel_id]);
-  perform 1 from public.conversations where id=v_conv and organization_id=d.organization_id for update;
+  if private.sequence_conversation(d.organization_id,d.contact_id,array[d.channel_id]) is distinct from p_expected_conv then return null; end if;
   if d.enrollment_id is not null then
     select sequence_id into v_sequence from public.sequence_enrollments where id=d.enrollment_id;
     perform 1 from public.sequences where id=v_sequence for share;
@@ -21,8 +21,20 @@ begin
   -- Revalidate the optimistic resolution. A new/replaced conversation is retried by the sweep;
   -- do not acquire a second conversation lock after acquiring the parent/delivery locks.
   if d.id is not null and private.sequence_conversation(d.organization_id,d.contact_id,array[d.channel_id])
-      is distinct from v_conv then return null; end if;
+      is distinct from p_expected_conv then return null; end if;
   return d;
+end $$;
+
+create function private.outreach_lock_delivery(p_id uuid) returns public.outreach_deliveries
+language plpgsql security definer set search_path = '' as $$
+declare d public.outreach_deliveries; v_conv uuid;
+begin
+  select * into d from public.outreach_deliveries where id=p_id;
+  if not found then return null; end if;
+  perform 1 from public.contacts where id=d.contact_id and organization_id=d.organization_id for key share;
+  v_conv:=private.sequence_conversation(d.organization_id,d.contact_id,array[d.channel_id]);
+  perform 1 from public.conversations where id=v_conv and organization_id=d.organization_id for update;
+  return private.outreach_lock_parent_delivery(p_id,v_conv);
 end $$;
 
 create function private.outreach_result(d public.outreach_deliveries) returns jsonb
@@ -50,6 +62,10 @@ begin
     v_reason:='contact_deleted';
   elsif d.source='campaign' then
     if not exists(select 1 from public.campaigns where id=d.campaign_id and organization_id=d.organization_id and status='sending') then v_reason:='campaign_cancelled'; end if;
+  elsif exists(select 1 from public.sequence_enrollments e join public.sequences s on s.id=e.sequence_id
+      where e.id=d.enrollment_id and e.organization_id=d.organization_id and e.status='active' and s.status='paused') then
+    -- Task5 excludes/reuses cancelled paused deliveries; preserve the unsent step.
+    v_reason:='paused';
   elsif not exists(select 1 from public.sequence_enrollments e join public.sequences s on s.id=e.sequence_id
       where e.id=d.enrollment_id and e.organization_id=d.organization_id and e.status='active' and s.status='active') then
     v_reason:='sequence_inactive';
@@ -200,10 +216,20 @@ end $$;
 
 create function public.sweep_outreach_deliveries() returns void
 language plpgsql security definer set search_path = '' as $$
-declare r record; d public.outreach_deliveries;
+declare r record; d public.outreach_deliveries; v_batch jsonb;
 begin
-  for r in select id from public.outreach_deliveries where status='sending' and claimed_until<=clock_timestamp() order by id loop
-    d:=private.outreach_lock_delivery(r.id);
+  -- All conversation waits happen before any enrollment/campaign/delivery is locked.
+  -- Inbound on a later conversation can therefore still opt out an earlier enrollment.
+  select coalesce(jsonb_agg(jsonb_build_object('id',x.id,'contactId',x.contact_id,'conversationId',
+    private.sequence_conversation(x.organization_id,x.contact_id,array[x.channel_id])) order by x.id),'[]') into v_batch
+    from (select id,organization_id,contact_id,channel_id from public.outreach_deliveries
+      where status='sending' and claimed_until<=clock_timestamp() order by id limit 100) x;
+  perform 1 from public.contacts c where c.id in(select (x->>'contactId')::uuid from jsonb_array_elements(v_batch) x)
+    order by c.id for key share;
+  perform 1 from public.conversations c where c.id in(select (x->>'conversationId')::uuid from jsonb_array_elements(v_batch) x)
+    order by c.id for update;
+  for r in select (x->>'id')::uuid id,(x->>'conversationId')::uuid conversation_id from jsonb_array_elements(v_batch) x loop
+    d:=private.outreach_lock_parent_delivery(r.id,r.conversation_id);
     if d.id is null or d.status<>'sending' or d.claimed_until>clock_timestamp() then continue; end if;
     if not private.outreach_active(d) then continue; end if;
     if d.attempts>=3 then perform private.outreach_finish(d.id,'failed','reservation_expired');
@@ -231,7 +257,7 @@ begin
     headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer '||service_key,'apikey',service_key,'X-FlowAI-Worker',worker_secret),timeout_milliseconds:=150000);
 end $$;
 
-revoke all on function private.outreach_lock_delivery(uuid),private.outreach_result(public.outreach_deliveries),
+revoke all on function private.outreach_lock_delivery(uuid),private.outreach_lock_parent_delivery(uuid,uuid),private.outreach_result(public.outreach_deliveries),
   private.outreach_finish(uuid,text,text),private.outreach_active(public.outreach_deliveries),private.outreach_payload(uuid,text),
   private.outreach_verify_payload(text),private.outreach_message(public.outreach_deliveries),private.outreach_instagram_body(jsonb)
   from public,anon,authenticated;
