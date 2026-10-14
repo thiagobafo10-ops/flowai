@@ -81,18 +81,18 @@ Migration `20261013000009_automation_final_fixes.sql`, pgTAP `045_automation_fin
 
 ## Evidências finais
 
-Pendente — preenchido pelo controller após as execuções de navegador.
+Branch `feat/fase-7a-automacoes`, após a onda final de correções (commits `7b5e259` e `9485fb1`). Testes de navegador rodados com `FLOWAI_E2E_SLOW_HOST=1` (host de 8 GB).
 
 | Verificação | Resultado |
 |---|---|
-| `npm test` | pendente |
-| `npm run test:scripts` | pendente |
-| `npm run typecheck` | pendente |
-| `npm run lint -w apps/web` | pendente |
-| `npx supabase db reset && npx supabase test db` | pendente |
-| `npm run test:edge` | pendente |
-| `npm run e2e -w apps/web` | pendente |
-| `npm run test:ai:e2e` | pendente |
-| `npm run test:instagram:e2e` | pendente |
-| `npm run test:automation:e2e` (2 execuções) | pendente |
-| `select jobname, active from cron.job` (quatro jobs ativos) | pendente |
+| `npm test` | PASS: core 346, web 132 |
+| `npm run test:scripts` | PASS: 13 |
+| `npm run typecheck` | PASS |
+| `npm run lint -w apps/web` | PASS |
+| `npx supabase db reset && npx supabase test db` | PASS: 45 arquivos / 1641 |
+| `npm run test:edge` | PASS: 171 |
+| `npm run e2e -w apps/web` | PASS: 64/64 |
+| `npm run test:ai:e2e` | PASS: 6/6 |
+| `npm run test:instagram:e2e` | PASS: 70/70 |
+| `npm run test:automation:e2e` (2 execuções) | PASS: 6/6 e 6/6 (após ajuste do seletor do aviso de transferência) |
+| `select jobname, active from cron.job` (quatro jobs ativos) | PASS: ai-worker, automation-worker, instagram-cleanup e instagram-worker ativos |
