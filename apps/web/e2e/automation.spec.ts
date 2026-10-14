@@ -1,5 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
 import { createHmac } from "node:crypto";
+import { test, expect, type Page } from "@playwright/test";
 import { newEmail, signUpWithOrg } from "./support/auth";
 import { gotoReady } from "./support/nav";
 import { clearRateLimits, psql, simulateInboundSql } from "./support/local-db";
@@ -43,7 +43,6 @@ test("Automação: builder configura modelo, etiqueta e etapa e ativa", async ({
   expect(moved.graph.nodes.find((node: { id: string }) => node.id === stage.id).position).not.toEqual(stage.position);
   await page.getByRole("button", { name: "Fechar painel" }).click();
   await drainAutomationRuns(email);
-  await page.screenshot({ path: "../../.superpowers/sdd/2026-10-13-fase-7a-automacoes/task-14-builder.png", fullPage: true });
   expect(psql(`select status from public.automations where organization_id='${org}'`)).toBe("active");
 });
 

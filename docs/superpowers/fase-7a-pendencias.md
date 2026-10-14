@@ -17,6 +17,11 @@ Referências: [design](specs/2026-10-13-fase-7a-automacoes-design.md) e [plano](
 - Transporte de resposta privada aceita o mesmo corpo estruturado usado no Direct, mantendo compatibilidade com chamadas textuais existentes.
 - Webhook de saída exige HTTPS, verifica todos os registros A/AAAA, bloqueia endereços internos/especiais, não segue redirects e limita tempo/corpo. O fetch usa a URL original para TLS/SNI: há janela residual de DNS rebinding sem pinning de IP. Qualquer porta pública é permitida.
 - Contagens de execuções usam `automation_run_counts` SECURITY INVOKER; passos são carregados ao expandir cada execução, com limite de 200 e aviso de truncamento.
+- Não existia evento de domínio `tag_added`: a 7A o adiciona (gatilho na inserção do vínculo contato-etiqueta); `save_contact` compara etiquetas para não reemiti-lo. `stage_changed` escuta `deal_stage_changed`/`deal_created`.
+- O validador aceita o código extra `dangling_edge` (aresta de/para nó inexistente).
+- `prepare` do worker devolve o contexto `ai` do nó atual ou de um sucessor direto do tipo IA (aditivo).
+- Execuções em nível de contato (sem conversa) são criadas por correspondência de gatilho; a regra de uma execução ativa por conversa é aplicada ao vincular uma conversa.
+- `ingest_inbound_message` de 7 argumentos (sem default; a versão de 6 passa `'{}'`) retorna NULL para payloads de clique inválidos; os chamadores tratam esse retorno.
 - Regras de comentário antigas são substituídas por automações. Os testes de navegador passaram a usar o editor, mantendo posse da publicação, token, janela, resposta privada e idempotência.
 
 ## Validação ao vivo pendente
@@ -41,6 +46,31 @@ Referências: [design](specs/2026-10-13-fase-7a-automacoes-design.md) e [plano](
 - Evento button_clicked do Simulador registra ator contato, sem auditar qual agent clicou. Rota de passos lê refs antes de verificar existência do run; contatos sem telefone usam chave sintética de lock.
 - Primeira execução fria do Inbox na tarefa 13 teve falhas não capturadas e repetição 13/13; observar a verificação final da tarefa 14.
 
-## Evidências locais
+## Harness E2E, cancelamento e recuperação
 
-As contagens finais e o estado restaurado dos quatro crons serão registrados após a verificação sequencial da tarefa 14. Harness: Graph e OpenAI falsos; Auth, REST, RLS, Realtime e RPCs reais do Supabase local. `npm run test:automation:e2e` roda seis cenários no Chromium, porta web 3103 e proxy 54328. O runner recusa portas ocupadas, pausa os três workers e restaura configuração/Vault e estado ativo dos crons em finally. No cancelamento (Ctrl-C/SIGTERM/saída), espera até 15 s o Playwright encerrar o Next e os navegadores que possui, encerra à força só as árvores de processos que o próprio runner iniciou (`taskkill /t /f` no Windows) e restaura uma única vez. Os privilégios padrão alterados por fixtures (SELECT em `memberships`, EXECUTE em `dashboard_metrics`) são garantidos no início de cada execução (globalSetup e runner) e na restauração. Testes do coordenador: `node --test scripts/tests/owned-process.test.mjs`.
+- Graph e OpenAI falsos; Auth, REST, RLS, Realtime e RPCs reais do Supabase local. `npm run test:automation:e2e` roda seis cenários no Chromium, porta web 3103 e proxy 54328; `npm run test:instagram:e2e` reutiliza o mesmo runner (3101/54326).
+- O runner recusa portas ocupadas, pausa os três workers e restaura configuração/Vault e estado ativo dos crons em finally, verificando a releitura.
+- Cancelamento (Ctrl-C/SIGTERM/saída): espera até 15 s o Playwright encerrar o Next e os navegadores que possui, encerra à força só as árvores de processos que o próprio runner iniciou (`taskkill /t /f` no Windows; grupo de processos no POSIX) e restaura uma única vez, mesmo se a parada dos filhos falhar. Falha de restauração termina com código 1, não 130/143.
+- Kill forçado (sem finally): antes de pausar os crons, o runner grava no Vault local o marcador `flowai_e2e_harness_state` com PID, horário e estado anterior (crons e configuração dos workers). A próxima execução de qualquer um dos dois runners restaura esse estado e remove o marcador antes de começar; se o PID do marcador ainda estiver vivo (e o marcador tiver menos de 6 h), recusa iniciar. Se a recuperação falhar, o marcador é mantido e o runner para. Limitação: até a próxima execução, os crons ficam pausados e os workers apontam para a configuração temporária do teste; para recuperar, execute o runner novamente (a recuperação acontece antes do proxy e do navegador; um Ctrl-C depois dela restaura normalmente) ou restaure manualmente `select cron.alter_job(...)`/`configure_*_worker` pelo conteúdo do marcador.
+- Privilégios compartilhados alterados por fixtures (SELECT em `memberships`, EXECUTE em `dashboard_metrics`): o `globalSetup` de todas as configs Playwright os garante no início, e o runner os garante na restauração (fonte única `scripts/lib/default-grants.mjs`).
+- `scripts/test-ai-e2e.mjs` (Fase 6) ainda usa o padrão antigo: `process.once` + `kill()` sem esperar a árvore e sem marcador; um kill forçado nele deixa os crons `flowai-ai-worker`/`flowai-instagram-worker` pausados até a próxima execução de um dos runners de automação/Instagram ou correção manual.
+- `FLOWAI_E2E_SLOW_HOST=1` (somente fora de CI): timeout 60 s / expect 15 s para host local com pouca memória; padrões normais e de CI continuam 30 s / 5 s.
+- Testes leves dos runners: `npm run test:scripts` (node:test; sem navegador nem banco).
+
+## Evidências finais
+
+Pendente — preenchido pelo controller após as execuções de navegador.
+
+| Verificação | Resultado |
+|---|---|
+| `npm test` | pendente |
+| `npm run test:scripts` | pendente |
+| `npm run typecheck` | pendente |
+| `npm run lint -w apps/web` | pendente |
+| `npx supabase db reset && npx supabase test db` | pendente |
+| `npm run test:edge` | pendente |
+| `npm run e2e -w apps/web` | pendente |
+| `npm run test:ai:e2e` | pendente |
+| `npm run test:instagram:e2e` | pendente |
+| `npm run test:automation:e2e` (2 execuções) | pendente |
+| `select jobname, active from cron.job` (quatro jobs ativos) | pendente |

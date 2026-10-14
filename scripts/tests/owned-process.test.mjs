@@ -86,3 +86,29 @@ test("SIGTERM maps to 143 and an unexpected exit restores synchronously", async 
   assert.equal(restores, 3);
   assert.ok(await gone(child.pid), "owned child force-killed on exit");
 });
+
+test("restoration still runs when stopping children throws, and shutdown never rejects", async () => {
+  let restores = 0; const exits = [];
+  const cancellation = createCancellation({
+    children: () => { throw new Error("process listing failed"); },
+    restore: () => { restores++; },
+    exit: (code) => exits.push(code),
+  });
+  assert.equal(await cancellation.shutdown(), false, "reports the stop failure");
+  assert.equal(restores, 1);
+  await cancellation.onSignal("SIGINT");
+  assert.deepEqual(exits, [1], "a failed shutdown keeps a non-zero, non-signal exit code");
+});
+
+test("a failed restoration exits 1 instead of 130/143, whether it throws or returns false", async () => {
+  for (const restore of [() => { throw new Error("db down"); }, () => false]) {
+    const exits = [];
+    const cancellation = createCancellation({ children: () => [], restore, exit: (code) => exits.push(code) });
+    await cancellation.onSignal("SIGTERM");
+    assert.deepEqual(exits, [1]);
+  }
+  const ok = createCancellation({ children: () => [], restore: () => true, exit: () => {} });
+  assert.equal(await ok.shutdown(), true);
+  const failingOnExit = createCancellation({ children: () => [], restore: () => { throw new Error("db down"); } });
+  assert.equal(failingOnExit.onExit(), false, "exit path reports the failure without throwing");
+});

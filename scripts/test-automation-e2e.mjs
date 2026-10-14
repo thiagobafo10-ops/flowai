@@ -5,6 +5,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_GRANTS } from "./lib/default-grants.mjs";
+import { captureStates, pidAlive, quote, recoverStaleRun, restoreStates, vaultMarkerStore } from "./lib/harness-state.mjs";
 import { createCancellation, installCancellation } from "./lib/owned-process.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -22,6 +24,7 @@ const sanitize = (value) => String(value).replace(/sb_(?:secret|publishable)_[A-
 // Buffer complete lines so credentials split across child-process chunks are masked too.
 function pipeSanitized(source, target) {
   let pending = "";
+  source.setEncoding("utf8"); // multi-byte characters split across chunks stay intact
   source.on("data", (chunk) => {
     pending += chunk;
     const newline = pending.lastIndexOf("\n");
@@ -36,11 +39,6 @@ function sql(statement) {
   if (result.status !== 0) throw new Error("Falha no banco local de testes.");
   return result.stdout.trim();
 }
-const quote = (text) => "'" + text.replaceAll("'", "''") + "'";
-function readConfig(kind) {
-  const value = sql(`select json_build_object('baseUrl',c.base_url,'serviceKey',s.decrypted_secret,'workerSecret',w.decrypted_secret) from private.${kind}_worker_config c join vault.decrypted_secrets s on s.id=c.service_key_secret_id join vault.decrypted_secrets w on w.id=c.worker_secret_id;`);
-  return value ? JSON.parse(value) : null;
-}
 async function assertPortFree(candidate) {
   const inUse = await new Promise((resolve) => {
     const probe = net.connect(candidate, "127.0.0.1");
@@ -49,36 +47,29 @@ async function assertPortFree(candidate) {
   });
   if (inUse) throw new Error(`A porta ${candidate} já está em uso.`);
 }
-const previous = new Map();
+const KINDS = ["automation", "ai", "instagram"];
+const marker = vaultMarkerStore(sql);
+let previous = null; // captured worker states; also persisted in the Vault marker
 let proxy; let test;
-// Shared-DB privileges toggled by dashboard/hardening fixtures; an interrupted fixture may skip
-// its finally, so the canonical grants are ensured before the run and again on restoration.
-const DEFAULT_GRANTS = "grant select on public.memberships to authenticated; grant execute on function public.dashboard_metrics(uuid, int) to authenticated;";
 let ownsRun = false; // false while refusing a busy port: another run may hold a fixture.
-function ensureDefaultGrants() {
+// Synchronous so it can also run from the process "exit" handler; called exactly once.
+// Returns false on failure so a signal exit becomes 1 instead of 130/143.
+function restore() {
+  if (!ownsRun) return true;
+  let ok = true;
+  // Fixtures revoking shared privileges may have been interrupted; globalSetup heals the next run.
   try { sql(DEFAULT_GRANTS); } catch {
     console.error("Falha ao restaurar privilégios padrão; confira o banco local.");
-    process.exitCode = 1;
+    ok = false;
   }
-}
-// Synchronous so it can also run from the process "exit" handler; called exactly once.
-function restore() {
-  if (ownsRun) ensureDefaultGrants();
-  // Restore Vault values/config before re-enabling crons. Secrets stay only in memory.
-  {
-    for (const [kind, state] of previous) {
-      try {
-        if (state.config) sql(`select public.configure_${kind}_worker(${quote(state.config.baseUrl)},${quote(state.config.serviceKey)},${quote(state.config.workerSecret)});`);
-        else sql(`with removed as (delete from private.${kind}_worker_config returning service_key_secret_id,worker_secret_id) delete from vault.secrets where id in (select service_key_secret_id from removed union all select worker_secret_id from removed);`);
-        if (state.active !== null) sql(`select cron.alter_job(jobid,active:=${state.active}) from cron.job where jobname='flowai-${kind}-worker';`);
-        if (JSON.stringify(readConfig(kind)) !== JSON.stringify(state.config)) throw new Error("config restoration mismatch");
-        if (state.active !== null && sql(`select active from cron.job where jobname='flowai-${kind}-worker';`) !== (state.active ? "t" : "f")) throw new Error("cron restoration mismatch");
-      } catch {
-        console.error(`Falha ao restaurar configuração/cron ${kind}; confira o banco local.`);
-        process.exitCode = 1;
-      }
-    }
-  }
+  if (!previous) return ok;
+  // Restore Vault values/config before re-enabling crons. Secrets stay only in memory/Vault.
+  let failed;
+  try { failed = restoreStates(sql, previous); } catch { failed = KINDS; }
+  for (const kind of failed) console.error(`Falha ao restaurar configuração/cron ${kind}; confira o banco local.`);
+  if (failed.length) return false; // keep the marker: the next run retries the recovery
+  try { marker.clear(); } catch { console.error("Falha ao remover o marcador do harness."); return false; }
+  return ok;
 }
 // Cancellation waits (bounded) for Playwright to stop the Next server and browsers it owns,
 // force-kills only the trees this script spawned, then restores once. Proxy goes last.
@@ -86,8 +77,6 @@ const cancellation = createCancellation({ children: () => [test, { child: proxy,
 installCancellation(cancellation);
 try {
   await assertPortFree(port); await assertPortFree(webPort);
-  ownsRun = true;
-  ensureDefaultGrants();
   console.log(`E2E local sequencial; memória livre: ${Math.round(os.freemem() / 1024 / 1024)} MB.`);
   const supabase = path.join(root, "node_modules/supabase/dist/supabase.js");
   // CLI status may contain keys even on stderr: never inherit either output stream.
@@ -95,9 +84,14 @@ try {
   try { status = JSON.parse(execFileSync(process.execPath, [supabase, "status", "-o", "json"], { cwd: root, encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] })); }
   catch { throw new Error("Supabase local indisponível; inicie-o antes do E2E."); }
   if (new URL(status.API_URL).hostname !== "127.0.0.1") throw new Error("Este teste exige o Supabase local.");
-  for (const kind of ["automation", "ai", "instagram"]) {
-    const active = sql(`select active from cron.job where jobname='flowai-${kind}-worker';`);
-    previous.set(kind, { active: active ? active === "t" : null, config: readConfig(kind) });
+  // A run killed without its finally left a marker: restore its saved state first.
+  const stale = recoverStaleRun({ store: marker, restore: (states) => restoreStates(sql, states), isAlive: pidAlive });
+  if (stale.recovered) console.log(`Estado de execução interrompida restaurado: ${stale.kinds.join(", ")}.`);
+  ownsRun = true; // from here on this run owns the shared state it restores
+  const captured = captureStates(sql, KINDS);
+  marker.write({ pid: process.pid, startedAt: Date.now(), suite: instagram ? "instagram" : "automation", states: captured });
+  previous = captured; // only now may restore() clear the marker
+  for (const kind of KINDS) {
     sql(`select cron.alter_job(jobid,active:=false) from cron.job where jobname='flowai-${kind}-worker';`);
     sql(`select public.configure_${kind}_worker('http://supabase_kong_flowai:8000',${quote(status.SERVICE_ROLE_KEY)},${quote(randomBytes(32).toString("hex"))});`);
   }
@@ -120,4 +114,4 @@ try {
   process.exitCode = await new Promise((resolve) => { test.on("error", () => resolve(1)); test.on("exit", (code) => resolve(code ?? 1)); });
 } catch (error) { console.error(sanitize(error instanceof Error ? error.message : "Falha no teste local.")); process.exitCode = 1; }
 // Normal end: Playwright already stopped its own tree; stop the proxy and restore once.
-finally { await cancellation.shutdown({ grace: 0 }); }
+finally { if (!await cancellation.shutdown({ grace: 0 })) process.exitCode = 1; }

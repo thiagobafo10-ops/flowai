@@ -45,33 +45,44 @@ export async function stopOwnedTree(child, { signal = "SIGINT", graceMs = 15_000
  * (bounded) and `restore` runs exactly once — also synchronously on an unexpected exit.
  */
 export function createCancellation({ children, restore, exit = (code) => process.exit(code), graceMs = 15_000, platform = process.platform }) {
-  let stopping; let restored = false; let exitCode;
+  let stopping; let restored = false; let restoreOk = true; let exitCode;
+  // `restore` signals failure by throwing or returning exactly false.
   const restoreOnce = () => {
-    if (restored) return;
+    if (restored) return restoreOk;
     restored = true;
-    restore();
+    try { restoreOk = restore() !== false; } catch { restoreOk = false; }
+    return restoreOk;
   };
+  /** Never rejects; resolves true only if every owned child stopped and restoration succeeded. */
   async function shutdown({ signal = "SIGINT", grace = graceMs } = {}) {
     if (!stopping) {
       stopping = (async () => {
-        // Entries are children or { child, graceMs } to cap the grace of helpers such as the proxy.
-        for (const entry of children()) {
-          const child = ownedChild(entry);
-          await stopOwnedTree(child, { signal, graceMs: Math.min(grace, entry?.graceMs ?? grace), platform });
+        let stopped = true;
+        try {
+          // Entries are children or { child, graceMs } to cap the grace of helpers such as the proxy.
+          for (const entry of children()) {
+            const child = ownedChild(entry);
+            if (!await stopOwnedTree(child, { signal, graceMs: Math.min(grace, entry?.graceMs ?? grace), platform })) stopped = false;
+          }
+        } catch {
+          stopped = false;
+        } finally {
+          restoreOnce();
         }
-        restoreOnce();
+        return stopped && restoreOk;
       })();
     }
     return stopping;
   }
   async function onSignal(signal) {
     if (exitCode === undefined) exitCode = signal === "SIGTERM" ? 143 : 130;
-    await shutdown({ signal });
-    exit(exitCode);
+    const ok = await shutdown({ signal });
+    exit(ok ? exitCode : 1);
   }
+  /** Synchronous last resort for an unexpected exit; returns false if restoration failed. */
   function onExit() {
-    for (const entry of children()) killOwnedTreeSync(ownedChild(entry), platform);
-    restoreOnce();
+    try { for (const entry of children()) killOwnedTreeSync(ownedChild(entry), platform); } catch { /* still restore */ }
+    return restoreOnce();
   }
   return { shutdown, onSignal, onExit, get restored() { return restored; } };
 }
@@ -80,5 +91,5 @@ export function createCancellation({ children, restore, exit = (code) => process
 export function installCancellation(cancellation, target = process) {
   target.on("SIGINT", () => cancellation.onSignal("SIGINT"));
   target.on("SIGTERM", () => cancellation.onSignal("SIGTERM"));
-  target.on("exit", () => cancellation.onExit());
+  target.on("exit", () => { if (!cancellation.onExit()) process.exitCode = 1; });
 }

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import type { AutomationGraph, TriggerType } from "@flowai/core";
-import { gotoReady } from "./nav";
 import { psql } from "./local-db";
+import { gotoReady } from "./nav";
 
 export const AUTOMATION_TEST_URL = process.env.FLOWAI_E2E_PROXY_URL ?? "http://127.0.0.1:54328";
 export function orgFor(email: string): string {
@@ -74,11 +74,17 @@ export function createDelayFlow(email: string): string {
   };
   return saveFixture(email, "Espera E2E", "message_received", { firstMessageOnly: false }, graph);
 }
+// Dollar-quoted literal with a random tag: apostrophes in names/text cannot break the SQL.
+function literal(text: string): string {
+  const tag = `$v${randomUUID().replaceAll("-", "")}$`;
+  if (text.includes(tag) || text.includes("$fixture$")) throw new Error("Invalid fixture literal");
+  return `${tag}${text}${tag}`;
+}
 function saveFixture(email: string, name: string, trigger: TriggerType, config: unknown, graph: AutomationGraph) {
   const org = orgFor(email);
   return psql(`do $fixture$ declare v_id uuid; begin
-perform set_config('request.jwt.claim.sub',(select id::text from auth.users where email='${email}'),true);
-v_id:=public.save_automation('${org}',null,'${name}','${trigger}','${JSON.stringify(config)}','${JSON.stringify(graph)}');
+perform set_config('request.jwt.claim.sub',(select id::text from auth.users where email=${literal(email)}),true);
+v_id:=public.save_automation(${literal(org)},null,${literal(name)},${literal(trigger)},${literal(JSON.stringify(config))},${literal(JSON.stringify(graph))});
 perform public.activate_automation(v_id); perform set_config('flowai.e2e.id',v_id::text,false);
 end $fixture$; select current_setting('flowai.e2e.id');`).split("\n").at(-1)!;
 }

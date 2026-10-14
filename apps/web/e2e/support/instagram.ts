@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
-import { psql } from "./local-db";
 import { expect, type Page } from "@playwright/test";
+import { psql } from "./local-db";
 import { gotoReady } from "./nav";
 
 export const INSTAGRAM_TEST_URL = process.env.FLOWAI_E2E_PROXY_URL ?? "http://127.0.0.1:54326";
