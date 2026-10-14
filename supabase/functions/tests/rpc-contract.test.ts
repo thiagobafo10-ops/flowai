@@ -100,3 +100,17 @@ Deno.test("contract parser reads overloads, defaults and OUT params", () => {
     { name: "p_a", hasDefault: false }, { name: "p_b", hasDefault: false }, { name: "p_c", hasDefault: true },
   ]));
 });
+
+Deno.test("outreach worker RPCs are wired and use latest SQL argument names", async () => {
+  const signatures = await sqlSignatures();
+  const calls = await rpcCalls("automation-worker/index.ts");
+  const required = {
+    claim_outreach_deliveries: ["p_limit"], prepare_outreach_delivery: ["p_id", "p_token"],
+    complete_outreach_delivery: ["p_id", "p_token", "p_result"], fail_outreach_delivery: ["p_id", "p_token", "p_code", "p_retryable"],
+  };
+  for (const [name, keys] of Object.entries(required)) {
+    const call = calls.find((c) => c.name === name);
+    assert(call && JSON.stringify(call.keys) === JSON.stringify(keys), `${name} not wired with ${keys.join(",")}`);
+    assert([...signatures.get(name)!.values()].some((params) => JSON.stringify(params.map((p) => p.name)) === JSON.stringify(keys)), `${name} SQL contract mismatch`);
+  }
+});

@@ -39,6 +39,10 @@ function fixture(overrides: Partial<Extract<PreparedRun, { action: "run" }>> = {
     },
     failRun: async (_run, _token, code, retryable) => { failures.push({ code, retryable }); },
     yieldRun: async (run, token) => { yields.push(`${run}/${token}`); },
+    claimDeliveries: async () => [],
+    prepareDelivery: async () => ({ action: "skip" }),
+    completeDelivery: async () => ({ state: "sent", intentIds: [] }),
+    failDelivery: async () => {},
     searchKnowledge: async () => opts.hits === false ? [] : [{ id: CHUNK, documentTitle: "Horarios", content: "O horario de funcionamento e das 9h as 18h. Fechamos aos domingos.", similarity: 0.9 }],
     provider: createOpenAIProvider({ apiKey: opts.apiKey ?? "key", fetch: openai }), chatModel: "test-model",
     claimSend: async (id) => ({ intentId: id, connectionId: "conn", channelId: "channel", kind: "direct", text: MESSAGE, messagePayload: steps.flatMap((s) => s.effects).find((e) => e.type === "send_text")?.instagram, recipientExternalId: "900", commentId: null, claimToken: "send-token" }),
@@ -245,4 +249,132 @@ Deno.test("lost claim during budget yield does not fail or retry run", async () 
   f.deps.yieldRun = async () => { throw new DbError("42501"); };
   await handleAutomationWorker(request(), f.deps);
   assert(f.steps.length === 0 && f.failures.length === 0 && f.logs.some((l) => l.includes("claim_lost")));
+});
+
+type DeliveryPrepared = {
+  action: "send"; deliveryId: string; organizationId: string; channelType: "simulator" | "instagram";
+  conversationId: string | null; contact: { name: string | null };
+  message: { text: string; buttons: { id: string; title: string; kind: "automation" | "url"; automationId?: string; url?: string }[]; quickReplies: { id: string; title: string; automationId: string; payload?: string }[] };
+  payloads: Record<string, string>;
+};
+function deliveryFixture(channelType: "simulator" | "instagram" = "simulator") {
+  const f = fixture();
+  const prepared: DeliveryPrepared = { action: "send", deliveryId: "delivery", organizationId: "org", channelType, conversationId: "conv", contact: { name: "Maria {nome}" }, message: { text: "Oi Maria {nome}", buttons: [], quickReplies: [] }, payloads: {} };
+  const results: Record<string, unknown>[] = [], failures: { code: string; retryable: boolean }[] = [], limits: number[] = [];
+  let claimed = false;
+  const deps = Object.assign(f.deps, {
+    claimDeliveries: async (limit: number) => { limits.push(limit); if (claimed) return []; claimed = true; return [{ deliveryId: "delivery", claimToken: "delivery-token" }]; },
+    prepareDelivery: async (id: string, token: string): Promise<DeliveryPrepared | { action: "skip" }> => { assert(id === "delivery" && token === "delivery-token"); return prepared; },
+    completeDelivery: async (id: string, token: string, result: Record<string, unknown>) => { assert(id === "delivery" && token === "delivery-token"); results.push(result); return { state: "sent", intentIds: channelType === "instagram" ? ["delivery-intent"] : [] }; },
+    failDelivery: async (id: string, token: string, code: string, retryable: boolean) => { assert(id === "delivery" && token === "delivery-token"); failures.push({ code, retryable }); },
+  });
+  const claimSend = deps.claimSend;
+  deps.claimSend = async (id) => {
+    const claim = await claimSend(id);
+    return claim && id === "delivery-intent" ? { ...claim, text: prepared.message.text, messagePayload: results.at(-1)?.instagram as Record<string, unknown> } : claim;
+  };
+  return { ...f, deps, delivery: prepared, results, deliveryFailures: failures, limits };
+}
+Deno.test("outreach Simulator completes after automation with an empty result and no provider send", async () => {
+  const f = deliveryFixture();
+  const complete = f.deps.completeDelivery;
+  f.deps.completeDelivery = async (...args) => { assert(f.steps.length === 2); return complete(...args); };
+  const response = await handleAutomationWorker(request(), f.deps);
+  assert(response.status === 200 && f.results.length === 1 && JSON.stringify(f.results[0]) === "{}");
+  assert(f.sends.length === 1 && f.deliveryFailures.length === 0 && f.limits.every((n) => n === 1));
+});
+Deno.test("outreach Instagram preserves SQL rendered text and authoritative fd1 quick replies through transport", async () => {
+  const f = deliveryFixture("instagram");
+  f.delivery.message.quickReplies = [{ id: "yes", title: "Sim", automationId: "flow", payload: "untrusted-option-copy" }];
+  f.delivery.payloads = { yes: "fd1.delivery.yes.0123456789abcdef" };
+  await handleAutomationWorker(request(), f.deps);
+  const expected = { instagram: { text: "Oi Maria {nome}", quick_replies: [{ content_type: "text", title: "Sim", payload: "fd1.delivery.yes.0123456789abcdef" }] } };
+  assert(JSON.stringify(f.results[0]) === JSON.stringify(expected), JSON.stringify(f.results));
+  assert(JSON.stringify(f.sends[1]?.message) === JSON.stringify(expected.instagram));
+  assert(f.deliveryFailures.length === 0 && f.openai.calls.length === 0);
+});
+Deno.test("outreach automation and URL buttons map to canonical provider template", async () => {
+  const f = deliveryFixture("instagram");
+  f.delivery.message.buttons = [{ id: "yes", title: "Sim", kind: "automation", automationId: "flow" }, { id: "url", title: "Site", kind: "url", url: "https://example.test/" }];
+  f.delivery.payloads = { yes: "fd1.delivery.yes.0123456789abcdef" };
+  await handleAutomationWorker(request(), f.deps);
+  assert(JSON.stringify(f.results[0]) === JSON.stringify({ instagram: { attachment: { type: "template", payload: { template_type: "button", text: "Oi Maria {nome}", buttons: [{ type: "postback", title: "Sim", payload: "fd1.delivery.yes.0123456789abcdef" }, { type: "web_url", url: "https://example.test/", title: "Site" }] } } } }), JSON.stringify(f.results));
+});
+Deno.test("outreach prepare skip finishes quietly without complete or fail", async () => {
+  const f = deliveryFixture(); let prepared = 0;
+  f.deps.prepareDelivery = async () => { prepared++; return { action: "skip" }; };
+  await handleAutomationWorker(request(), f.deps);
+  assert(prepared === 1 && f.results.length === 0 && f.deliveryFailures.length === 0 && f.sends.length === 1);
+});
+for (const state of ["pending", "skipped"]) {
+  Deno.test(`outreach complete ${state} returns quietly without send or fail`, async () => {
+    const f = deliveryFixture("instagram"); let completed = 0;
+    f.delivery.conversationId = null;
+    f.deps.completeDelivery = async () => { completed++; return { state, intentIds: [] }; };
+    await handleAutomationWorker(request(), f.deps);
+    assert(completed === 1 && f.sends.length === 1 && f.deliveryFailures.length === 0);
+  });
+}
+for (const invalid of ["bytes", "button_text", "missing_payload", "mixed_options"]) {
+  Deno.test(`outreach invalid ${invalid} fails invalid_content before completion`, async () => {
+    const f = deliveryFixture("instagram");
+    if (invalid === "bytes") f.delivery.message.text = "á".repeat(501);
+    if (invalid === "button_text") { f.delivery.message.text = "a".repeat(641); f.delivery.message.buttons = [{ id: "a", title: "A", kind: "url", url: "https://example.test" }]; }
+    if (invalid === "missing_payload" || invalid === "mixed_options") f.delivery.message.quickReplies = [{ id: "yes", title: "Sim", automationId: "flow" }];
+    if (invalid === "mixed_options") { f.delivery.payloads = { yes: "fd1.delivery.yes.0123456789abcdef" }; f.delivery.message.buttons = [{ id: "a", title: "A", kind: "url", url: "https://example.test" }]; }
+    await handleAutomationWorker(request(), f.deps);
+    assert(f.results.length === 0 && f.sends.length === 1 && f.deliveryFailures[0]?.code === "invalid_content" && !f.deliveryFailures[0].retryable, JSON.stringify(f.deliveryFailures));
+  });
+}
+for (const operation of ["prepareDelivery", "completeDelivery"] as const) {
+  for (const [code, expected, retryable] of [["42501", null, false], ["22023", "invalid_step", false], ["40P01", "db_conflict", true], ["40001", "db_conflict", true]] as const) {
+    Deno.test(`outreach ${operation} SQLSTATE ${code} classifies safely`, async () => {
+      const f = deliveryFixture(); let called = 0;
+      f.deps[operation] = async () => { called++; throw new DbError(code); };
+      await handleAutomationWorker(request(), f.deps);
+      assert(called === 1);
+      assert(expected ? f.deliveryFailures[0]?.code === expected && f.deliveryFailures[0].retryable === retryable : f.deliveryFailures.length === 0 && f.logs.some((l) => l.includes("claim_lost") && l.includes("delivery")), JSON.stringify(f.deliveryFailures));
+    });
+  }
+}
+Deno.test("outreach errors and failure-recording errors do not log text or tokens or stop next delivery", async () => {
+  const f = deliveryFixture(); let claims = 0, completed = 0;
+  f.deps.claimDeliveries = async () => ++claims <= 2 ? [{ deliveryId: "delivery", claimToken: "delivery-token" }] : [];
+  f.deps.prepareDelivery = async () => { if (claims === 1) throw new Error(MESSAGE); return f.delivery; };
+  f.deps.failDelivery = async () => { throw new Error("delivery-token " + MESSAGE); };
+  f.deps.completeDelivery = async () => { completed++; return { state: "sent", intentIds: [] }; };
+  await handleAutomationWorker(request(), f.deps);
+  assert(completed === 1 && f.logs.some((l) => l.includes("failure_not_recorded")));
+  assert(!f.logs.join().includes(MESSAGE) && !f.logs.join().includes("delivery-token"));
+});
+Deno.test("outreach single claims do not strand a batch when transport consumes remaining budget", async () => {
+  const f = deliveryFixture("instagram"); let clock = new Date("2026-10-13T12:00:00Z");
+  f.deps.now = () => clock;
+  const transport = f.deps.fetch;
+  f.deps.fetch = async (...args) => { const response = await transport(...args); if (f.results.length) clock = new Date("2026-10-13T12:01:41Z"); return response; };
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.limits.length === 1 && f.limits[0] === 1 && f.results.length === 1);
+});
+Deno.test("outreach due delivery is not starved by normal run occupying its time slice", async () => {
+  const f = deliveryFixture(); let clock = new Date("2026-10-13T12:00:00Z"), runClaims = 0;
+  f.deps.now = () => clock;
+  f.deps.claimRuns = async () => { runClaims++; return [{ runId: "run", claimToken: "token" }]; };
+  const apply = f.deps.applyStep;
+  f.deps.applyStep = async (...args) => { const result = await apply(...args); clock = new Date(clock.getTime() + 51_000); return result; };
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.results.length === 1 && runClaims === 1 && f.yields.length === 1 && f.failures.length === 0);
+});
+Deno.test("short worker budget retains normal run processing without outreach reservation", async () => {
+  const f = deliveryFixture(); let clock = new Date("2026-10-13T12:00:00Z"); f.deps.now = () => clock; f.deps.deadlineMs = 60_000;
+  const prepare = f.deps.prepareRun;
+  f.deps.prepareRun = async (...args) => { const result = await prepare(...args); clock = new Date(clock.getTime() + 16_000); return result; };
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.steps.length === 2 && f.yields.length === 0 && f.failures.length === 0);
+  assert(f.limits.length === 0);
+});
+Deno.test("exhausted worker budget claims neither automation nor outreach", async () => {
+  const f = deliveryFixture(); f.deps.deadlineMs = 45_000;
+  f.deps.claimRuns = async () => { throw new Error("must not claim"); };
+  const response = await handleAutomationWorker(request(), f.deps);
+  assert(response.status === 200 && f.limits.length === 0 && f.results.length === 0);
 });

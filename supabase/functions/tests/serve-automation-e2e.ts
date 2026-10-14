@@ -1,7 +1,7 @@
 /** Test-only local proxy. Real Auth/REST/RLS; Graph boundary is injected here. */
 import { createOpenAIProvider } from "../_shared/openai.ts";
 import { createFakeOpenAIFetch } from "./fake-openai.ts";
-import { DbError, handleAutomationWorker, type AppliedStep, type PreparedRun, type RunClaim } from "../automation-worker/handler.ts";
+import { DbError, handleAutomationWorker, type AppliedStep, type PreparedRun, type RunClaim, type DeliveryClaim, type PreparedDelivery, type CompletedDelivery } from "../automation-worker/handler.ts";
 import type { KnowledgeHit } from "../../../packages/core/src/ai/index.ts";
 import { createAuthorize } from "../_shared/auth.ts";
 import { createMetaRepository } from "../_shared/meta-repository.ts";
@@ -78,6 +78,10 @@ const automationDeps = {
   applyStep: (run: string, token: string, step: unknown) => rpc<AppliedStep>("apply_automation_step", { p_run: run, p_token: token, p_step: step }),
   failRun: (run: string, token: string, code: string, retryable: boolean) => rpc<void>("fail_automation_run", { p_run: run, p_token: token, p_code: code, p_retryable: retryable }),
   yieldRun: (run: string, token: string) => rpc<void>("yield_automation_run", { p_run: run, p_token: token }),
+  claimDeliveries: (limit: number) => rpc<DeliveryClaim[]>("claim_outreach_deliveries", { p_limit: limit }),
+  prepareDelivery: (id: string, token: string) => rpc<PreparedDelivery>("prepare_outreach_delivery", { p_id: id, p_token: token }),
+  completeDelivery: (id: string, token: string, result: Record<string, unknown>) => rpc<CompletedDelivery>("complete_outreach_delivery", { p_id: id, p_token: token, p_result: result }),
+  failDelivery: (id: string, token: string, code: string, retryable: boolean) => rpc<void>("fail_outreach_delivery", { p_id: id, p_token: token, p_code: code, p_retryable: retryable }),
   searchKnowledge: async (org: string, embedding: number[]): Promise<KnowledgeHit[]> => {
     const rows = await rpc<{ id: string; document_title: string; content: string; similarity: number }[]>("match_knowledge_chunks", { p_org: org, p_embedding: "[" + embedding.join(",") + "]", p_k: 5, p_min_similarity: 0.3 });
     return rows.map((row) => ({ id: row.id, documentTitle: row.document_title, content: row.content, similarity: row.similarity }));

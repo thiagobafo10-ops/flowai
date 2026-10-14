@@ -19,6 +19,18 @@ export type AutomationStep = {
   aiReply?: { text: string; usedChunkIds: string[] };
 };
 export type AppliedStep = { state: string; intentIds: string[]; payloads: Record<string, string>; result: string | null; currentNodeId: string };
+export type DeliveryClaim = { deliveryId: string; claimToken: string };
+export type PreparedDelivery = { action: "skip" } | {
+  action: "send"; deliveryId: string; organizationId: string; channelType: "simulator" | "instagram";
+  conversationId: string | null; contact: { name: string | null };
+  message: {
+    text: string;
+    buttons: { id: string; title: string; kind: "automation" | "url"; automationId?: string; url?: string }[];
+    quickReplies: { id: string; title: string; automationId: string; payload?: string }[];
+  };
+  payloads: Record<string, string>;
+};
+export type CompletedDelivery = { state: string; intentIds: string[] };
 export type AutomationWorkerDeps = SendDeps & {
   readWorkerSecret(): Promise<string | null>;
   claimRuns(limit: number): Promise<RunClaim[]>;
@@ -27,6 +39,10 @@ export type AutomationWorkerDeps = SendDeps & {
   applyStep(run: string, token: string, step: AutomationStep): Promise<AppliedStep>;
   failRun(run: string, token: string, code: string, retryable: boolean): Promise<void>;
   yieldRun(run: string, token: string): Promise<void>;
+  claimDeliveries(limit: number): Promise<DeliveryClaim[]>;
+  prepareDelivery(id: string, token: string): Promise<PreparedDelivery>;
+  completeDelivery(id: string, token: string, result: Record<string, unknown>): Promise<CompletedDelivery>;
+  failDelivery(id: string, token: string, code: string, retryable: boolean): Promise<void>;
   claimSend(intent: string): Promise<SendClaim | null>;
   searchKnowledge(org: string, embedding: number[]): Promise<KnowledgeHit[]>;
   provider: AIProvider; chatModel: string; resolve?: Resolver; deadlineMs?: number;
@@ -159,20 +175,67 @@ async function processRun(run: RunClaim, deps: AutomationWorkerDeps, deadline: n
   }
 }
 
+async function processDelivery(delivery: DeliveryClaim, deps: AutomationWorkerDeps): Promise<void> {
+  try {
+    const prepared = await deps.prepareDelivery(delivery.deliveryId, delivery.claimToken);
+    if (prepared.action === "skip") return;
+    const result: Record<string, unknown> = {};
+    if (prepared.channelType === "instagram") {
+      try {
+        // SQL already expands templates. Rendering again would expand placeholders
+        // inside the contact's name and fail the canonical provider-body comparison.
+        result.instagram = toInstagramMessage(prepared.message.text, {
+          buttons: prepared.message.buttons.map((button) => ({ ...button, kind: button.kind === "automation" ? "path" : "url" })),
+          quickReplies: prepared.message.quickReplies, payloads: prepared.payloads,
+        });
+      } catch { throw new RunError("invalid_content"); }
+    }
+    // Complete even without a conversation: SQL owns skips and postponements.
+    const completed = await deps.completeDelivery(delivery.deliveryId, delivery.claimToken, result);
+    await sendIntents(completed.intentIds, prepared.organizationId, deps);
+  } catch (error) {
+    if (error instanceof DbError && error.code === "42501") {
+      log(deps, "claim_lost", { deliveryId: delivery.deliveryId, code: error.code }); return;
+    }
+    const conflict = error instanceof DbError && (error.code === "40P01" || error.code === "40001");
+    const code = conflict ? "db_conflict" : error instanceof DbError && error.code === "22023" ? "invalid_step" : error instanceof RunError ? error.code : "worker_error";
+    const retryable = conflict || (error instanceof RunError && error.retryable);
+    log(deps, "delivery_failed", { deliveryId: delivery.deliveryId, code });
+    try { await deps.failDelivery(delivery.deliveryId, delivery.claimToken, code, retryable); }
+    catch (inner) { log(deps, "failure_not_recorded", { deliveryId: delivery.deliveryId, code: inner instanceof DbError ? inner.code : null }); }
+  }
+}
+
 export async function handleAutomationWorker(request: Request, deps: AutomationWorkerDeps): Promise<Response> {
   if (request.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405 });
   try {
     const secret = await deps.readWorkerSecret();
     const provided = request.headers.get("x-flowai-worker") ?? "";
     if (!secret || !provided || provided.length > 8192 || !await constantTimeTextEqual(provided, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
-    const deadline = deps.now().getTime() + (deps.deadlineMs ?? BUDGET_MS);
-    let processed = 0;
+    const started = deps.now().getTime();
+    const budget = deps.deadlineMs ?? BUDGET_MS;
+    const deadline = started + budget;
+    // Reserve half a normal invocation for deliveries. Short custom budgets keep
+    // the original run deadline instead of losing their entire run allowance.
+    const runDeadline = budget >= 2 * IN_FLIGHT_MARGIN_MS ? started + budget / 2 : deadline;
+    let processed = 0, deliveriesProcessed = 0, runsEmpty = false, deliveriesEmpty = false;
     while (deps.now().getTime() < deadline - IN_FLIGHT_MARGIN_MS) {
-      const batch = await deps.claimRuns(CONCURRENCY);
-      if (!batch.length) break;
-      await Promise.all(batch.map((run) => processRun(run, deps, deadline)));
-      processed += batch.length;
+      if (!runsEmpty && deps.now().getTime() < runDeadline) {
+        const batch = await deps.claimRuns(CONCURRENCY);
+        runsEmpty = batch.length === 0;
+        await Promise.all(batch.map((run) => processRun(run, deps, runDeadline)));
+        processed += batch.length;
+      }
+      if (!deliveriesEmpty && deps.now().getTime() < deadline - IN_FLIGHT_MARGIN_MS) {
+        // Claim only work we are about to prepare/send. A slow transport must not
+        // leave an already-claimed batch waiting for the three-minute lease sweep.
+        const batch = await deps.claimDeliveries(1);
+        deliveriesEmpty = batch.length === 0;
+        for (const delivery of batch) await processDelivery(delivery, deps);
+        deliveriesProcessed += batch.length;
+      }
+      if ((runsEmpty || deps.now().getTime() >= runDeadline) && deliveriesEmpty) break;
     }
-    return Response.json({ processed });
+    return Response.json({ processed, deliveriesProcessed });
   } catch { return Response.json({ error: "temporarily_unavailable" }, { status: 503 }); }
 }

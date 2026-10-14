@@ -1,6 +1,6 @@
 import { createMetaRepository } from "../_shared/meta-repository.ts";
 import { createOpenAIProvider } from "../_shared/openai.ts";
-import { DbError, handleAutomationWorker, type AppliedStep, type PreparedRun, type RunClaim } from "./handler.ts";
+import { DbError, handleAutomationWorker, type AppliedStep, type PreparedRun, type RunClaim, type DeliveryClaim, type PreparedDelivery, type CompletedDelivery } from "./handler.ts";
 import type { SendClaim } from "../send-message/handler.ts";
 import type { KnowledgeHit } from "../../../packages/core/src/ai/index.ts";
 
@@ -36,6 +36,10 @@ Deno.serve((request) => handleAutomationWorker(request, {
   applyStep: (run, token, step) => rpc<AppliedStep>("apply_automation_step", { p_run: run, p_token: token, p_step: step }),
   failRun: (run, token, code, retryable) => rpc<void>("fail_automation_run", { p_run: run, p_token: token, p_code: code, p_retryable: retryable }),
   yieldRun: (run, token) => rpc<void>("yield_automation_run", { p_run: run, p_token: token }),
+  claimDeliveries: (limit) => rpc<DeliveryClaim[]>("claim_outreach_deliveries", { p_limit: limit }),
+  prepareDelivery: (id, token) => rpc<PreparedDelivery>("prepare_outreach_delivery", { p_id: id, p_token: token }),
+  completeDelivery: (id, token, result) => rpc<CompletedDelivery>("complete_outreach_delivery", { p_id: id, p_token: token, p_result: result }),
+  failDelivery: (id, token, code, retryable) => rpc<void>("fail_outreach_delivery", { p_id: id, p_token: token, p_code: code, p_retryable: retryable }),
   searchKnowledge: async (org, embedding): Promise<KnowledgeHit[]> => {
     const rows = await rpc<MatchRow[]>("match_knowledge_chunks", { p_org: org, p_embedding: `[${embedding.join(",")}]`, p_k: 5, p_min_similarity: 0.3 });
     return rows.map((row) => ({ id: row.id, documentTitle: row.document_title, content: row.content, similarity: row.similarity }));
