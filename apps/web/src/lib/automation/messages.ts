@@ -9,6 +9,10 @@ export const AUTOMATION_ACTIVATE_WITH_ISSUES = "Corrija os erros antes de ativar
 export const AUTOMATION_RERUN_BUSY = "A conversa já tem outra automação em andamento.";
 export const AUTOMATION_RERUN_INVALID = "Não foi possível reexecutar a partir deste passo.";
 export const AUTOMATION_RUN_GONE = "Esta execução não existe mais.";
+export const AUTOMATION_AI_PROMPT_REQUIRED = "Descreva o fluxo que deseja criar com pelo menos 3 caracteres.";
+export const AUTOMATION_AI_PROMPT_TOO_LONG = "O pedido deve ter no máximo 1000 caracteres.";
+export const AUTOMATION_AI_NOT_CONFIGURED = "IA não configurada na plataforma.";
+export const AUTOMATION_AI_FAILED = "Não foi possível gerar a automação com a IA. Tente reformular o pedido.";
 
 export const AUTOMATION_STATUS_LABEL: Record<string, string> = {
   draft: "Rascunho",
