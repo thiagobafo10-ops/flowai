@@ -1,95 +1,43 @@
-# Checklist de Auditoria e Hardening de Segurança do MVP — FlowAI
+# Checklist de segurança do MVP — estado verificado localmente
 
-- **Data da Auditoria:** 17 de Outubro de 2026
-- **Escopo:** Monorepo FlowAI (`apps/web`, `packages/core`, `supabase`)
-- **Status:** Aprovado para Entrada em Produção (Piloto)
+- **Revisão:** 14 de outubro de 2026.
+- **Escopo:** código e metadados do Supabase local após migrations adicionais de Analytics.
+- **Status:** controles abaixo conferidos; configuração de produção e integrações reais pendentes. Sem aprovação de entrada em produção.
 
----
+## Banco e isolamento
 
-## 1. Isolamento Multi-Tenant e Camada de Dados (PostgreSQL / Supabase)
+- [x] RLS habilitado nas 40 tabelas públicas locais. **FORCE RLS não está habilitado** nessas tabelas; proprietários e funções de serviço têm privilégios deliberadamente elevados.
+- [x] Nenhuma policy de tabelas públicas concede acesso a `anon` ou `PUBLIC`. As policies de domínio validam membership e papéis; tabelas de filas/serviço têm acesso restrito próprio. RLS não implica acesso irrestrito a todo membro.
+- [x] As 117 funções `SECURITY DEFINER` de `public` locais definem **`search_path = ''`**, com nomes qualificados. Não usam `public, pg_temp` como antes afirmado.
+- [x] `authenticated` não pode inserir diretamente em `events`/`audit_logs` nem ler `channels.access_token_secret_id`, conforme grants locais. Triggers/funções autorizadas produzem eventos e auditoria.
+- [x] Relações de domínio usam chaves compostas com organização quando aplicável; contratos pgTAP de isolamento cobrem relações cruzadas. Isso não significa que toda FK da aplicação é composta.
 
-- [x] **Row-Level Security (RLS) Mandatório:**
-  - Todas as tabelas públicas do schema `public` possuem RLS habilitado explicitamente (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY; ALTER TABLE ... FORCE ROW LEVEL SECURITY;`).
-  - Nenhuma política permite acesso ao role `anon` para tabelas de domínio ou dados de clientes.
-  - O role `authenticated` só visualiza e altera linhas onde `organization_id` coincide com uma organização na qual o usuário possui membership ativa (`is_member(organization_id)`).
-- [x] **Chave Estrangeira Composta e Integridade Referencial:**
-  - Tabelas dependentes de relacionamentos secundários (ex: mensagens, conversas, tags, estágios, deals, nós de automação) utilizam foreign keys compostas incluindo `organization_id` para impedir associações cruzadas entre tenants.
-- [x] **Funções `SECURITY DEFINER` Seguras:**
-  - Todas as funções com privilégios de definer definem explicitamente `SET search_path = public, pg_temp` para neutralizar ataques de manipulação de search path.
-  - Inserções em `audit_logs` e `events` são executadas exclusivamente por código de serviço/definer; a API e usuários autenticados não possuem permissão direta de escrita nessas tabelas.
-- [x] **Privilégios por Coluna:**
-  - A tabela `public.channels` protege identificadores de credenciais com restrição de privilégios de coluna; a chave anon e usuários autenticados não conseguem ler IDs de segredos.
+A consulta local foi somente de metadados (`pg_class`, `pg_proc`, `pg_policies`, `has_*_privilege`), sem ler tokens/Vault e sem reset. A suíte pgTAP da correção de Analytics aprovou 2174 verificações em 51 arquivos; essa evidência não substitui uma auditoria de produção.
 
----
+## Segredos e integração Meta
 
-## 2. Gestão de Segredos e Credenciais
+- [x] Credenciais Meta e de workers são referenciadas por IDs e armazenadas no Vault; os acessos de serviço e remoção de segredos são implementados no banco. O app web recebe somente URL e chave pública do Supabase.
+- [x] OpenAI usa secrets das Edge Functions; a chave não vai em `NEXT_PUBLIC_*`. O gerador de automações faz chamada pelo backend, sem expor a chave ao cliente.
+- [x] Webhook Meta valida HMAC-SHA256 do corpo bruto em tempo constante antes do parse; rejeita assinatura inválida e limita corpo a 1 MiB.
+- [ ] Segredos, permissões Meta, verificação de conta e entrega real conferidos no ambiente de produção.
 
-- [x] **Supabase Vault:**
-  - Tokens de acesso, chaves de webhook e segredos de aplicativos (Meta / Instagram) são armazenados de forma criptografada no Supabase Vault (`vault.secrets`).
-  - A exclusão de uma conexão ou canal aciona trigger que remove o segredo correspondente do Vault.
-- [x] **Chaves de API de Terceiros (OpenAI):**
-  - A variável `OPENAI_API_KEY` reside exclusivamente nas variáveis de ambiente das Edge Functions (`ai-worker`, `ai-playground`) e proxies seguros de backend.
-  - Nenhuma chave de IA é exposta em variáveis `NEXT_PUBLIC_*`, cookies de cliente ou tabelas acessíveis por frontend.
-- [x] **Isolamento de Service Role:**
-  - A chave de `service_role` nunca é embutida ou importada dentro do bundle client ou server de `apps/web`.
+## Webhooks de saída e navegador
 
----
+- [x] Automação exige HTTPS, rejeita IPs internos/especiais após resolução A/AAAA, limita resposta a 64 KB e timeout a 10 s, sem seguir redirects. Resta uma janela de DNS rebinding entre resolução e fetch pela URL original, registrada em [pendências de automação](fase-7a-pendencias.md).
+- [x] `headers.ts` produz CSP com `default-src 'self'`, `frame-ancestors 'none'`, `base-uri 'self'` e `form-action 'self'`. `connect-src` permite a URL configurada do Supabase e seu WebSocket; em desenvolvimento adiciona WebSockets localhost. Não libera origens OpenAI/Graph, cujas chamadas são de servidor.
+- [x] CSP ainda permite `'unsafe-inline'` em scripts e estilos; desenvolvimento também permite `'unsafe-eval'`. A política não usa nonce e não garante prevenção integral de injeção.
+- [x] X-Frame-Options DENY, nosniff, Referrer-Policy e Permissions-Policy definidos. HSTS (`max-age=63072000; includeSubDomains; preload`) é emitido somente em produção; isso não comprova inscrição em lista preload nem transporte do deploy.
+- [ ] Conferência de HTTPS, proxy confiável e headers efetivamente servidos no endereço publicado.
 
-## 3. Segurança no Webhook e Proteção Contra SSRF
+## IA e abuso
 
-- [x] **Validação Criptográfica de Assinatura:**
-  - O endpoint de webhook do Instagram/Meta (`meta-webhook`) valida o cabeçalho `X-Hub-Signature-256` utilizando HMAC-SHA256 comparado em tempo constante contra o App Secret bruto antes de processar qualquer JSON.
-  - Payloads adulterados são rejeitados com `401 Unauthorized`.
-- [x] **Tamanho Máximo de Requisição:**
-  - Limite estrito de 1 MiB para o corpo das requisições inbound de webhook.
-- [x] **Prevenção de SSRF em Webhooks de Saída (Automação):**
-  - Nós de webhook de saída em automações exigem protocolo HTTPS estrito.
-  - Resolução de DNS prévia e checagem de IP: faixas privadas (RFC 1918), loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`) e endereços especiais IPv6 são expressamente bloqueados.
-  - Limite de resposta de 64 KB e timeout máximo de 10 segundos, sem seguir redirecionamentos cegos.
+- [x] Prompt neutraliza delimitadores `<`/`>` e separa dados em blocos `<knowledge>`, `<contact>` e `<conversation>`, com regras para tratar esses dados como conteúdo. Não há sanitização universal de XML/Markdown ou garantia contra prompt injection; heurísticas e limitações estão em [pendências IA](fase-6-pendencias.md).
+- [x] Ausência de conhecimento e decisões de baixa confiança podem transferir para `pending_human`, cobertas por contratos locais com OpenAI falsa. Não é avaliação da qualidade do modelo real.
+- [x] Rate limiting aproxima uma janela deslizante com bucket atual + bucket anterior ponderado. Limpeza por chave ocorre a cada chamada; limpeza global de entradas antigas tem probabilidade de 1%, não expiração automática garantida.
+- [x] `check_rate_limit` não é executável por `anon`/`authenticated`; `check_auth_rate_limit` expõe somente namespaces `signup`/`login`. São defesa em profundidade; limites Supabase Auth e captcha devem ser configurados na produção.
+- [x] Webhook usa limite grosso por IP antes da assinatura e 3000/min **por conexão** após assinatura válida. O IP depende do proxy confiável que sobrescreve headers; configuração de hospedagem continua pendente.
+- [ ] Validação ao vivo de custos, cotas e comportamento de OpenAI, medidas antiabuso e rollout.
 
----
+## Evidência e limites
 
-## 4. Proteção de Transporte, HTTP Headers e Navegador
-
-- [x] **Content-Security-Policy (CSP):**
-  - Implementado em `apps/web/src/lib/security/headers.ts` e injetado em `next.config.ts`.
-  - Diretiva `default-src 'self'`.
-  - Diretivas `connect-src` restritas a `'self'`, endpoints locais e remotos do Supabase, OpenAI, Graph API Meta e websocket do Vercel Live Reload em modo desenvolvimento.
-- [x] **Transporte Seguro (HSTS):**
-  - Cabeçalho `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` ativo para forçar conexões HTTPS.
-- [x] **Prevenção de Clickjacking:**
-  - Cabeçalho `X-Frame-Options: DENY` e CSP `frame-ancestors 'none'`.
-- [x] **Prevenção de Sniffing de Tipo MIME:**
-  - Cabeçalho `X-Content-Type-Options: nosniff`.
-- [x] **Proteção de Privacidade de Referência:**
-  - Cabeçalho `Referrer-Policy: strict-origin-when-cross-origin`.
-- [x] **Política de Permissões (Permissions-Policy):**
-  - Recursos não utilizados bloqueados (`camera=(), microphone=(), geolocation=()`).
-
----
-
-## 5. Salvaguardas de IA e Prevenção de Prompt Injection
-
-- [x] **Sanitização de Entradas de Contatos:**
-  - Caracteres de controle e delimitadores artificiais XML/Markdown injetados em mensagens de contato são neutralizados antes da interpolação no prompt do agente.
-- [x] **Isolamento de Contexto do RAG:**
-  - Trechos de documentos indexados são passados dentro de tags estruturadas de contexto (`<context>`), com instruções de sistema protegidas por regras de desconsideração de instruções vindas do usuário.
-- [x] **Handoff Automático em Baixa Confiança:**
-  - Se a base de conhecimento não contiver respostas satisfatórias ou se o contato expressar descontentamento, o fluxo aciona fallback seguro transferindo a conversa para o atendente humano (`pending_human`).
-
----
-
-## 6. Rate Limiting e Prevenção de Abuso
-
-- [x] **Controle de Janela Deslizante:**
-  - Tabela `public.rate_limits` rastreia tentativas com janela de tempo e expiração automática.
-- [x] **Proteção em Autenticação (Signup e Login):**
-  - Função segura `check_auth_rate_limit` isola os limites de tentativas por IP e ação.
-- [x] **Controle de Ingestão de Webhook:**
-  - Rate limit por IP antes de verificação criptográfica e taxa máxima de 3.000 requisições por minuto por canal conectado.
-
----
-
-## 7. Conformidade e Conclusão
-
-Todas as 7 seções foram auditadas e os testes de conformidade correspondentes foram aprovados sem apontamentos impeditivos. A arquitetura atende integralmente aos requisitos de segurança estipulados para a entrada em produção do MVP.
+`npm run test:scripts` aprovou 16 testes de seleção, cancelamento e recuperação do harness; não é suíte Edge. `npm run test:edge` é um comando separado. Os resultados históricos de 199 Edge/13 scripts não são apresentados como nova execução. Build/navegador revisados permanecem pendentes por falta de memória; veja [mapa de aceitação](fase-10-mvp-conclusao.md).

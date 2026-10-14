@@ -8,12 +8,12 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_GRANTS } from "./lib/default-grants.mjs";
 import { captureStates, pidAlive, quote, recoverStaleRun, restoreStates, vaultMarkerStore } from "./lib/harness-state.mjs";
 import { createCancellation, installCancellation } from "./lib/owned-process.mjs";
+import { selectE2eSuite } from "./lib/e2e-suite.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const require = createRequire(import.meta.url);
-const instagram = process.env.FLOWAI_E2E_SUITE === "instagram";
-const port = instagram ? 54326 : 54328;
-const webPort = instagram ? 3101 : 3103;
+const suite = selectE2eSuite(process.env.FLOWAI_E2E_SUITE);
+const { port, webPort } = suite;
 const env = { ...process.env, FLOWAI_E2E_PROXY_PORT: String(port), FLOWAI_E2E_PROXY_URL: `http://127.0.0.1:${port}` };
 if (process.platform === "win32") {
   const inheritedPath = process.env.PATH ?? process.env.Path ?? "";
@@ -47,7 +47,7 @@ async function assertPortFree(candidate) {
   });
   if (inUse) throw new Error(`A porta ${candidate} já está em uso.`);
 }
-const KINDS = ["automation", "ai", "instagram"];
+const KINDS = suite.workerKinds;
 const marker = vaultMarkerStore(sql);
 let previous = null; // captured worker states; also persisted in the Vault marker
 let proxy; let test;
@@ -89,26 +89,26 @@ try {
   if (stale.recovered) console.log(`Estado de execução interrompida restaurado: ${stale.kinds.join(", ")}.`);
   ownsRun = true; // from here on this run owns the shared state it restores
   const captured = captureStates(sql, KINDS);
-  marker.write({ pid: process.pid, startedAt: Date.now(), suite: instagram ? "instagram" : "automation", states: captured });
+  marker.write({ pid: process.pid, startedAt: Date.now(), suite: suite.name, states: captured });
   previous = captured; // only now may restore() clear the marker
   for (const kind of KINDS) {
     sql(`select cron.alter_job(jobid,active:=false) from cron.job where jobname='flowai-${kind}-worker';`);
     sql(`select public.configure_${kind}_worker('http://supabase_kong_flowai:8000',${quote(status.SERVICE_ROLE_KEY)},${quote(randomBytes(32).toString("hex"))});`);
   }
-  proxy = spawn(process.env.DENO_BIN ?? "deno", ["run", "--config", "supabase/functions/deno.json", `--allow-net=127.0.0.1:54321,127.0.0.1:${port}`, "--allow-env", "--allow-read", "supabase/functions/tests/serve-automation-e2e.ts"], { cwd: root, env: { ...env, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, SUPABASE_ANON_KEY: status.ANON_KEY }, stdio: ["ignore", "ignore", "pipe"], shell: false });
+  proxy = spawn(process.env.DENO_BIN ?? "deno", ["run", "--config", "supabase/functions/deno.json", `--allow-net=127.0.0.1:54321,127.0.0.1:${port}`, "--allow-env", "--allow-read", `supabase/functions/tests/${suite.proxy}`], { cwd: root, env: { ...env, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, SUPABASE_ANON_KEY: status.ANON_KEY }, stdio: ["ignore", "ignore", "pipe"], shell: false });
   let proxyError = false; let stderrTail = "";
   proxy.on("error", () => { proxyError = true; });
   proxy.stderr.on("data", (chunk) => { stderrTail = (stderrTail + chunk).slice(-4000); });
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
     if (proxyError || proxy.exitCode !== null) throw new Error(`Não foi possível iniciar o proxy Deno.\n${sanitize(stderrTail)}`);
-    try { ready = (await fetch(`${env.FLOWAI_E2E_PROXY_URL}/__test__/graph-calls`)).ok; } catch { /* starting */ }
+    try { ready = (await fetch(`${env.FLOWAI_E2E_PROXY_URL}/__test__/${suite.ready}`)).ok; } catch { /* starting */ }
     if (ready) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (!ready) throw new Error(`O proxy de testes não iniciou.\n${sanitize(stderrTail)}`);
   const cli = path.join(path.dirname(require.resolve("@playwright/test/package.json")), "cli.js");
-  test = spawn(process.execPath, [cli, "test", "--config", instagram ? "playwright.integration.config.ts" : "playwright.automation.config.ts", ...process.argv.slice(2)], { cwd: path.join(root, "apps/web"), env, stdio: ["ignore", "pipe", "pipe"], shell: false, detached: process.platform !== "win32" });
+  test = spawn(process.execPath, [cli, "test", "--config", suite.config, ...process.argv.slice(2)], { cwd: path.join(root, "apps/web"), env, stdio: ["ignore", "pipe", "pipe"], shell: false, detached: process.platform !== "win32" });
   pipeSanitized(test.stdout, process.stdout);
   pipeSanitized(test.stderr, process.stderr);
   process.exitCode = await new Promise((resolve) => { test.on("error", () => resolve(1)); test.on("exit", (code) => resolve(code ?? 1)); });

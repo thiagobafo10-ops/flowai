@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { newEmail, signUpWithOrg } from "./support/auth";
-import { gotoReady } from "./support/nav";
-import { clearRateLimits, simulateInboundSql } from "./support/local-db";
+import { gotoReady, reloadReady } from "./support/nav";
+import { clearRateLimits, contactIdByName, psql, simulateInboundSql } from "./support/local-db";
 import { aiJobStates, aiMessageCount, chatCompletionCount, drainAiJobs } from "./support/ai";
 
 const AI_TEXT = "Frete grátis para compras acima de R$ 200.";
@@ -52,15 +52,31 @@ test("IA: documento é indexado e fica pronto com um trecho", async ({ page }) =
   await indexDocument(page, email);
 });
 
-test("IA: responde com base no documento e conta o uso", async ({ page }) => {
+test("IA: classificação e resposta RAG persistem no banco e no Inbox e contam uso", async ({ page }) => {
   const email = newEmail();
   await readyKnowledge(page, email);
   await enableAgent(page);
   const callsBefore = await chatCompletionCount();
   await inbound(page, email, "Qual o valor do frete grátis?");
   await drainAiJobs(email);
+  const contactId = contactIdByName(email, "Carla");
+  expect(JSON.parse(psql(`select json_build_object('intent',intent,'sentiment',sentiment,'summary',summary)
+    from public.conversations where contact_id='${contactId}'`))).toEqual({
+    intent: "duvida", sentiment: "neutral", summary: "Cliente com dúvida",
+  });
+  expect(aiMessageCount(email)).toBe(1);
+  expect(psql(`select m.content from public.messages m join public.conversations c on c.id=m.conversation_id
+    where c.contact_id='${contactId}' and m.sender_type='ai'`)).toBe(AI_TEXT);
+  // A reload proves this is server state rather than an optimistic message/cache.
+  await reloadReady(page);
+  await page.getByRole("region", { name: "Lista de conversas" }).getByRole("button", { name: /Carla/ }).click();
   const reply = page.getByTestId("message-bubble").filter({ has: page.getByTestId("ai-badge") });
-  await expect(reply).toContainText("R$ 200", { timeout: 20_000 });
+  await expect(reply).toContainText(AI_TEXT, { timeout: 20_000 });
+  const panel = page.getByRole("region", { name: "Contato da conversa", exact: true });
+  await expect(panel.getByText("duvida", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Neutro", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Cliente com dúvida", { exact: true })).toBeVisible();
+  await expect(panel.getByLabel("Lead score", { exact: true })).toHaveValue("50");
   await gotoReady(page, "/ia");
   await expect(page.getByText("1 de 300 respostas")).toBeVisible();
   expect(await chatCompletionCount()).toBeGreaterThan(callsBefore);

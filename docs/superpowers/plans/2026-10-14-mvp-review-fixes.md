@@ -45,11 +45,11 @@ Files: `packages/core/src/automation/ai-generator.ts` e testes, `apps/web/src/li
 
 Files: `apps/web/e2e/mvp-journey.spec.ts`, suporte/config/harness local apenas se necessário, `docs/superpowers/fase-10-mvp-conclusao.md`, `security-checklist.md`, README e documentos de evidência afetados.
 
-- [ ] Converter critérios declarados em asserções reais ou classificá-los explicitamente como smoke/pendentes: classificação preenchida, pergunta enviada e RAG relevante retornado, resposta IA persistida/mostrada, fluxo ativado/executado, métricas com valores coerentes e CSV realmente baixado/conferido.
-- [ ] Usar harness local com Graph/OpenAI falsos e restauração de crons/configurações existente; sem afirmar aceitação de fornecedores reais. Reutilizar cenários comportamentais existentes quando cobrem o requisito, registrando o mapa de evidências em vez de duplicar suítes.
-- [ ] Corrigir afirmações falsas da checklist (por exemplo search_path efetivo, script não é suíte Edge, rate limits) após comparar com código; remover homologação de produção e datas/evidências inventadas.
-- [ ] Executar jornada/casos relevantes quando memória permitir; registrar comando, contagem, resultado e limitações. Unitários, scripts, Edge, tipos/lint e pgTAP completos ao final conforme deltas.
-- [ ] Revisão final independente das correções; commit. Integrações reais e rollout permanecem pendentes e explícitos.
+- [x] Converter critérios declarados em asserções reais ou classificá-los explicitamente como smoke/pendentes: classificação preenchida, pergunta enviada e RAG relevante retornado, resposta IA persistida/mostrada, fluxo ativado/executado, métricas com valores coerentes e CSV realmente baixado/conferido.
+- [x] Usar harness local com Graph/OpenAI falsos e restauração de crons/configurações existente; sem afirmar aceitação de fornecedores reais. Reutilizar cenários comportamentais existentes quando cobrem o requisito, registrando o mapa de evidências em vez de duplicar suítes.
+- [x] Corrigir afirmações falsas da checklist (por exemplo search_path efetivo, script não é suíte Edge, rate limits) após comparar com código; remover homologação de produção e datas/evidências inventadas.
+- [x] Executar jornada/casos relevantes quando memória permitir; registrar comando, contagem, resultado e limitações. Unitários, scripts, Edge, tipos/lint e pgTAP completos ao final conforme deltas.
+- [x] Revisão final independente das correções; commit. Integrações reais e rollout permanecem pendentes e explícitos.
 
 ## Revisão prévia
 

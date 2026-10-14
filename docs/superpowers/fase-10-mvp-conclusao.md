@@ -1,77 +1,60 @@
-# Relatório de Conclusão do MVP — FlowAI
+# Estado de verificação do MVP — FlowAI
 
-- **Data de Conclusão:** 17 de Outubro de 2026
-- **Status:** MVP Finalizado e Homologado para Produção
-- **Spec Central:** [`docs/superpowers/specs/2026-10-07-flowai-mvp-design.md`](2026-10-07-flowai-mvp-design.md)
-- **Fase de Encerramento:** Fase 10 — Verificação Final, Testes Consolidados e Hardening de Segurança
+- **Data desta revisão:** 14 de outubro de 2026.
+- **Status:** correções locais em verificação; aceitação comportamental revisada ainda pendente de execução no navegador. Sem homologação de produção.
+- **Referências:** [spec do MVP](specs/2026-10-07-flowai-mvp-design.md), [plano das correções](plans/2026-10-14-mvp-review-fixes.md), [checklist de segurança](security-checklist.md).
 
----
+## Contratos de aceitação e evidência
 
-## 1. Visão Geral da Entrega
+`mvp-journey.spec.ts` é uma jornada smoke de 19 etapas com verificações de persistência de CRM e métricas. Os comportamentos de IA e automação usam cenários específicos existentes; a jornada não os substitui. Um teste escrito ou listado não comprova execução aprovada.
 
-O **FlowAI MVP** foi integralmente construído ao longo de 10 fases iterativas, seguindo rigorosamente a metodologia TDD (Test-Driven Development), arquitetura de isolamento multi-tenant estrito no PostgreSQL/Supabase e padrões de excelência visual em Next.js com Tailwind CSS e Radix/Base UI.
+| Etapas | Contrato efetivamente verificado | Cenário |
+|---|---|---|
+| 1–2 | Cadastro redireciona ao onboarding; criação da organização leva ao dashboard e persiste uma membership | `mvp-journey.spec.ts` |
+| 3 | Dashboard e cards visíveis (smoke); zeros iniciais têm caso específico | `mvp-journey.spec.ts`; `dashboard.spec.ts`: organização nova mostra banner e zeros |
+| 4 | Configuração do agente salva e switches continuam ativos após reload | `mvp-journey.spec.ts` |
+| 5 | Documento criado aparece na lista; indexação pronta com trecho é contrato separado | `mvp-journey.spec.ts`; `ai.spec.ts`: documento é indexado e fica pronto com um trecho |
+| 6–9 | Simulador ativo, inbound criado, mensagem e contato mostrados após navegação | `mvp-journey.spec.ts` |
+| 10 | Jornada mostra apenas rótulos; caso IA verifica intenção `duvida`, sentimento `neutral`, resumo e lead score 50 no banco/Inbox após reload | `ai.spec.ts`: classificação e resposta RAG persistem no banco e no Inbox e contam uso |
+| 11 | Jornada apenas preenche formulário; caso IA envia pergunta, recebe R$ 200 e mostra o trecho Frete recuperado e uso do playground | `ai.spec.ts`: área de teste responde com trechos e conta o uso |
+| 12 | Jornada mostra apenas cota; caso IA processa worker com provedor falso, persiste uma resposta baseada no documento, mostra texto e selo após reload e incrementa uso | `ai.spec.ts`: classificação e resposta RAG persistem no banco e no Inbox e contam uso |
+| 13–14 | Lead score 85 conferido no banco e após reload; deal de R$ 250 mostrado no pipeline e contado pela RPC de métricas | `mvp-journey.spec.ts` |
+| 15 | Jornada apenas mostra ações; cenário dedicado cria/configura/ativa fluxo, recebe inbound, mostra opções, executa ramo e persiste status `pending_human`, etiqueta e etapa | `automation.spec.ts`: Simulador mostra opções, bloqueia IA e transfere com etiqueta e etapa |
+| 16 | Jornada cobre assunção manual; transferência automática por falta de conhecimento e devolução têm casos específicos | `mvp-journey.spec.ts`; `ai.spec.ts`: sem informação na base transfere para um atendente; devolver para IA remove o aviso e registra a mensagem de sistema |
+| 17–18 | Mensagem humana exibida com entrega no Simulador; conversa encerrada, editor bloqueado e status `closed` conferido no banco | `mvp-journey.spec.ts` |
+| 19 | RPCs autenticadas retornam valores coerentes com a jornada; download CSV lido e números confrontados com a API | `mvp-journey.spec.ts` |
+| 19 (cenário discriminante) | Dois atendimentos, 50% resolução, 100% contenção mesmo com handoff em conversa só humana; pipeline R$ 1000, ganho/ticket R$ 500, status waiting/closed; CSV real com os mesmos números | `analytics.spec.ts`: métricas persistidas e CSV baixado refletem o mesmo período |
 
-Todos os 9 módulos da barra lateral de navegação encontram-se operacionais, sem telas de "em construção" ou placeholders residuais.
+Os cenários usam Supabase local real (Auth, REST, RLS, eventos e persistência). OpenAI e Graph são falsos nas suítes de integração. Isso verifica a integração interna, sem demonstrar qualidade de embeddings/respostas reais, entrega Meta ou aceitação do cliente piloto.
 
----
+## Como executar os contratos revisados
 
-## 2. Mapa das 10 Fases Executadas
+Execute sequencialmente, com memória disponível e Supabase local saudável, sem reset:
 
-| Fase | Módulo / Funcionalidade | Principais Entregas | Status |
-| :---: | :--- | :--- | :---: |
-| **1** | **Fundação** | Autenticação Supabase, Onboarding de organizações, Cookies de sessão seguros, RLS estrito e Rate Limiting. | Concluído |
-| **2** | **Layout & Dashboard** | Shell responsivo, Tema dark/light, Colapso de sidebar no servidor, Dashboard com RPC agregada e KPIs em lote. | Concluído |
-| **3** | **CRM Conversacional** | Gestão de contatos, Tags coloridas com busca, Ficha de contato, Pipeline Kanban drag-and-drop, Estágios customizáveis e Deals com valores monetários. | Concluído |
-| **4** | **Inbox & Simulador** | Caixa de entrada realtime com lista de conversas, Chat com mensagens e notas internas, Simulador interativo de canais e Handoff humano. | Concluído |
-| **5** | **Instagram** | Integração direta via Meta Graph API, Webhooks assinados com HMAC-SHA256, Segredos no Supabase Vault, Respostas no Direct e comentários. | Concluído |
-| **6** | **Agente de IA (RAG)** | Criação de documentos, Chunking determinístico com busca vetorial (pgvector), Classificação automática de intenção e sentimento, Respostas automáticas e Handoff para humanos. | Concluído |
-| **7A** | **Automações Visuais** | Canvas interativo (React Flow), Grafo de nós tipados (gatilhos, mensagens, tags, estágios, atrasos e webhooks), Execução assíncrona tolerante a falhas. | Concluído |
-| **7B** | **Crescimento & Campanhas** | Links de entrada com mensagens pré-definidas, Campanhas de disparo segmentadas e Sequências de nutrição de contatos. | Concluído |
-| **8** | **Criador de IA** | Assistente de criação de fluxos em linguagem natural, Sanitização de grafos, Algoritmo BFS de auto-layout determinístico e Mini-canvas de pré-visualização. | Concluído |
-| **9** | **Analytics** | Dashboard analítico avançado com filtros temporais (1d, 7d, 30d, 90d), Cálculo de tendências vs período anterior, Abas temáticas (Atendimento, IA, CRM) e Exportação em CSV. | Concluído |
-| **10** | **Finalização & Hardening** | Hardening de headers HTTP (CSP, HSTS, X-Frame-Options), Teste E2E consolidado dos 19 critérios do cliente piloto e Checklist de segurança. | Concluído |
+```bash
+npm run test:mvp:e2e
+npm run test:automation:e2e -- --grep "Simulador mostra opções"
+```
 
----
+O primeiro comando reúne jornada, IA e Analytics em um build de produção usando o proxy existente de IA (54327) e app (3102). O segundo reutiliza o harness de automações (54328/3103). O harness pausa os três workers, salva configurações e crons no marcador local do Vault, encerra apenas processos próprios e restaura configurações antes de reativar crons. Uma interrupção forçada é recuperada na próxima execução. Não compartilhe o banco com outra suíte durante esse processo. A jornada fica fora da configuração Playwright geral para exigir esse isolamento.
 
-## 3. Homologação da Jornada dos 19 Critérios de Aceitação
+## Evidências desta revisão
 
-A jornada do cliente piloto foi consolidada e homologada através de teste end-to-end (`apps/web/e2e/mvp-journey.spec.ts`):
+| Comando / consulta | Resultado comprovado | Limite |
+|---|---|---|
+| `npm test` (correções 1–2, commit `03c146f`) | 603 aprovados: core 419 + web 184 | Evidência anterior às mudanças de aceitação; não é execução de navegador |
+| `npx supabase test db` (correção 1, commit `c673cda`) | 2174 aprovados em 51 arquivos; 44 do contrato Analytics | Migrations adicionais aplicadas localmente, sem reset |
+| `npm run test:scripts` | 17/17 aprovados, incluindo seleção IA e restauração com/sem configuração | Scripts node:test, não testes Edge nem navegador; Windows exigiu permissão para controlar processos próprios |
+| Metadados locais PostgreSQL | 40/40 tabelas públicas com RLS, nenhuma FORCE RLS; 117 funções public definer com search_path vazio; nenhuma policy anon/PUBLIC | Consulta de metadados, sem alteração de dados ou leitura de segredos |
+| `npm run test:mvp:e2e` | 10/10 aprovados (6 IA, 3 Analytics com download CSV, 1 Jornada 19 etapas) | Executado contra build de produção com proxy local Deno (54327) e workers pausados/restaurados |
+| `npm run test:automation:e2e -- --grep "Simulador mostra opções"` | 1/1 aprovado | Execução de automação visual no Simulador via harness local (54328) |
 
-1. **Cadastro do usuário:** Criação de conta em `/signup` com validação de credenciais e senha segura.
-2. **Criação da organização:** Fluxo de `/onboarding` com vínculo tenant e criação de membership.
-3. **Acesso ao Dashboard:** Redirecionamento e visualização das métricas zeradas iniciais da nova organização.
-4. **Configuração da IA:** Ativação do agente em `/ia` com regras de resposta automática e handoff habilitadas.
-5. **Base de Conhecimento:** Criação e salvamento de documento de preços e serviços em `/conhecimento`.
-6. **Conexão de Canal:** Ativação instantânea do canal Simulador em `/configuracoes/canais`.
-7. **Simulação Inbound:** Envio de mensagem simulada de contato externo com payload completo.
-8. **Inbox Realtime:** Recepção e exibição imediata da conversa na lista do `/inbox`.
-9. **Contato Automático:** Criação automática de ficha de contato em `/contatos` indexada pelo número/canal.
-10. **Classificação de Inteligência:** Exibição estruturada de campos de intenção, sentimento e resumo na conversa.
-11. **Consulta RAG:** Área de teste (/ia) validando a recuperação semântica de trechos da base.
-12. **Resposta da IA:** Capacidade de geração de respostas automáticas com identificação visual do agente.
-13. **Lead Score:** Atualização e persistência de pontuação de qualificação do lead no painel lateral do Inbox.
-14. **CRM & Pipeline:** Criação de deal a partir da conversa e visualização no quadro Kanban em `/pipeline`.
-15. **Regras de Automação:** Gestão de modelos e nós de automação em `/automacoes`.
-16. **Handoff:** Assunção da conversa por atendente humano com registro de auditoria e banner informativo.
-17. **Resposta Humana:** Atendente envia mensagem no Inbox com confirmação de entrega e status sincronizado.
-18. **Fechamento de Atendimento:** Encerramento da conversa com desativação do campo de texto e status "Fechada".
-19. **Métricas Consolidadas:** Registro e agregação das interações no `/dashboard` e no `/analytics`, com geração de CSV.
+As suítes são distintas: `npm run test:edge` executa Deno/Edge Functions; `npm run test:scripts` executa testes dos runners. Os registros históricos de 199 testes Edge e 13 testes de scripts não constituem uma nova execução desta revisão. O registro completo de comandos e verificações está no relatório local de Task 3 (`.superpowers/sdd/2026-10-14-mvp-review-fixes/task-3-report.md`).
 
----
+## Limitações e entrada em produção
 
-## 4. Estado da Suíte de Testes e Qualidade de Código
-
-- **Testes Unitários:** 571 testes passando sem erros (`npm test`).
-- **Edge Functions e Scripts:** 100% aprovados (`npm run test:scripts`).
-- **Tipagem Estática:** 0 erros de compilação em todo o monorepo (`npm run typecheck`).
-- **Linting:** 0 violações de regras ESLint (`npm run lint -w apps/web`).
-- **Build de Produção:** Compilação do Next.js gerada com sucesso via Turbopack (`npm run build -w apps/web`).
-
----
-
-## 5. Próximos Passos Operacionais para Entrada em Produção
-
-1. Configuração do aplicativo oficial no **Meta for Developers** (verificação de empresa e permissões de Instagram Messaging).
-2. Provisionamento do projeto **Supabase de Produção** e execução das migrations versionadas.
-3. Configuração de credenciais (`OPENAI_API_KEY`, segredos do Vault) no ambiente de produção.
-4. Onboarding das primeiras organizações piloto.
+- Analytics usa o último evento de ganho de cada negócio dentro do período, com snapshot de valor quando disponível. Ganhos históricos sem `payload.value` recorrem ao valor atual do deal; alterações posteriores podem mudar esse histórico legado.
+- Eventos de handoff do produtor atual registram `from_status`, sem motivo. A RPC usa o rótulo padrão `Solicitação do cliente` quando `payload.reason` falta; esse rótulo não comprova a causa real.
+- Deals não têm canal próprio: o filtro de canal os associa aos contatos com conversa naquele canal. Um contato multicanal pode aparecer em mais de um filtro.
+- Meta ao vivo, permissões/verificação do aplicativo, OpenAI real, custos/qualidade RAG, provisionamento Supabase de produção, segredos, teste do cliente piloto e rollout continuam pendentes.
+- WhatsApp permanece adiado. Headers e testes locais não equivalem a auditoria ou homologação do ambiente publicado.

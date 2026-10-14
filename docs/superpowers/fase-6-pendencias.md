@@ -21,7 +21,7 @@ Tarefas 1–13 concluídas, cada uma com revisão independente. Fica pendente a 
 - **Copy extra:** código 22023 "canal não suportado" mostra "A IA não atende conversas deste canal."
 - **Atualização do painel de classificação:** depende de `complete_ai_reply` atualizar `conversations` na mesma transação (comentado no código), sem incluir `ai_classifications` na publicação realtime.
 - **Teste de integração do Instagram:** `ai.spec.ts` está fora do `playwright.integration.config.ts` (que usa o proxy da Graph, não o da OpenAI); roda por `npm run test:ai:e2e`.
-- **Fake da OpenAI nos e2e:** usa palavras irrelevantes ignoradas para atingir a similaridade mínima de 0,3; `test:ai:e2e` sobrescreve a configuração local do worker (como o script do Instagram).
+- **Fake da OpenAI nos e2e:** usa palavras irrelevantes ignoradas para atingir a similaridade mínima de 0,3; `test:ai:e2e` usa o harness coordenado das automações, salva configurações/crons dos três workers e restaura o estado anterior (inclusive ausência de configuração). Um marcador no Vault permite recuperação após interrupção forçada.
 
 ## Pendências
 
@@ -36,7 +36,7 @@ Tarefas 1–13 concluídas, cada uma com revisão independente. Fica pendente a 
 - **Interface:** no Playground, respostas não-2xx da função (403/400) viram o texto genérico e o código do erro se perde; a linha de uso só é atualizada após teste bem-sucedido; quando a organização não tem agente, aparece "Somente administradores podem testar o agente". O aviso de transferência no Inbox permanece após "Assumir" ou fechar até devolver/reabrir (consistente com o modelo, confirmar UX). Faltam testes de componente para os estados de `/conhecimento` (cobertos pelo e2e).
 - **Cota diária conta só respostas enviadas:** transferências e novas tentativas não consomem a cota; uma organização com muitas transferências pode gastar chamadas da OpenAI além do limite de respostas. Avaliar contar tentativas ou chamadas.
 - **Aviso de transição conta como resposta da IA:** "Vou te encaminhar para um atendente, só um instante." é gravado como mensagem da IA e entra na métrica `ai_replied`. Avaliar separar o aviso das respostas.
-- **Scripts de teste:** `test-ai-e2e.mjs` mascara chaves `sb_secret_` só parcialmente (apenas se o proxy falhar ao subir); no Windows o sinal só encerra o CLI do Playwright; o SQL cru da spec poderia ir para o helper `local-db`. O schema estrito do `openai.ts` remove `minimum/maximum/pattern/format` (o Zod revalida).
+- **Scripts de teste:** o executor IA passou a reutilizar mascaramento por linhas completas, encerramento dos processos próprios e recuperação de configuração/Vault do harness de automações. Os testes leves de seleção e restauração passaram; a execução do navegador revisado ainda está pendente. O schema estrito do `openai.ts` remove `minimum/maximum/pattern/format` (o Zod revalida).
 - **Ambiente local:** o analytics/vector local segue desligado em `supabase/config.toml` (host de 8 GB). Para `test:ai:e2e` e `test:instagram:e2e` é preciso definir `DENO_BIN` e `DENO_DIR` (sem eles o proxy não sobe).
 
 ## Correções da revisão final

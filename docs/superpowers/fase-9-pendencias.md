@@ -38,13 +38,14 @@ Referências: [design](specs/2026-10-16-fase-9-analytics-design.md) e [plano](pl
 
 ---
 
-## Tabela de Evidências dos Testes
+## Correção de métricas e limites (14 de outubro de 2026)
 
-| Suíte / Comando | Escopo | Resultado |
-| :--- | :--- | :--- |
-| `npm test -w @flowai/core` | 34 arquivos de teste (analytics schemas, trend calculation, layout, etc.) | **406 testes aprovados** (0 falhas) |
-| `npm test -w apps/web` | 32 arquivos de teste (analytics queries, actions, growth, inbox, etc.) | **162 testes aprovados** (0 falhas) |
-| `npm run test:scripts` | 1 arquivo de teste de harness | **13 testes aprovados** |
-| `npm run typecheck` | Checagem estrita de tipos do TypeScript em todo o monorepo | **Aprovado com 0 erros** |
-| `npm run lint -w apps/web` | Verificação de regras de código com ESLint 9 | **Aprovado com 0 avisos/erros** |
-| `e2e/analytics.spec.ts` | Testes E2E de navegação, alternância de períodos, abas e exportação CSV | **Aprovado** |
+A migration adicional `20261016000002_analytics_metrics_fix.sql` corrige a execução da RPC, o agrupamento dos motivos via `events.payload`, o ticket médio e a contenção. `pending_human` é exposto como `waiting`. Filtro de canal é aplicado às seções; deals usam a associação de contato/conversa porque não têm canal próprio, podendo aparecer em mais de um filtro para contatos multicanal.
+
+O ticket usa o último evento de ganho por deal dentro do período, com snapshot `payload.value`; ganhos históricos sem snapshot recorrem ao valor atual do deal. Eventos de handoff do produtor atual trazem `from_status`, sem motivo; na ausência de `payload.reason`, o ranking usa `Solicitação do cliente`, que não demonstra a causa real.
+
+## Evidências e execução pendente
+
+O contrato SQL corrigido aprovou 44 verificações focadas e a suíte pgTAP aprovou 2174 verificações em 51 arquivos, com migrations adicionais instaladas localmente sem reset. Após as correções 1–2, os unitários aprovaram 603 testes (419 core + 184 web). Essas são verificações locais e não demonstram desempenho ou aceitação em produção.
+
+O caso original `analytics.spec.ts` cobria navegação, períodos, abas e botão CSV habilitado; ele não baixava nem conferia o arquivo. O novo caso verifica números da API sobre eventos produzidos pelos gatilhos e lê o CSV realmente baixado, confrontando seus valores com os da API. **A execução desse contrato revisado no navegador está pendente de memória disponível.** Consulte o [mapa de aceitação e evidências](fase-10-mvp-conclusao.md) para comandos e estado atualizado. Scripts do harness e testes Edge são suítes distintas.

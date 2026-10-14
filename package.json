@@ -8,6 +8,7 @@
     "test:scripts": "node --test \"scripts/tests/*.test.mjs\"",
     "test:instagram:e2e": "node scripts/test-instagram-e2e.mjs",
     "test:ai:e2e": "node scripts/test-ai-e2e.mjs",
+    "test:mvp:e2e": "node scripts/test-mvp-e2e.mjs",
     "test:automation:e2e": "node scripts/test-automation-e2e.mjs",
     "test:growth:e2e": "node scripts/test-growth-e2e.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
