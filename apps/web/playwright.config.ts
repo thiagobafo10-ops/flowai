@@ -7,7 +7,7 @@ const slowHost = !process.env.CI && process.env.FLOWAI_E2E_SLOW_HOST === "1";
 // sem compilação sob demanda nem recarga do dev server no meio dos testes.
 export default defineConfig({
   testDir: "e2e",
-  testIgnore: ["instagram.spec.ts", "ai.spec.ts", "automation.spec.ts"],
+  testIgnore: ["instagram.spec.ts", "ai.spec.ts", "automation.spec.ts", "growth.spec.ts"],
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,

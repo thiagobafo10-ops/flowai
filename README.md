@@ -39,6 +39,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | `npm run test:instagram:e2e` | Suíte completa de navegador com Graph injetada somente no proxy local de testes |
 | `npm run test:ai:e2e` | Suíte de navegador da IA com stub local da OpenAI e cron pausado/restaurado; nenhuma chamada real à OpenAI |
 | `npm run test:automation:e2e` | Seis fluxos de automação no navegador (3103), Supabase local e Graph/OpenAI falsos (54328); restaura os três crons/configurações de workers; após um kill forçado, a próxima execução recupera o estado salvo |
+| `npm run test:growth:e2e` | Fluxos de crescimento (Fase 7B): links de entrada, sequências, campanhas e referral do Instagram no navegador (3103) e proxy local (54328) |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |

@@ -29,6 +29,30 @@ export async function drainAutomationRuns(email: string, instagram = false) {
   }
   throw new Error("Local automation queue did not drain");
 }
+
+export async function drainGrowth(email: string) {
+  const org = orgFor(email);
+  try {
+    psql(`select private.start_due_campaigns();`);
+  } catch {
+    // ignora se não houver campanhas no ponto
+  }
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await runAutomationWorker();
+    const pendingRuns = Number(
+      psql(
+        `select count(*) from public.automation_runs where organization_id='${org}' and (status in ('pending','running') or (status='waiting' and resume_at<=now()))`,
+      ),
+    );
+    const pendingDeliveries = Number(
+      psql(
+        `select count(*) from public.outreach_deliveries where organization_id='${org}' and status in ('pending','sending') and run_after<=now()`,
+      ),
+    );
+    if (pendingRuns === 0 && pendingDeliveries === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 export async function createTemplate(page: Page, name: string) {
   await gotoReady(page, "/automacoes");
   await page.getByRole("button", { name: "Nova automação", exact: true }).click();
