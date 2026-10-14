@@ -6,6 +6,8 @@ import {
   type NodeType,
   type TriggerType,
 } from "./schemas.ts";
+import { applyAutoLayout } from "./layout.ts";
+import { validateGraph, type GraphRefs, type GraphIssue } from "./validate.ts";
 
 export const automationAiOutputSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome da automação.").max(100, "O nome deve ter até 100 caracteres."),
@@ -116,3 +118,253 @@ PEDIDO DO USUÁRIO:
 "${userPrompt}"
 `;
 }
+
+export type SanitizedAiGraphResult = {
+  name: string;
+  triggerType: TriggerType;
+  triggerConfig: unknown;
+  graph: AutomationGraph;
+  explanation: string;
+  issues: GraphIssue[];
+};
+
+/**
+ * Higieniza, repara e valida um grafo de automação gerado por IA:
+ * 1. Remove arestas desconexas, auto-loops e saídas ilegais de blocos terminais;
+ * 2. Garante a existência do nó trigger;
+ * 3. Corrige handles para condição (true/false) e mensagem (default/opt:*);
+ * 4. Preenche fallbacks seguros para nós incompletos com catálogo real;
+ * 5. Aplica auto-layout para posicionamento limpo dos nós no canvas;
+ * 6. Executa validateGraph retornando o grafo pronto e os avisos encontrados.
+ */
+export function sanitizeAndValidateGeneratedGraph(
+  raw: unknown,
+  refs: GraphRefs,
+): SanitizedAiGraphResult {
+  let parsed: Record<string, unknown> = {};
+
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+  } else if (typeof raw === "object" && raw !== null) {
+    parsed = raw as Record<string, unknown>;
+  }
+
+  const name = typeof parsed.name === "string" && parsed.name.trim().length > 0
+    ? parsed.name.trim().slice(0, 100)
+    : "Automação com IA";
+
+  const triggerType: TriggerType = (TRIGGER_TYPES as readonly string[]).includes(parsed.triggerType as string)
+    ? (parsed.triggerType as TriggerType)
+    : "message_received";
+
+  const triggerConfig = typeof parsed.triggerConfig === "object" && parsed.triggerConfig !== null
+    ? parsed.triggerConfig
+    : { firstMessageOnly: false };
+
+  const explanation = typeof parsed.explanation === "string" && parsed.explanation.trim().length > 0
+    ? parsed.explanation.trim()
+    : "Fluxo gerado e estruturado automaticamente.";
+
+  const rawNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
+  const cleanNodes: AutomationGraph["nodes"] = [];
+  const seenIds = new Set<string>();
+  let hasTrigger = false;
+
+  for (let i = 0; i < rawNodes.length; i++) {
+    const node = rawNodes[i];
+    if (!node || typeof node !== "object") continue;
+
+    const nodeType: NodeType = (NODE_TYPES as readonly string[]).includes((node as { type?: string }).type as string)
+      ? ((node as { type: NodeType }).type)
+      : "message";
+
+    if (nodeType === "trigger") {
+      if (hasTrigger) continue;
+      hasTrigger = true;
+    }
+
+    let id = typeof (node as { id?: string }).id === "string" && (node as { id: string }).id.trim().length > 0
+      ? (node as { id: string }).id.trim()
+      : `${nodeType}_${i + 1}`;
+
+    if (seenIds.has(id)) {
+      id = `${id}_${i + 1}`;
+    }
+    seenIds.add(id);
+
+    const config = typeof (node as { config?: unknown }).config === "object" && (node as { config?: unknown }).config !== null
+      ? { ...((node as { config: Record<string, unknown> }).config) }
+      : {};
+
+    if (nodeType === "message") {
+      config.mode = config.mode === "ai" ? "ai" : "text";
+      if (config.mode === "text") {
+        if (typeof config.text !== "string" || config.text.trim().length === 0) {
+          config.text = "Olá! Como posso te ajudar hoje?";
+        }
+        if (Array.isArray(config.buttons)) {
+          config.buttons = (config.buttons as Record<string, unknown>[]).slice(0, 3).map((b, bIdx) => {
+            const bId = typeof b?.id === "string" && /^[a-z0-9]{1,12}$/.test(b.id)
+              ? b.id
+              : `opt${bIdx + 1}`;
+            const bTitle = typeof b?.title === "string" && b.title.trim().length > 0
+              ? b.title.trim().slice(0, 20)
+              : `Opção ${bIdx + 1}`;
+            const bKind = b?.kind === "url" ? "url" : "path";
+            return {
+              id: bId,
+              title: bTitle,
+              kind: bKind,
+              ...(bKind === "url" ? { url: typeof b.url === "string" ? b.url : "https://exemplo.com.br" } : {}),
+            };
+          });
+        }
+      }
+    } else if (nodeType === "condition") {
+      if (!config.kind) {
+        config.kind = "keyword";
+        config.keywords = ["sim"];
+        config.mode = "contains";
+      }
+    } else if (nodeType === "delay") {
+      const mins = typeof config.minutes === "number" ? Math.round(config.minutes) : 60;
+      config.minutes = mins > 0 ? mins : 60;
+    } else if (nodeType === "tag" || nodeType === "remove_tag") {
+      if (!config.tagId && refs.tagIds.length > 0) {
+        config.tagId = refs.tagIds[0];
+      }
+    } else if (nodeType === "move_stage") {
+      if (!config.stageId && refs.stageIds.length > 0) {
+        config.stageId = refs.stageIds[0];
+      }
+    } else if (nodeType === "sequence_enroll" || nodeType === "sequence_remove") {
+      if (!config.sequenceId && refs.sequenceIds.length > 0) {
+        config.sequenceId = refs.sequenceIds[0];
+      }
+    } else if (nodeType === "assign_user") {
+      if (!config.userId && refs.userIds.length > 0) {
+        config.userId = refs.userIds[0];
+      }
+    }
+
+    cleanNodes.push({
+      id,
+      type: nodeType,
+      config,
+      position: { x: 0, y: 0 },
+    });
+  }
+
+  let insertedTrigger = false;
+  if (!hasTrigger) {
+    const triggerId = seenIds.has("trigger") ? "trigger_root" : "trigger";
+    cleanNodes.unshift({
+      id: triggerId,
+      type: "trigger",
+      config: {},
+      position: { x: 0, y: 0 },
+    });
+    seenIds.add(triggerId);
+    hasTrigger = true;
+    insertedTrigger = true;
+  }
+
+  const terminalTypes = new Set<NodeType>(["end", "close_conversation", "handoff_ai", "handoff_human"]);
+  const nodeMap = new Map(cleanNodes.map((n) => [n.id, n]));
+  const rawEdges = Array.isArray(parsed.edges) ? parsed.edges : [];
+  const cleanEdges: AutomationGraph["edges"] = [];
+  const seenHandleKeys = new Set<string>();
+
+  for (let i = 0; i < rawEdges.length; i++) {
+    const edge = rawEdges[i];
+    if (!edge || typeof edge !== "object") continue;
+
+    const source = typeof (edge as { source?: string }).source === "string" ? (edge as { source: string }).source : "";
+    const target = typeof (edge as { target?: string }).target === "string" ? (edge as { target: string }).target : "";
+
+    if (!nodeMap.has(source) || !nodeMap.has(target)) continue;
+    if (source === target) continue;
+
+    const sourceNode = nodeMap.get(source)!;
+    if (terminalTypes.has(sourceNode.type)) continue;
+
+    let sourceHandle = "default";
+    const rawHandle = typeof (edge as { sourceHandle?: unknown }).sourceHandle === "string"
+      ? (edge as { sourceHandle: string }).sourceHandle.trim()
+      : "";
+
+    if (sourceNode.type === "condition") {
+      if (rawHandle === "true" || rawHandle === "false") {
+        sourceHandle = rawHandle;
+      } else {
+        const alreadyHasTrue = cleanEdges.some((e) => e.source === source && e.sourceHandle === "true");
+        sourceHandle = !alreadyHasTrue ? "true" : "false";
+      }
+    } else if (sourceNode.type === "message") {
+      const config = sourceNode.config as Record<string, unknown> | undefined;
+      if (config?.mode === "ai") {
+        sourceHandle = rawHandle === "handoff" ? "handoff" : "sent";
+      } else if (Array.isArray(config?.buttons) && config.buttons.length > 0) {
+        const validHandles = (config.buttons as { id: string }[]).map((b) => `opt:${b.id}`);
+        validHandles.push("no_reply");
+        if (validHandles.includes(rawHandle)) {
+          sourceHandle = rawHandle;
+        } else {
+          const unused = validHandles.find((h) => !cleanEdges.some((e) => e.source === source && e.sourceHandle === h));
+          sourceHandle = unused ?? validHandles[0]!;
+        }
+      } else {
+        sourceHandle = "default";
+      }
+    } else {
+      sourceHandle = "default";
+    }
+
+    const handleKey = `${source}:${sourceHandle}`;
+    if (seenHandleKeys.has(handleKey)) continue;
+    seenHandleKeys.add(handleKey);
+
+    cleanEdges.push({
+      id: `e_${source}_${target}_${sourceHandle}_${i}`,
+      source,
+      target,
+      sourceHandle,
+    });
+  }
+
+  if (insertedTrigger && cleanNodes.length > 1) {
+    const triggerNode = cleanNodes[0]!;
+    const firstChild = cleanNodes[1]!;
+    cleanEdges.unshift({
+      id: `e_${triggerNode.id}_${firstChild.id}_default`,
+      source: triggerNode.id,
+      target: firstChild.id,
+      sourceHandle: "default",
+    });
+  }
+
+  const laidOutGraph = applyAutoLayout({
+    nodes: cleanNodes,
+    edges: cleanEdges,
+  });
+
+  const issues = validateGraph(
+    laidOutGraph,
+    { type: triggerType, config: triggerConfig },
+    refs,
+  );
+
+  return {
+    name,
+    triggerType,
+    triggerConfig,
+    graph: laidOutGraph,
+    explanation,
+    issues,
+  };
+}
+

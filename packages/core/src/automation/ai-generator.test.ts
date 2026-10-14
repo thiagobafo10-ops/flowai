@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   automationAiOutputSchema,
   buildAutomationPrompt,
+  sanitizeAndValidateGeneratedGraph,
   type GeneratorRefs,
 } from "./ai-generator.ts";
 import type { AutomationGraph } from "./schemas.ts";
@@ -94,3 +95,121 @@ describe("buildAutomationPrompt", () => {
     expect(prompt).toContain('"id": "m1"');
   });
 });
+
+describe("sanitizeAndValidateGeneratedGraph", () => {
+  const GRAPH_REFS = {
+    tagIds: ["11111111-1111-4000-8000-000000000001"],
+    stageIds: ["22222222-2222-4000-8000-000000000001"],
+    userIds: ["66666666-6666-4000-8000-000000000001"],
+    channelIds: ["33333333-3333-4000-8000-000000000001"],
+    sequenceIds: ["55555555-5555-4000-8000-000000000001"],
+    entryLinkIds: ["44444444-4444-4000-8000-000000000001"],
+  };
+
+  it("remove arestas desconexas, auto-loops e arestas saindo de nós terminais", () => {
+    const raw = {
+      name: "Fluxo com pontas soltas",
+      triggerType: "message_received",
+      triggerConfig: { firstMessageOnly: true },
+      explanation: "Teste de sanitização",
+      nodes: [
+        { id: "trig", type: "trigger", config: {} },
+        { id: "msg", type: "message", config: { mode: "text", text: "Olá" } },
+        { id: "fim", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "trig", target: "msg", sourceHandle: "default" },
+        { source: "msg", target: "fim", sourceHandle: "default" },
+        // Aresta saindo de nó terminal (deve ser removida)
+        { source: "fim", target: "msg", sourceHandle: "default" },
+        // Aresta apontando para nó inexistente (deve ser removida)
+        { source: "msg", target: "fantasma", sourceHandle: "default" },
+        // Auto-loop (deve ser removido)
+        { source: "msg", target: "msg", sourceHandle: "default" },
+      ],
+    };
+
+    const result = sanitizeAndValidateGeneratedGraph(raw, GRAPH_REFS);
+
+    expect(result.graph.edges).toHaveLength(2);
+    expect(result.graph.edges.map((e) => `${e.source}->${e.target}`)).toEqual([
+      "trig->msg",
+      "msg->fim",
+    ]);
+  });
+
+  it("insere nó trigger automaticamente se a IA o omitir e conecta ao primeiro nó", () => {
+    const raw = {
+      name: "Fluxo sem trigger inicial",
+      triggerType: "keyword_detected",
+      triggerConfig: { keywords: ["ajuda"], mode: "contains" },
+      explanation: "Fluxo criado sem nó trigger explícito",
+      nodes: [
+        { id: "msg1", type: "message", config: { mode: "text", text: "Em que posso ajudar?" } },
+        { id: "end1", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "msg1", target: "end1", sourceHandle: "default" },
+      ],
+    };
+
+    const result = sanitizeAndValidateGeneratedGraph(raw, GRAPH_REFS);
+
+    const triggerNode = result.graph.nodes.find((n) => n.type === "trigger");
+    expect(triggerNode).toBeDefined();
+    // Deve haver conexão partindo do trigger para msg1
+    const edgeFromTrigger = result.graph.edges.find((e) => e.source === triggerNode!.id);
+    expect(edgeFromTrigger).toBeDefined();
+    expect(edgeFromTrigger!.target).toBe("msg1");
+  });
+
+  it("corrige handles de condição e mensagem sem botões", () => {
+    const raw = {
+      name: "Correção de Handles",
+      triggerType: "message_received",
+      triggerConfig: { firstMessageOnly: false },
+      explanation: "Ajuste de handles",
+      nodes: [
+        { id: "trig", type: "trigger", config: {} },
+        { id: "cond", type: "condition", config: { kind: "has_tag", tagId: GRAPH_REFS.tagIds[0] } },
+        { id: "msg_sim", type: "message", config: { mode: "text", text: "Cliente VIP" } },
+        { id: "msg_nao", type: "message", config: { mode: "text", text: "Novo cliente" } },
+      ],
+      edges: [
+        { source: "trig", target: "cond", sourceHandle: null },
+        // A IA gerou 'yes' e 'no' em vez de 'true' e 'false'
+        { source: "cond", target: "msg_sim", sourceHandle: "yes" },
+        { source: "cond", target: "msg_nao", sourceHandle: "no" },
+      ],
+    };
+
+    const result = sanitizeAndValidateGeneratedGraph(raw, GRAPH_REFS);
+
+    const condEdges = result.graph.edges.filter((e) => e.source === "cond");
+    expect(condEdges.map((e) => e.sourceHandle).sort()).toEqual(["false", "true"]);
+  });
+
+  it("aplica auto-layout nos nós retornados", () => {
+    const raw = {
+      name: "Layout aplicado",
+      triggerType: "message_received",
+      triggerConfig: { firstMessageOnly: false },
+      explanation: "Layout",
+      nodes: [
+        { id: "trig", type: "trigger", config: {} },
+        { id: "msg", type: "message", config: { mode: "text", text: "Oi" } },
+      ],
+      edges: [
+        { source: "trig", target: "msg", sourceHandle: "default" },
+      ],
+    };
+
+    const result = sanitizeAndValidateGeneratedGraph(raw, GRAPH_REFS);
+
+    const trig = result.graph.nodes.find((n) => n.id === "trig")!;
+    const msg = result.graph.nodes.find((n) => n.id === "msg")!;
+
+    expect(trig.position.y).toBeLessThan(msg.position.y);
+  });
+});
+
