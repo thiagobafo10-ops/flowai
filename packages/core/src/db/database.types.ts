@@ -1466,6 +1466,9 @@ isOneToOne: false
 "shares_org_with":
 { Args: { "p_user": string }; Returns: boolean
                            },
+"simulate_entry_link":
+{ Args: { "p_contact_name": string,"p_contact_phone": string,"p_link": string }; Returns: string
+                           },
 "slugify":
 { Args: { "p": string }; Returns: string
                            },
