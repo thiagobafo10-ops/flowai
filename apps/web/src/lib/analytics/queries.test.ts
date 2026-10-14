@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getAnalyticsMetrics } from "./queries";
+import { getAnalyticsMetrics, type SupabaseRpcClient } from "./queries";
 
 const mockMetricsPayload = {
   period_days: 7,
@@ -39,7 +39,7 @@ const mockMetricsPayload = {
 describe("getAnalyticsMetrics", () => {
   it("chama a rpc analytics_metrics com os parâmetros corretos e valida a resposta", async () => {
     const mockRpc = vi.fn().mockResolvedValue({ data: mockMetricsPayload, error: null });
-    const mockClient = { rpc: mockRpc } as any;
+    const mockClient = { rpc: mockRpc } as unknown as SupabaseRpcClient;
 
     const result = await getAnalyticsMetrics("org-123", "7d", undefined, mockClient);
     expect(mockRpc).toHaveBeenCalledWith("analytics_metrics", {
@@ -52,7 +52,7 @@ describe("getAnalyticsMetrics", () => {
 
   it("passa o channel_id quando especificado", async () => {
     const mockRpc = vi.fn().mockResolvedValue({ data: mockMetricsPayload, error: null });
-    const mockClient = { rpc: mockRpc } as any;
+    const mockClient = { rpc: mockRpc } as unknown as SupabaseRpcClient;
 
     await getAnalyticsMetrics("org-123", "30d", "chan-456", mockClient);
     expect(mockRpc).toHaveBeenCalledWith("analytics_metrics", {
@@ -64,7 +64,7 @@ describe("getAnalyticsMetrics", () => {
 
   it("lança erro caso a rpc retorne erro", async () => {
     const mockRpc = vi.fn().mockResolvedValue({ data: null, error: { message: "db error" } });
-    const mockClient = { rpc: mockRpc } as any;
+    const mockClient = { rpc: mockRpc } as unknown as SupabaseRpcClient;
 
     await expect(getAnalyticsMetrics("org-123", "7d", undefined, mockClient)).rejects.toThrow(
       "Falha ao carregar métricas de analytics",

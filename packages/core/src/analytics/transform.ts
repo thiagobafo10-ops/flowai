@@ -28,7 +28,7 @@ export function parseAnalyticsPeriod(raw: unknown): AnalyticsPeriod {
 /**
  * Converte período em quantidade de dias.
  */
-export function periodToDays(period: AnalyticsPeriod): number {
+export function analyticsPeriodToDays(period: AnalyticsPeriod): number {
   switch (period) {
     case "1d":
       return 1;
@@ -44,7 +44,7 @@ export function periodToDays(period: AnalyticsPeriod): number {
 /**
  * Retorna o rótulo textual legível para o período.
  */
-export function periodToLabel(period: AnalyticsPeriod): string {
+export function analyticsPeriodToLabel(period: AnalyticsPeriod): string {
   switch (period) {
     case "1d":
       return "Hoje";

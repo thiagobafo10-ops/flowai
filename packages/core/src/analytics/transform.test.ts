@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateTrendPercentage, formatAnalyticsCsv, periodToDays, parseAnalyticsPeriod } from "./transform.js";
+import { calculateTrendPercentage, formatAnalyticsCsv, analyticsPeriodToDays, parseAnalyticsPeriod } from "./transform.js";
 import type { AnalyticsMetrics } from "./schemas.js";
 
 describe("calculateTrendPercentage", () => {
@@ -24,7 +24,7 @@ describe("calculateTrendPercentage", () => {
   });
 });
 
-describe("parseAnalyticsPeriod & periodToDays", () => {
+describe("parseAnalyticsPeriod & analyticsPeriodToDays", () => {
   it("converte string em período com fallback seguro", () => {
     expect(parseAnalyticsPeriod("7d")).toBe("7d");
     expect(parseAnalyticsPeriod("30d")).toBe("30d");
@@ -35,10 +35,10 @@ describe("parseAnalyticsPeriod & periodToDays", () => {
   });
 
   it("converte período para número de dias", () => {
-    expect(periodToDays("1d")).toBe(1);
-    expect(periodToDays("7d")).toBe(7);
-    expect(periodToDays("30d")).toBe(30);
-    expect(periodToDays("90d")).toBe(90);
+    expect(analyticsPeriodToDays("1d")).toBe(1);
+    expect(analyticsPeriodToDays("7d")).toBe(7);
+    expect(analyticsPeriodToDays("30d")).toBe(30);
+    expect(analyticsPeriodToDays("90d")).toBe(90);
   });
 });
 

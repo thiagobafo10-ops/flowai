@@ -1,6 +1,6 @@
 import {
   analyticsMetricsSchema,
-  periodToDays,
+  analyticsPeriodToDays,
   type AnalyticsMetrics,
   type AnalyticsPeriod,
 } from "@flowai/core";
@@ -22,10 +22,10 @@ export async function getAnalyticsMetrics(
   channelId?: string | null,
   clientOverride?: SupabaseRpcClient,
 ): Promise<AnalyticsMetrics> {
-  const supabase = clientOverride ?? (await createServerClient());
-  const { data, error } = await supabase.rpc("analytics_metrics", {
+  const client = (clientOverride ?? (await createServerClient())) as unknown as SupabaseRpcClient;
+  const { data, error } = await client.rpc("analytics_metrics", {
     p_org: orgId,
-    p_days: periodToDays(period),
+    p_days: analyticsPeriodToDays(period),
     p_channel_id: channelId || null,
   });
 
