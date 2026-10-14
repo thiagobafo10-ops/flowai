@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { automationAiOutputSchema, type AutomationGraph } from "@flowai/core";
 
 const state = vi.hoisted(() => ({
   role: "admin",
@@ -34,7 +35,9 @@ describe("generateAutomationWithAi", () => {
   beforeEach(() => {
     state.role = "admin";
     state.apiKey = "test-openai-key";
-    process.env.OPENAI_API_KEY = "test-openai-key";
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("OPENAI_CHAT_MODEL", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
     state.tables = {
       tags: [{ id: "11111111-1111-4000-8000-000000000001", name: "VIP" }],
       pipelines: [{ id: "22222222-2222-4000-8000-000000000001", is_default: true }],
@@ -44,6 +47,40 @@ describe("generateAutomationWithAi", () => {
       sequences: [{ id: "66666666-6666-4000-8000-000000000001", name: "Nutrição" }],
       entry_links: [{ id: "77777777-7777-4000-8000-000000000001", name: "Link Bio" }],
     };
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([false, true])("instrui JSON com contrato completo na chamada real da action (refinamento=%s)", async (refining) => {
+    const currentGraph: AutomationGraph = {
+      nodes: [{ id: "trigger", type: "trigger", config: {}, position: { x: 0, y: 0 } }],
+      edges: [],
+    };
+    let requestBody = "";
+    const customFetch: typeof fetch = async (_url, options) => {
+      requestBody = String(options?.body);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        name: "Boas-vindas", triggerType: "message_received", triggerConfig: { firstMessageOnly: false },
+        explanation: "Recebe e termina.",
+        nodes: [{ id: "trigger", type: "trigger", config: {} }, { id: "end", type: "end", config: {} }],
+        edges: [{ source: "trigger", target: "end", sourceHandle: "default" }],
+      }) } }] });
+    };
+    const result = await generateAutomationWithAi({
+      prompt: "Criar fluxo de boas-vindas", ...(refining ? { currentGraph } : {}),
+    }, { fetchFn: customFetch });
+    expect(result.ok).toBe(true);
+    const request = JSON.parse(requestBody);
+    expect(request.model).toBe("gpt-4.1-mini");
+    expect(request.response_format).toEqual({ type: "json_object" });
+    const system = request.messages.find((m: { role: string }) => m.role === "system").content;
+    expect(system).toMatch(/JSON/);
+    expect(system).toMatch(/(?:somente|apenas|exclusivamente).*JSON/i);
+    // O exemplo fornecido ao modelo deve ser consumível pelo schema de saída.
+    const sample = system.match(/```json\s*([\s\S]*?)```/);
+    expect(sample, "instrução precisa mostrar a estrutura JSON de saída").not.toBeNull();
+    expect(automationAiOutputSchema.safeParse(JSON.parse(sample![1])).success).toBe(true);
+    if (result.ok) expect(result.data.issues).toEqual([]);
   });
 
   it("rejeita requisições de agentes ou membros sem permissão de escrita", async () => {

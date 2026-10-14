@@ -6,8 +6,15 @@ import { deleteCampaign, saveCampaignDraft } from "@/lib/growth/actions";
 
 const headers = { "Cache-Control": "no-store" };
 
+function paginationInteger(raw: string | null, fallback: number, min: number, max: number): number {
+  if (raw === null || !/^\d+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < min) return fallback;
+  return Math.min(value, max);
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -24,7 +31,11 @@ export async function GET(
 
     let report = null;
     if (campaign.status !== "draft") {
-      report = await getCampaignReport(id, 50, 0);
+      const searchParams = new URL(request.url).searchParams;
+      const limit = paginationInteger(searchParams.get("limit"), 50, 1, 100);
+      // campaign_report recebe int PostgreSQL e aceita somente offset não negativo.
+      const offset = paginationInteger(searchParams.get("offset"), 0, 0, 2147483647);
+      report = await getCampaignReport(id, limit, offset);
     }
 
     const canWrite = ["owner", "admin"].includes(org.role);

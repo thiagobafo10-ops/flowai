@@ -2,12 +2,14 @@ import { z } from "zod";
 import {
   NODE_TYPES,
   TRIGGER_TYPES,
+  HANDLE_REGEX,
+  optionId,
   type AutomationGraph,
   type NodeType,
   type TriggerType,
 } from "./schemas.ts";
 import { applyAutoLayout } from "./layout.ts";
-import { validateGraph, type GraphRefs, type GraphIssue } from "./validate.ts";
+import { requiredHandles, validateGraph, type GraphRefs, type GraphIssue } from "./validate.ts";
 
 export const automationAiOutputSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome da automação.").max(100, "O nome deve ter até 100 caracteres."),
@@ -45,6 +47,24 @@ export function buildAutomationPrompt(
   refs: GeneratorRefs,
   currentGraph?: AutomationGraph,
 ): string {
+  const terminalTypes = NODE_TYPES.filter((type) => requiredHandles({
+    id: type, type, config: {}, position: { x: 0, y: 0 },
+  }).length === 0);
+  const outputExample: AutomationAiOutput = {
+    name: "Boas-vindas",
+    triggerType: "message_received",
+    triggerConfig: { firstMessageOnly: false },
+    explanation: "Recebe uma mensagem, responde e termina o fluxo.",
+    nodes: [
+      { id: "trigger", type: "trigger", config: {} },
+      { id: "message", type: "message", config: { mode: "text", text: "Olá! Como posso ajudar?" } },
+      { id: "end", type: "end", config: {} },
+    ],
+    edges: [
+      { source: "trigger", target: "message", sourceHandle: "default" },
+      { source: "message", target: "end", sourceHandle: "default" },
+    ],
+  };
   const tagsList = refs.tags.length > 0
     ? refs.tags.map((t) => `- "${t.name}": ID ${t.id}`).join("\n")
     : "(Nenhuma etiqueta cadastrada)";
@@ -79,17 +99,29 @@ Instruções de refinamento: Mantenha a estrutura existente que não foi solicit
   return `Você é o arquiteto especialista em automação e atendimento com IA do FlowAI.
 Sua missão é converter a descrição do usuário em um fluxo de automação perfeitamente estruturado e válido.
 
+CONTRATO DE RESPOSTA:
+Responda somente com um objeto JSON válido, sem Markdown ou texto fora do JSON, tanto ao gerar quanto ao refinar.
+O objeto deve conter name (string de 1 a 100 caracteres), triggerType, triggerConfig (objeto), explanation (string de 1 a 1000 caracteres), nodes (array de {id, type, config}) e edges (array de {source, target, sourceHandle}).
+Use triggerType dentre: ${TRIGGER_TYPES.join(", ")}; type de nó dentre: ${NODE_TYPES.join(", ")}.
+Cada config deve corresponder ao tipo do nó ou gatilho. Retorne o fluxo completo no refinamento.
+Exemplo de estrutura (adapte os valores ao pedido):
+\`\`\`json
+${JSON.stringify(outputExample, null, 2)}
+\`\`\`
+
 DIRETRIZES FUNDAMENTAIS:
 1. Responda em Português do Brasil (pt-BR).
 2. O fluxo sempre DEVE começar por um nó com id "trigger" e type "trigger".
 3. Conecte os nós de forma lógica e sequencial usando "edges" (source, target, sourceHandle).
-4. Nós terminais ("end", "close_conversation", "handoff_ai", "handoff_human") NÃO devem ter arestas de saída.
+4. Nós terminais (${terminalTypes.map((type) => `"${type}"`).join(", ")}) NÃO devem ter arestas de saída. "close_conversation" tem saída "default" ligada apenas a "end".
 5. Para blocos de "condition":
    - Devem ter saída com sourceHandle "true" (quando atende) e sourceHandle "false" (quando não atende).
 6. Para blocos de "message":
    - Podem ter botões (máximo 3) ou respostas rápidas (máximo 13).
-   - Se houver opções/botões, cada opção possui um id (ex: "opt1", "opt2") e as saídas correspondentes usam sourceHandle "opt:opt1", "opt:opt2".
-   - Se for mensagem simples sem botões, a saída usa sourceHandle "default".
+   - Use config.mode "text" com text e buttons [{id,title,kind:"path"}] OU quickReplies [{id,title}], nunca ambos. IDs têm 1 a 12 letras minúsculas ou números, títulos até 20 caracteres.
+   - Cada botão kind "path" ou resposta rápida tem saída "opt:<id>"; conecte também "no_reply". Botões kind "url" exigem URL https e não têm saída opt.
+   - Se for mensagem simples sem opções de caminho, a saída usa sourceHandle "default".
+   - Para config.mode "ai", conecte as saídas "sent" e "handoff".
 7. Para blocos de CRM e Sequência, use OBRIGATORIAMENTE os IDs reais informados no catálogo abaixo quando aplicável:
    - "tag" e "remove_tag": config: { tagId: "<UUID_REAL>" }
    - "move_stage": config: { stageId: "<UUID_REAL>" }
@@ -132,7 +164,7 @@ export type SanitizedAiGraphResult = {
  * Higieniza, repara e valida um grafo de automação gerado por IA:
  * 1. Remove arestas desconexas, auto-loops e saídas ilegais de blocos terminais;
  * 2. Garante a existência do nó trigger;
- * 3. Corrige handles para condição (true/false) e mensagem (default/opt:*);
+ * 3. Preserva saídas canônicas e corrige aliases conhecidos ou saídas inequívocas omitidas;
  * 4. Preenche fallbacks seguros para nós incompletos com catálogo real;
  * 5. Aplica auto-layout para posicionamento limpo dos nós no canvas;
  * 6. Executa validateGraph retornando o grafo pronto e os avisos encontrados.
@@ -208,7 +240,7 @@ export function sanitizeAndValidateGeneratedGraph(
         }
         if (Array.isArray(config.buttons)) {
           config.buttons = (config.buttons as Record<string, unknown>[]).slice(0, 3).map((b, bIdx) => {
-            const bId = typeof b?.id === "string" && /^[a-z0-9]{1,12}$/.test(b.id)
+            const bId = optionId.safeParse(b?.id).success
               ? b.id
               : `opt${bIdx + 1}`;
             const bTitle = typeof b?.title === "string" && b.title.trim().length > 0
@@ -273,7 +305,6 @@ export function sanitizeAndValidateGeneratedGraph(
     insertedTrigger = true;
   }
 
-  const terminalTypes = new Set<NodeType>(["end", "close_conversation", "handoff_ai", "handoff_human"]);
   const nodeMap = new Map(cleanNodes.map((n) => [n.id, n]));
   const rawEdges = Array.isArray(parsed.edges) ? parsed.edges : [];
   const cleanEdges: AutomationGraph["edges"] = [];
@@ -290,39 +321,24 @@ export function sanitizeAndValidateGeneratedGraph(
     if (source === target) continue;
 
     const sourceNode = nodeMap.get(source)!;
-    if (terminalTypes.has(sourceNode.type)) continue;
+    const validHandles = requiredHandles(sourceNode);
+    if (validHandles.length === 0) continue;
 
     let sourceHandle = "default";
     const rawHandle = typeof (edge as { sourceHandle?: unknown }).sourceHandle === "string"
       ? (edge as { sourceHandle: string }).sourceHandle.trim()
       : "";
 
-    if (sourceNode.type === "condition") {
-      if (rawHandle === "true" || rawHandle === "false") {
-        sourceHandle = rawHandle;
-      } else {
-        const alreadyHasTrue = cleanEdges.some((e) => e.source === source && e.sourceHandle === "true");
-        sourceHandle = !alreadyHasTrue ? "true" : "false";
-      }
-    } else if (sourceNode.type === "message") {
-      const config = sourceNode.config as Record<string, unknown> | undefined;
-      if (config?.mode === "ai") {
-        sourceHandle = rawHandle === "handoff" ? "handoff" : "sent";
-      } else if (Array.isArray(config?.buttons) && config.buttons.length > 0) {
-        const validHandles = (config.buttons as { id: string }[]).map((b) => `opt:${b.id}`);
-        validHandles.push("no_reply");
-        if (validHandles.includes(rawHandle)) {
-          sourceHandle = rawHandle;
-        } else {
-          const unused = validHandles.find((h) => !cleanEdges.some((e) => e.source === source && e.sourceHandle === h));
-          sourceHandle = unused ?? validHandles[0]!;
-        }
-      } else {
-        sourceHandle = "default";
-      }
+    // Corrige somente aliases conhecidos ou saída omitida e inequívoca.
+    // Uma opção inexistente nunca pode ser reatribuída a outro caminho.
+    if (sourceNode.type === "condition" && (rawHandle === "yes" || rawHandle === "no")) {
+      sourceHandle = rawHandle === "yes" ? "true" : "false";
+    } else if (!rawHandle && validHandles.length === 1) {
+      sourceHandle = validHandles[0]!;
     } else {
-      sourceHandle = "default";
+      sourceHandle = rawHandle;
     }
+    if (!HANDLE_REGEX.test(sourceHandle) || !validHandles.includes(sourceHandle)) continue;
 
     const handleKey = `${source}:${sourceHandle}`;
     if (seenHandleKeys.has(handleKey)) continue;

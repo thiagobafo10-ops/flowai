@@ -106,6 +106,106 @@ describe("sanitizeAndValidateGeneratedGraph", () => {
     entryLinkIds: ["44444444-4444-4000-8000-000000000001"],
   };
 
+  it("preserva fechamento seguido de fim como grafo válido", () => {
+    const result = sanitizeAndValidateGeneratedGraph({
+      triggerConfig: { firstMessageOnly: false },
+      nodes: [
+        { id: "trigger", type: "trigger", config: {} },
+        { id: "close", type: "close_conversation", config: {} },
+        { id: "end", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "trigger", target: "close", sourceHandle: "default" },
+        { source: "close", target: "end", sourceHandle: "default" },
+      ],
+    }, GRAPH_REFS);
+    expect(result.graph.edges.map((e) => `${e.source}->${e.target}`)).toEqual(["trigger->close", "close->end"]);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("preserva cada ramo de respostas rápidas e ausência de resposta", () => {
+    const result = sanitizeAndValidateGeneratedGraph({
+      triggerConfig: { firstMessageOnly: false },
+      nodes: [
+        { id: "trigger", type: "trigger", config: {} },
+        { id: "menu", type: "message", config: { mode: "text", text: "Escolha", quickReplies: [
+          { id: "sim", title: "Sim" }, { id: "nao", title: "Não" },
+        ] } },
+        ...["aceite", "recusa", "silencio"].map((id) => ({ id, type: "end", config: {} })),
+      ],
+      edges: [
+        { source: "trigger", target: "menu", sourceHandle: "default" },
+        { source: "menu", target: "aceite", sourceHandle: "opt:sim" },
+        { source: "menu", target: "recusa", sourceHandle: "opt:nao" },
+        { source: "menu", target: "silencio", sourceHandle: "no_reply" },
+      ],
+    }, GRAPH_REFS);
+    expect(result.graph.edges.filter((e) => e.source === "menu").map((e) => [e.sourceHandle, e.target])).toEqual([
+      ["opt:sim", "aceite"], ["opt:nao", "recusa"], ["no_reply", "silencio"],
+    ]);
+    expect(result.issues).toEqual([]);
+  });
+
+  it.each([
+    { buttons: [{ id: "sim", title: "Sim", kind: "path" }], handle: "opt:forjado" },
+    { buttons: [{ id: "site", title: "Site", kind: "url", url: "https://example.com" }], handle: "opt:site" },
+    { quickReplies: [{ id: "sim", title: "Sim" }], handle: "opt:forjado" },
+    { handle: "opt:forjado" },
+  ])("não reatribui saída inexistente de mensagem: %j", ({ handle, ...options }) => {
+    const result = sanitizeAndValidateGeneratedGraph({
+      triggerConfig: { firstMessageOnly: false },
+      nodes: [
+        { id: "trigger", type: "trigger", config: {} },
+        { id: "menu", type: "message", config: { mode: "text", text: "Escolha", ...options } },
+        { id: "end", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "trigger", target: "menu", sourceHandle: "default" },
+        { source: "menu", target: "end", sourceHandle: handle },
+      ],
+    }, GRAPH_REFS);
+    expect(result.graph.edges.filter((e) => e.source === "menu")).toEqual([]);
+    expect(result.issues.some((i) => i.nodeId === "menu" && i.code === "missing_handle")).toBe(true);
+  });
+
+  it.each([
+    ["tag", "tagId", "unknown_tag"], ["remove_tag", "tagId", "unknown_tag"],
+    ["move_stage", "stageId", "unknown_stage"], ["assign_user", "userId", "unknown_user"],
+    ["sequence_enroll", "sequenceId", "unknown_sequence"], ["sequence_remove", "sequenceId", "unknown_sequence"],
+  ])("não aceita referência indisponível em %s mesmo sendo UUID", (type, field, code) => {
+    const result = sanitizeAndValidateGeneratedGraph({
+      triggerConfig: { firstMessageOnly: false },
+      nodes: [
+        { id: "trigger", type: "trigger", config: {} },
+        { id: "action", type, config: { [field]: "99999999-9999-4000-8000-000000000001" } },
+        { id: "end", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "trigger", target: "action", sourceHandle: "default" },
+        { source: "action", target: "end", sourceHandle: "default" },
+      ],
+    }, GRAPH_REFS);
+    expect(result.issues.map((i) => [i.nodeId, i.code])).toEqual([["action", code]]);
+  });
+
+  it("valida a proibição de ações após fechar a conversa", () => {
+    const result = sanitizeAndValidateGeneratedGraph({
+      triggerConfig: { firstMessageOnly: false },
+      nodes: [
+        { id: "trigger", type: "trigger", config: {} },
+        { id: "close", type: "close_conversation", config: {} },
+        { id: "message", type: "message", config: { mode: "text", text: "Oi" } },
+        { id: "end", type: "end", config: {} },
+      ],
+      edges: [
+        { source: "trigger", target: "close", sourceHandle: "default" },
+        { source: "close", target: "message", sourceHandle: "default" },
+        { source: "message", target: "end", sourceHandle: "default" },
+      ],
+    }, GRAPH_REFS);
+    expect(result.issues.map((i) => [i.nodeId, i.code])).toEqual([["close", "after_close"]]);
+  });
+
   it("remove arestas desconexas, auto-loops e arestas saindo de nós terminais", () => {
     const raw = {
       name: "Fluxo com pontas soltas",
