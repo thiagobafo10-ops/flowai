@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(78);
 select tests.create_user('owner47@t.test','Owner47') as ua \gset
 select tests.create_user('agent47@t.test','Agent47') as uag \gset
 select tests.create_user('viewer47@t.test','Viewer47') as uv \gset
@@ -66,7 +66,7 @@ select pg_temp.mk('00000000-0000-0000-0000-000000004734',:'oa','message_received
 select pg_temp.mk('00000000-0000-0000-0000-000000004735',:'oa','tag_added','{"tagId":"00000000-0000-0000-0000-000000004711"}',now()-interval '3 hours');
 
 -- =============================================================== segurança
-select ok(not has_function_privilege('authenticated','private.entry_link_open(uuid,text,text,text,uuid)','execute'),'authenticated não executa entry_link_open');
+select ok(not has_function_privilege('authenticated','private.entry_link_open(uuid,text,text,text,uuid,timestamptz)','execute'),'authenticated não executa entry_link_open');
 select ok(not has_function_privilege('anon','public.simulate_entry_link(uuid,text,text)','execute'),'anon não executa simulate_entry_link');
 select ok(has_function_privilege('authenticated','public.simulate_entry_link(uuid,text,text)','execute'),'authenticated executa simulate_entry_link');
 
@@ -127,6 +127,28 @@ select is(pg_temp.notes((:'d1'::jsonb->>'conversationId')::uuid),1,'RF1: uma not
 select is(:'d2'::jsonb->>'duplicate','true','RF1: segunda abertura marcada como duplicada');
 select is((select count(*)::int from public.contacts where phone = '+5511990004703'),1,'RF1: um contato');
 
+-- external_id acima de 200 caracteres: hash determinístico (RF1 mantido)
+select private.entry_link_open('00000000-0000-0000-0000-000000004701','+5511990004705','promo-sim',repeat('x',300)) as long1 \gset
+select private.entry_link_open('00000000-0000-0000-0000-000000004701','+5511990004705','promo-sim',repeat('x',300)) as long2 \gset
+select is((select count(*)::int from public.entry_link_hits where external_id like 'sha256:%'),1,'id longo: um uso com hash');
+select is(:'long2'::jsonb->>'duplicate','true','id longo: segunda abertura duplicada');
+select is(pg_temp.runs((:'long1'::jsonb->>'conversationId')::uuid),1,'id longo: uma execução');
+
+-- horário do chamador: conversa criada com last_message_at = p_at; nota em least(p_at, now())
+select private.entry_link_open('00000000-0000-0000-0000-000000004701','+5511990004706','promo-sim','ext-past',null,
+  now() - interval '1 hour') as past \gset
+select is((select last_message_at from public.conversations where id = (:'past'::jsonb->>'conversationId')::uuid),
+  now() - interval '1 hour','conversa nova usa o horário do chamador');
+select ok((select created_at from public.messages where conversation_id = (:'past'::jsonb->>'conversationId')::uuid
+  and sender_type = 'system') <= now() - interval '1 hour','nota no horário do evento');
+select is((select last_interaction_at from public.contacts where phone = '+5511990004706'),now() - interval '1 hour',
+  'interação do contato no horário do evento');
+
+-- núcleo compartilhado
+select has_function('private','inbound_conversation',array['uuid','uuid','channel_type','text','text','timestamp with time zone','uuid'],
+  'helper compartilhado de contato + conversa');
+select hasnt_function('private','entry_link_contact','sem resolução de contato duplicada');
+
 -- link arquivado / código desconhecido / outra organização
 select is(private.entry_link_open('00000000-0000-0000-0000-000000004701','+5511990004704','velho','ext-old')->>'ignored','true','link arquivado ignorado');
 select is(pg_temp.hits('00000000-0000-0000-0000-000000004722'),0,'arquivado: nenhum uso');
@@ -156,6 +178,20 @@ select is((select external_id from public.entry_link_hits where link_id = '00000
 select is(pg_temp.notes(pg_temp.conv_of_sender('9472')),1,'referral: nota escrita');
 select is(pg_temp.runs(pg_temp.conv_of_sender('9472')),1,'referral: uma execução');
 select is(pg_temp.runs(pg_temp.conv_of_sender('9472'),'00000000-0000-0000-0000-000000004733'),1,'referral: execução da automação do link');
+select ok((select created_at from public.messages where conversation_id = pg_temp.conv_of_sender('9472') and sender_type = 'system')
+  < (select created_at from public.messages where external_id = 'mid-ref'),'nota ordenada antes da mensagem');
+-- RF1 pelo webhook: reentrega da mesma mensagem com referral
+select is(pg_temp.ig('mid-ref','9472','quero','{"referral":{"ref":"igcode"}}'),:'mref'::jsonb,'reentrega devolve o mesmo evento');
+select is((select count(*)::int from public.messages where external_id = 'mid-ref' and direction = 'inbound'),1,'reentrega: uma mensagem');
+select is(pg_temp.hits('00000000-0000-0000-0000-000000004723'),1,'reentrega: um uso');
+select is(pg_temp.notes(pg_temp.conv_of_sender('9472')),1,'reentrega: uma nota');
+select is(pg_temp.runs(pg_temp.conv_of_sender('9472')),1,'reentrega: uma execução');
+
+-- eco (remetente = a própria conta): nenhum uso nem nota
+select pg_temp.ig('mid-echo','78947','eco','{"referral":{"ref":"igcode"}}');
+select is((select count(*)::int from public.entry_link_hits where external_id = 'mid-echo'),0,'eco: nenhum uso');
+select is((select count(*)::int from public.messages m join public.contacts ct on ct.id = (select contact_id from public.conversations
+  where id = m.conversation_id) where ct.instagram_id = '78947' and m.sender_type = 'system'),0,'eco: nenhuma nota');
 
 -- referral válido sem automação de link: a mensagem não inicia gatilho de mensagem
 select pg_temp.ig('mid-semauto','9474','oi','{"referral":{"ref":"semauto"}}');

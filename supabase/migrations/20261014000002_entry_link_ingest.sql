@@ -7,6 +7,8 @@
 -- * ingest_instagram_event: novo kind 'referral'; mensagem com context.referral abre o link antes da ingestão.
 -- * automation_inbound: mensagem com referral válido (link ativo do canal) nunca inicia gatilho de mensagem.
 -- * public.simulate_entry_link: abertura simulada no Simulador (agent+).
+-- * private.inbound_find_contact / private.inbound_conversation: resolução de contato + conversa extraída de
+--   private.ingest_inbound_core (redefinido aqui sobre elas, mesmo comportamento) e reutilizada pela entrada por link.
 
 alter table public.instagram_events drop constraint instagram_events_kind_check;
 alter table public.instagram_events add constraint instagram_events_kind_check
@@ -28,23 +30,43 @@ language sql stable security definer set search_path = '' as $$
     and (private.entry_link_resolve(p_channel, p_context #>> '{referral,ref}')).id is not null, false)
 $$;
 
--- ---------------------------------------------------------------- contato
--- Mesma busca/criação de private.ingest_inbound_core (o chamador já serializou o remetente).
-create function private.entry_link_contact(p_org uuid, p_type public.channel_type, p_sender text, p_name text)
-returns uuid
-language plpgsql security definer set search_path = '' as $$
-declare v_contact uuid; v_name text := nullif(btrim(coalesce(p_name, '')), '');
+
+-- ---------------------------------------------------------------- contato + conversa (núcleo compartilhado)
+-- Extraído de private.ingest_inbound_core (000009) sem mudança de comportamento; usado pela ingestão de mensagens
+-- e pela entrada por link. O chamador já serializou o remetente (trava 'ingest:sender:').
+-- Busca do contato pelo remetente: Instagram → instagram_id; WhatsApp → whatsapp_id e, sem ele, telefone;
+-- demais canais (Simulador) → telefone.
+create function private.inbound_find_contact(p_org uuid, p_type public.channel_type, p_sender text) returns uuid
+language plpgsql stable security definer set search_path = '' as $$
+declare v_contact uuid;
 begin
   if p_type = 'instagram' then
     select id into v_contact from public.contacts where organization_id = p_org and instagram_id = p_sender;
-  else
-    if p_type = 'whatsapp' then
-      select id into v_contact from public.contacts where organization_id = p_org and whatsapp_id = p_sender;
-    end if;
-    if v_contact is null then
-      select id into v_contact from public.contacts where organization_id = p_org and phone = p_sender
-        order by created_at limit 1;
-    end if;
+    return v_contact;
+  end if;
+  if p_type = 'whatsapp' then
+    select id into v_contact from public.contacts where organization_id = p_org and whatsapp_id = p_sender;
+  end if;
+  if v_contact is null then
+    select id into v_contact from public.contacts where organization_id = p_org and phone = p_sender
+      order by created_at limit 1;
+  end if;
+  return v_contact;
+end $$;
+
+-- Contato (p_contact já resolvido pelo chamador; nulo = busca pelo remetente e cria se não existir) e a conversa
+-- mais recente do contato no canal (travada; criada com last_message_at = p_at, ou reaberta se fechada).
+create function private.inbound_conversation(p_org uuid, p_channel uuid, p_type public.channel_type, p_sender text,
+  p_name text, p_at timestamptz, p_contact uuid) returns public.conversations
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_contact uuid := p_contact;
+  v_name text := nullif(btrim(coalesce(p_name, '')), '');
+  v_handler public.handler_type;
+  conv public.conversations;
+begin
+  if v_contact is null then
+    v_contact := private.inbound_find_contact(p_org, p_type, p_sender);
   end if;
   if v_contact is null then
     insert into public.contacts (organization_id, name, phone, source, whatsapp_id, instagram_id)
@@ -55,22 +77,128 @@ begin
         case when p_type = 'instagram' then p_sender end)
       returning id into v_contact;
   end if;
-  return v_contact;
+
+  select case when exists (select 1 from public.ai_agents
+      where organization_id = p_org and is_active and auto_reply) then 'ai' else 'human' end::public.handler_type
+    into v_handler;
+  select * into conv from public.conversations
+    where organization_id = p_org and contact_id = v_contact and channel_id = p_channel
+    order by created_at desc, id desc limit 1
+    for update;
+  if conv.id is null then
+    insert into public.conversations (organization_id, contact_id, channel_id, status, handled_by, last_message_at)
+      values (p_org, v_contact, p_channel, 'open', v_handler, p_at)
+      returning * into conv;
+  elsif conv.status = 'closed' then
+    update public.conversations set status = 'open', assigned_to = null, closed_at = null, handled_by = v_handler
+      where id = conv.id
+      returning * into conv;
+  end if;
+  return conv;
+end $$;
+
+-- ---------------------------------------------------------------- núcleo do ingest (000009 sobre o helper)
+-- Mesma ordem de 000009: travas → duplicata → busca do contato → portão do clique assinado (antes de criar
+-- contato/conversa) → contato + conversa (helper) → mensagem → interação.
+create or replace function private.ingest_inbound_core(
+  p_org uuid,
+  p_channel uuid,
+  p_type public.channel_type,
+  p_external_id text,
+  p_sender_external_id text,
+  p_sender_name text,
+  p_text text,
+  p_at timestamptz,
+  p_context jsonb,
+  p_contact uuid default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_msg uuid;
+  v_contact uuid;
+  v_conv uuid;
+  conv public.conversations;
+  v_name text := nullif(btrim(coalesce(p_sender_name, '')), '');
+  v_context jsonb := coalesce(p_context, '{}'::jsonb);
+  v_click text;
+begin
+  -- serializa duplicatas e primeiras mensagens simultaneas do mesmo remetente
+  perform pg_advisory_xact_lock(hashtextextended('ingest:msg:' || p_channel::text || ':' || p_external_id, 0));
+  perform pg_advisory_xact_lock(hashtextextended('ingest:sender:' || p_org::text || ':' || p_type::text || ':' || p_sender_external_id, 0));
+
+  -- duplicada: sem nenhum efeito
+  select id into v_msg from public.messages
+  where channel_id = p_channel and external_id = p_external_id;
+  if v_msg is not null then
+    return v_msg;
+  end if;
+
+  -- 4. contato (busca)
+  if p_contact is not null then
+    select id into v_contact from public.contacts where id = p_contact and organization_id = p_org;
+    if v_contact is null then return null; end if;
+  else
+    v_contact := private.inbound_find_contact(p_org, p_type, p_sender_external_id);
+  end if;
+  -- Clique assinado: adulterado / de outra organização ou contato é descartado (nunca cria contato nem conversa).
+  -- Autêntico mas vencido entra como texto comum, sem payload e marcado (não retoma a espera atual).
+  -- A serialização do remetente foi feita acima, antes das travas de conversa → execução.
+  if v_context ? 'payload' then
+    if v_contact is not null then
+      select id into v_conv from public.conversations
+        where organization_id = p_org and contact_id = v_contact and channel_id = p_channel
+        order by created_at desc, id desc limit 1;
+    end if;
+    v_click := private.automation_click_kind(p_org, v_contact, v_conv, v_context ->> 'payload');
+    if v_click = 'forged' then return null; end if;
+    if v_click = 'stale' then v_context := (v_context - 'payload') || '{"staleClick":true}'::jsonb; end if;
+  end if;
+
+  -- 4–5. contato (criação) e conversa (a mais recente do contato no canal)
+  conv := private.inbound_conversation(p_org, p_channel, p_type, p_sender_external_id, v_name, p_at, v_contact);
+  v_contact := conv.contact_id;
+  v_conv := conv.id;
+
+  -- 6. mensagem (created_at = p_at; o gatilho move last_message_at para frente). O context vai
+  -- na inserção para que os gatilhos AFTER INSERT (automações) o enxerguem.
+  insert into public.messages (organization_id, conversation_id, channel_id, direction,
+    sender_type, content, status, external_id, created_at, context)
+  values (p_org, v_conv, p_channel, 'inbound', 'contact', p_text, 'delivered', p_external_id, p_at, v_context)
+  on conflict (channel_id, external_id) do nothing
+  returning id into v_msg;
+  if v_msg is null then
+    select id into v_msg from public.messages
+    where channel_id = p_channel and external_id = p_external_id;
+    return v_msg;
+  end if;
+
+  -- 7. interacao do contato (apenas para frente)
+  update public.contacts
+  set last_interaction_at = greatest(coalesce(last_interaction_at, p_at), p_at),
+      name = coalesce(name, v_name),
+      whatsapp_id = case when p_type = 'whatsapp' then coalesce(whatsapp_id, p_sender_external_id) else whatsapp_id end
+  where id = v_contact;
+
+  return v_msg;
 end $$;
 
 -- ---------------------------------------------------------------- abertura
+-- p_at: instante do evento (nunca no futuro); a conversa nova usa-o em last_message_at e a nota fica 1 ms antes
+-- dele, para ser ordenada antes da mensagem que veio junto (gravada em p_at).
 -- Retorna {ignored:true} (link desconhecido/arquivado/de outro canal) ou
 -- {ignored:false, duplicate, linkId, hitId, contactId, conversationId, runId}.
 create function private.entry_link_open(p_channel uuid, p_sender text, p_code text, p_external_id text,
-  p_contact uuid default null) returns jsonb
+  p_contact uuid default null, p_at timestamptz default now()) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
   l public.entry_links;
   v_type public.channel_type;
   v_sender text := btrim(coalesce(p_sender, ''));
   v_external text := coalesce(p_external_id, '');
-  v_contact uuid;
-  v_handler public.handler_type;
+  v_at timestamptz := least(coalesce(p_at, now()), now());
   conv public.conversations;
   h public.entry_link_hits;
   v_hit uuid;
@@ -91,44 +219,24 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('ingest:sender:' || l.organization_id::text || ':' || v_type::text
     || ':' || v_sender, 0));
 
-  -- RF1: o mesmo uso não tem nenhum efeito novo
+  -- RF1: uso já registrado → devolve o registro existente, sem novo uso, contato, conversa, nota, tag ou execução
   select * into h from public.entry_link_hits where link_id = l.id and external_id = v_external;
   if found then
     return jsonb_build_object('ignored', false, 'duplicate', true, 'linkId', l.id, 'hitId', h.id,
       'contactId', h.contact_id, 'conversationId', h.conversation_id, 'runId', null);
   end if;
 
-  -- contato
-  if p_contact is not null then
-    select id into v_contact from public.contacts where id = p_contact and organization_id = l.organization_id;
-    if v_contact is null then return jsonb_build_object('ignored', true); end if;
-  else
-    v_contact := private.entry_link_contact(l.organization_id, v_type, v_sender, null);
+  if p_contact is not null and not exists (select 1 from public.contacts
+      where id = p_contact and organization_id = l.organization_id) then
+    return jsonb_build_object('ignored', true);
   end if;
+  conv := private.inbound_conversation(l.organization_id, p_channel, v_type, v_sender, null, v_at, p_contact);
+  update public.contacts set last_interaction_at = greatest(coalesce(last_interaction_at, v_at), v_at)
+    where id = conv.contact_id;
 
-  -- conversa (a mais recente do contato no canal), como em ingest_inbound_core
-  select case when exists (select 1 from public.ai_agents
-      where organization_id = l.organization_id and is_active and auto_reply) then 'ai' else 'human' end::public.handler_type
-    into v_handler;
-  select * into conv from public.conversations
-    where organization_id = l.organization_id and contact_id = v_contact and channel_id = p_channel
-    order by created_at desc, id desc limit 1
-    for update;
-  if conv.id is null then
-    insert into public.conversations (organization_id, contact_id, channel_id, status, handled_by, last_message_at)
-      values (l.organization_id, v_contact, p_channel, 'open', v_handler, now())
-      returning * into conv;
-  elsif conv.status = 'closed' then
-    update public.conversations set status = 'open', assigned_to = null, closed_at = null, handled_by = v_handler
-      where id = conv.id
-      returning * into conv;
-  end if;
-  update public.contacts set last_interaction_at = greatest(coalesce(last_interaction_at, now()), now())
-    where id = v_contact;
-
-  -- uso
+  -- uso (on conflict: corrida com outro remetente no mesmo external_id — trata como o RF1 acima)
   insert into public.entry_link_hits (organization_id, link_id, contact_id, conversation_id, external_id)
-    values (l.organization_id, l.id, v_contact, conv.id, v_external)
+    values (l.organization_id, l.id, conv.contact_id, conv.id, v_external)
     on conflict (link_id, external_id) do nothing
     returning id into v_hit;
   if v_hit is null then
@@ -138,8 +246,10 @@ begin
   end if;
 
   -- nota de sistema (uma por uso)
-  insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, status)
-    values (l.organization_id, conv.id, p_channel, 'outbound', 'system', 'Entrou pelo link ' || l.name, 'delivered');
+  insert into public.messages (organization_id, conversation_id, channel_id, direction, sender_type, content, status,
+      created_at)
+    values (l.organization_id, conv.id, p_channel, 'outbound', 'system', 'Entrou pelo link ' || l.name, 'delivered',
+      v_at - interval '1 millisecond');
 
   -- gatilho entry_link: só com a conversa livre (sem execução ativa e sem humano, regras da 7A); ocupada = só o uso
   if not private.automation_conversation_busy(l.organization_id, conv.id, null)
@@ -153,10 +263,10 @@ begin
       limit 1;
     if found then
       insert into public.events (organization_id, type, conversation_id, contact_id, actor_type, actor_id, payload)
-        values (l.organization_id, 'automation_trigger', conv.id, v_contact, 'system', null,
+        values (l.organization_id, 'automation_trigger', conv.id, conv.contact_id, 'system', null,
           jsonb_build_object('automation_id', auto.id, 'entry_link_id', l.id, 'hit_id', v_hit))
         returning id into v_event;
-      v_run := private.automation_start_run(auto, v_event, conv.id, v_contact);
+      v_run := private.automation_start_run(auto, v_event, conv.id, conv.contact_id);
       if v_run is not null then
         perform private.automation_link_run(conv.id, v_run);
       end if;
@@ -166,17 +276,18 @@ begin
   -- tag do link (depois da execução: tag_added encontra a conversa ocupada)
   if l.tag_id is not null then
     insert into public.contact_tags (organization_id, contact_id, tag_id)
-      values (l.organization_id, v_contact, l.tag_id)
+      values (l.organization_id, conv.contact_id, l.tag_id)
       on conflict do nothing;
   end if;
 
   return jsonb_build_object('ignored', false, 'duplicate', false, 'linkId', l.id, 'hitId', v_hit,
-    'contactId', v_contact, 'conversationId', conv.id, 'runId', v_run);
+    'contactId', conv.contact_id, 'conversationId', conv.id, 'runId', v_run);
 end $$;
 
 revoke all on function private.entry_link_resolve(uuid, text), private.entry_link_referral_valid(uuid, jsonb),
-  private.entry_link_contact(uuid, public.channel_type, text, text),
-  private.entry_link_open(uuid, text, text, text, uuid) from public, anon, authenticated;
+  private.inbound_find_contact(uuid, public.channel_type, text),
+  private.inbound_conversation(uuid, uuid, public.channel_type, text, text, timestamptz, uuid),
+  private.entry_link_open(uuid, text, text, text, uuid, timestamptz) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------- Simulador
 -- Erros: 42501 = sem permissão (inclui link inexistente ou de outra organização); 22023 'not_simulator' |
@@ -188,7 +299,7 @@ declare
   ch public.channels;
   v_phone text := btrim(coalesce(p_contact_phone, ''));
   v_name text := nullif(btrim(coalesce(p_contact_name, '')), '');
-  v_contact uuid;
+  conv public.conversations;
   r jsonb;
 begin
   select * into l from public.entry_links where id = p_link;
@@ -204,12 +315,14 @@ begin
   if v_phone = '' or char_length(v_phone) > 100 then raise exception 'invalid_phone' using errcode = '22023'; end if;
   if char_length(v_name) > 120 then raise exception 'invalid_name' using errcode = '22023'; end if;
 
+  -- contato com o nome informado (o Simulador não tem busca de perfil); a abertura reaproveita a conversa
   perform pg_advisory_xact_lock(hashtextextended('ingest:sender:' || l.organization_id::text || ':simulator:'
     || v_phone, 0));
-  v_contact := private.entry_link_contact(l.organization_id, 'simulator', v_phone, v_name);
-  update public.contacts set name = v_name where id = v_contact and name is null and v_name is not null;
+  conv := private.inbound_conversation(l.organization_id, l.channel_id, 'simulator', v_phone, v_name, now(), null);
+  update public.contacts set name = v_name where id = conv.contact_id and name is null and v_name is not null;
 
-  r := private.entry_link_open(l.channel_id, v_phone, l.code, 'sim:' || gen_random_uuid()::text, v_contact);
+  r := private.entry_link_open(l.channel_id, v_phone, l.code, 'sim:' || gen_random_uuid()::text, conv.contact_id,
+    now());
   if coalesce((r ->> 'ignored')::boolean, true) then
     raise exception 'entry_link_archived' using errcode = '22023';
   end if;
@@ -252,9 +365,11 @@ begin
       -- Authentic but stale: ordinary text without the payload (never resumes the current wait).
       if v_click='stale' then v_context:=(v_context-'payload')||'{"staleClick":true}'::jsonb; end if;
       -- 7B: the entry link opens first (unknown/archived codes are ignored; the message always enters).
+      -- Same echo guard as the referral kind: the account itself never opens a link.
       if v_kind='message' and jsonb_typeof(v_context->'referral')='object'
-         and coalesce(p_event->>'senderExternalId','')<>'' then
-        perform private.entry_link_open(ch.id,p_event->>'senderExternalId',v_context#>>'{referral,ref}',v_external);
+         and coalesce(p_event->>'senderExternalId','')<>'' and p_event->>'senderExternalId'<>ch.external_account_id then
+        perform private.entry_link_open(ch.id,p_event->>'senderExternalId',v_context#>>'{referral,ref}',v_external,
+          null,v_at);
       end if;
       v_message:=public.ingest_inbound_message(ch.id,v_external,p_event->>'senderExternalId',p_event->>'senderName',
         case when v_kind='button' then p_event->>'title' else p_event->>'text' end,v_at,v_context);
@@ -269,7 +384,7 @@ begin
     if coalesce(p_event->>'senderExternalId','')='' or p_event->>'senderExternalId'=ch.external_account_id then
       v_state:='ignored';
     else
-      v_open:=private.entry_link_open(ch.id,p_event->>'senderExternalId',p_event->>'ref',v_external);
+      v_open:=private.entry_link_open(ch.id,p_event->>'senderExternalId',p_event->>'ref',v_external,null,v_at);
       if coalesce((v_open->>'ignored')::boolean,true) then v_state:='ignored'; end if;
     end if;
   elsif v_kind='comment' then
