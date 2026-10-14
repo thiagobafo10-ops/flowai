@@ -70,7 +70,9 @@ test("Automação: Simulador mostra opções, bloqueia IA e transfere com etique
   expect(Number(psql(`select count(*) from public.messages where organization_id='${org}' and sender_type='ai'`))).toBe(0);
   await bubble.getByRole("button", { name: "Sim", exact: true }).click();
   await drainAutomationRuns(email);
-  await expect(page.getByText("Automação transferiu para atendimento humano")).toBeVisible();
+  const handoffText = "Automação transferiu para atendimento humano";
+  await expect(page.getByTestId("handoff-banner")).toContainText(handoffText);
+  await expect(page.getByTestId("system-message").filter({ hasText: handoffText })).toBeVisible();
   const panel = page.getByRole("region", { name: "Contato da conversa" });
   await expect(panel.getByRole("list", { name: "Tags do contato" }).getByText("Qualificado", { exact: true })).toBeVisible();
   await expect(panel.getByText("Etapa: Interessado", { exact: true })).toBeVisible();
