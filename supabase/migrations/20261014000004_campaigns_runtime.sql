@@ -109,6 +109,7 @@ declare
   v_spacing interval;
   v_base timestamptz;
   v_audience jsonb;
+  v_channels jsonb;
   v_campaign_ids uuid[];
 begin
   select campaign_rate_per_minute into v_rate from private.outreach_settings where singleton;
@@ -125,9 +126,23 @@ begin
   ) order by ch.id for update;
   for v_campaign in select * from public.campaigns where id = any(v_campaign_ids) order by scheduled_at, id loop
     update public.campaigns set status = 'sending', started_at = now() where id = v_campaign.id;
+    -- Selected channels are JSON references: a disconnect can delete one after scheduling.
+    -- Drop only missing channels in a runtime copy; existing foreign channels remain invalid.
+    if not private.is_uuid_array(v_campaign.audience -> 'channelIds', 1) or exists (
+      select 1 from public.channels ch where ch.organization_id <> v_campaign.organization_id
+        and v_campaign.audience -> 'channelIds' @> jsonb_build_array(ch.id)
+    ) then raise exception 'invalid_audience' using errcode = '22023'; end if;
+    select coalesce(jsonb_agg(ch.id order by ch.id), '[]') into v_channels from public.channels ch
+      where ch.organization_id = v_campaign.organization_id
+        and v_campaign.audience -> 'channelIds' @> jsonb_build_array(ch.id);
     -- Materialize once: every recipient and window decision belongs to the same snapshot.
-    select coalesce(jsonb_agg(to_jsonb(a)), '[]') into v_audience
-      from private.campaign_audience(v_campaign.organization_id, v_campaign.audience) a;
+    if jsonb_array_length(v_channels) = 0 then
+      v_audience := '[]';
+    else
+      select coalesce(jsonb_agg(to_jsonb(a)), '[]') into v_audience
+        from private.campaign_audience(v_campaign.organization_id,
+          jsonb_set(v_campaign.audience, '{channelIds}', v_channels)) a;
+    end if;
     -- The channel union is already locked, serializing pacing across concurrent campaigns.
     -- Pending/sending/sent CAMPAIGN deliveries reserve slots; future sequence steps do not.
     -- Sent slots preserve spacing between consecutive campaigns; cancellation frees unused slots.

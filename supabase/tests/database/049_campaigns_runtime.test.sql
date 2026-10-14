@@ -176,5 +176,40 @@ select ok(not has_function_privilege('anon','public.preview_campaign_audience(uu
 select ok(not has_function_privilege('anon','public.schedule_campaign(uuid,timestamptz)','execute'),'anon no schedule');
 select ok(not has_function_privilege('authenticated','private.start_due_campaigns()','execute'),'member no worker function');
 select ok(not has_function_privilege('authenticated','private.campaign_maybe_complete(uuid)','execute'),'member no completion helper');
+-- Deleting a channel after scheduling must not poison the entire cross-organization batch.
+insert into public.channels(id,organization_id,type,name,status) values
+ (pg_temp.n('deleted'),:'oa','instagram','Sem histórico49','active'),
+ (pg_temp.n('healthyb'),:'ob','simulator','Healthy49B','active');
+insert into public.conversations(organization_id,contact_id,channel_id)
+ values(:'ob',pg_temp.n('kb'),pg_temp.n('healthyb'));
+insert into public.campaigns(id,organization_id,name,audience,message) values
+ (pg_temp.n('camp7'),:'oa','All stale',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('deleted')))),'{"text":"Oi"}'),
+ (pg_temp.n('camp8'),:'oa','Mixed stale',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('deleted'),pg_temp.n('sim')))),'{"text":"Oi"}'),
+ (pg_temp.n('camp9'),:'ob','Healthy other org',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('healthyb')))),'{"text":"Oi"}'),
+ (pg_temp.n('camp10'),:'oa','Foreign draft',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('igb')))),'{"text":"Oi"}');
+select tests.authenticate_as(:'ua');
+select public.schedule_campaign(pg_temp.n('camp7'),null),public.schedule_campaign(pg_temp.n('camp8'),null);
+select throws_ok('select public.schedule_campaign(pg_temp.n(''camp10''),null)','22023',null,'schedule still rejects foreign channel');
+select tests.authenticate_as(:'ub');
+select public.schedule_campaign(pg_temp.n('camp9'),null);
+select tests.clear_authentication();
+delete from public.channels where id=pg_temp.n('deleted');
+select tests.authenticate_as(:'ua');
+select throws_ok(format('select public.preview_campaign_audience(%L,%L)',:'oa',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('deleted'),pg_temp.n('sim'))))),
+ '22023',null,'preview remains strict about deleted channel');
+select throws_ok(format('select public.preview_campaign_audience(%L,%L)',:'oa',pg_temp.a(jsonb_build_object('channelIds',jsonb_build_array(pg_temp.n('igb'))))),
+ '22023',null,'preview remains strict about foreign channel');
+select tests.clear_authentication();
+select lives_ok('select private.start_due_campaigns()','stale selection does not abort healthy due campaigns');
+select is((select status from public.campaigns where id=pg_temp.n('camp7')),'completed','all deleted channels complete empty snapshot');
+select is((select count(*)::int from public.outreach_deliveries where campaign_id=pg_temp.n('camp7')),0,'all deleted channels have no recipients');
+select is((select status from public.campaigns where id=pg_temp.n('camp8')),'sending','mixed stale selection keeps valid local channel');
+select is((select count(*)::int from public.outreach_deliveries where campaign_id=pg_temp.n('camp8') and channel_id=pg_temp.n('sim') and status='pending'),2,'mixed stale snapshot keeps local recipients');
+select is((select status from public.campaigns where id=pg_temp.n('camp9')),'sending','healthy other organization still starts');
+select is((select count(*)::int from public.outreach_deliveries where campaign_id=pg_temp.n('camp9') and organization_id=:'ob' and contact_id=pg_temp.n('kb')),1,'healthy other organization snapshot stays isolated');
+-- An existing foreign channel is invalid rather than a stale/missing reference.
+update public.campaigns set status='scheduled',scheduled_at=now() where id=pg_temp.n('camp10');
+select throws_ok('select private.start_due_campaigns()','22023',null,'runtime still rejects existing foreign channel');
+select is((select count(*)::int from public.outreach_deliveries where campaign_id=pg_temp.n('camp10')),0,'invalid foreign selection creates no deliveries');
 select * from finish();
 rollback;
