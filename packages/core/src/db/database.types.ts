@@ -1215,6 +1215,12 @@ isOneToOne: false
               "automation_id": string,"runs": number
             }[]
                            },
+"campaign_report":
+{ Args: { "p_id": string,"p_limit"?: number,"p_offset"?: number }; Returns: Json
+                           },
+"cancel_campaign":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
 "check_auth_rate_limit":
 { Args: { "p_kind": string,"p_limit": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },
@@ -1380,6 +1386,9 @@ isOneToOne: false
 "prepare_instagram_profile":
 { Args: { "p_event_id": string }; Returns: Json
                            },
+"preview_campaign_audience":
+{ Args: { "p_audience": Json,"p_org": string }; Returns: Json
+                           },
 "read_ai_worker_config":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
@@ -1451,6 +1460,9 @@ isOneToOne: false
                            },
 "save_sequence":
 { Args: { "p_id": string,"p_name": string,"p_org": string,"p_settings": Json,"p_steps": Json }; Returns: string
+                           },
+"schedule_campaign":
+{ Args: { "p_at": string,"p_id": string }; Returns: undefined
                            },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
