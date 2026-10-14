@@ -7,11 +7,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Background, Controls, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge,
 } from "@xyflow/react";
-import { ArrowLeftIcon, Loader2Icon, PauseIcon, PlayIcon, SaveIcon } from "lucide-react";
+import { ArrowLeftIcon, Loader2Icon, PauseIcon, PlayIcon, SaveIcon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
-  validateGraph, type AutomationGraph, type GraphIssue, type GraphRefs, type NodeType, type TriggerType,
+  validateGraph, type AutomationGraph, type GraphIssue, type GraphRefs, type NodeType, type TriggerType, type SanitizedAiGraphResult,
 } from "@flowai/core";
+import { AutomationAiDialog } from "./ai-dialog";
 import { activateAutomation, pauseAutomation, saveAutomation } from "@/lib/automation/actions";
 import {
   AUTOMATION_ACTIVATED, AUTOMATION_ACTIVE_WITH_ISSUES, AUTOMATION_GONE, AUTOMATION_LOAD_FAILED, AUTOMATION_PAUSED, AUTOMATION_SAVED,
@@ -120,8 +121,23 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
     snapshot(automation.name, automation.triggerType, automation.triggerConfig, fromFlow(initial.nodes, initial.edges)),
   );
   const [issuesOpen, setIssuesOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
   // O fluxo continua montado na aba "Execuções" (oculto) para não perder alterações não salvas.
   const [tab, setTab] = useState<"flow" | "runs">("flow");
+
+  function handleApplyAi(res: SanitizedAiGraphResult) {
+    const flow = toFlow(res.graph);
+    setNodes(flow.nodes);
+    setEdges(flow.edges);
+    setTriggerType(res.triggerType);
+    setTriggerConfig(res.triggerConfig);
+    if (res.name && res.name.trim() && res.name !== name) {
+      setName(res.name);
+    }
+    setTimeout(() => {
+      void fitView({ padding: 0.3, duration: 400 });
+    }, 50);
+  }
 
   const graph = useMemo(() => fromFlow(nodes, edges), [nodes, edges]);
   const current = snapshot(name, triggerType, triggerConfig, graph);
@@ -308,6 +324,16 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
             {saveBlocked && <span className="text-xs text-destructive">{AUTOMATION_ACTIVE_WITH_ISSUES}</span>}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setAiOpen(true)}
+              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+            >
+              <SparklesIcon className="size-4" />
+              Ajustar com IA
+            </Button>
             <Button type="button" variant="outline" disabled={pending || !dirty || saveBlocked} onClick={save}>
               {pending ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
               {active ? "Salvar" : "Salvar rascunho"}
@@ -384,6 +410,16 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
           />
         )}
       </div>
+      {canWrite && (
+        <AutomationAiDialog
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          mode="refine"
+          currentGraph={graph}
+          onApply={handleApplyAi}
+          refs={refs}
+        />
+      )}
     </div>
   );
 }

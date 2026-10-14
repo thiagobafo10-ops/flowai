@@ -139,8 +139,21 @@ export function AutomationAiDialog({
     setRefinePrompt("");
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && (isGenerating || isApplying)) {
+      return;
+    }
+    onOpenChange(nextOpen);
+    if (!nextOpen) {
+      setTimeout(() => {
+        setResult(null);
+        setRefinePrompt("");
+      }, 200);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className={cn("max-w-2xl transition-all", result ? "max-w-3xl" : "max-w-xl")}>
         <DialogHeader>
           <div className="flex items-center gap-2">
@@ -171,6 +184,14 @@ export function AutomationAiDialog({
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    if (!isGenerating && prompt.trim().length >= 3) {
+                      void handleGenerate(prompt);
+                    }
+                  }
+                }}
                 placeholder="Ex: Quando o cliente mandar primeira mensagem, responder dando as boas-vindas, aguardar 1 hora e se não responder adicionar a tag Interessado..."
                 disabled={isGenerating}
                 className="w-full resize-none rounded-lg border border-input bg-transparent p-3 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"

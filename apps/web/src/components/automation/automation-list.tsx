@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CopyIcon, Loader2Icon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, Loader2Icon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { automationTemplates } from "@flowai/core";
+import { AutomationAiDialog } from "./ai-dialog";
 import {
   activateAutomation, createAutomation, deleteAutomation, duplicateAutomation, pauseAutomation,
 } from "@/lib/automation/actions";
@@ -34,6 +35,7 @@ export function AutomationList({ orgId }: { orgId: string }) {
   const query = useQuery({ queryKey: ["automations", orgId], queryFn: fetchAutomations });
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<AutomationRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -114,7 +116,29 @@ export function AutomationList({ orgId }: { orgId: string }) {
   }
 
   const templateCards = (
-    <div className="grid w-full gap-3 sm:grid-cols-3">
+    <div className="grid w-full gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <button
+        type="button"
+        disabled={pending || !canWrite}
+        onClick={() => {
+          setCreating(false);
+          setTimeout(() => setAiOpen(true), 60);
+        }}
+        className="group flex flex-col justify-between rounded-xl border border-primary/30 bg-primary/5 p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/10 disabled:opacity-60"
+      >
+        <div>
+          <div className="flex items-center gap-1.5 font-medium text-primary">
+            <SparklesIcon className="size-4" />
+            <span>Criar com IA</span>
+          </div>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Descreva seu fluxo em português e a IA estruturará todos os blocos.
+          </span>
+        </div>
+        <span className="mt-3 text-xs font-semibold text-primary underline-offset-2 group-hover:underline">
+          Experimentar →
+        </span>
+      </button>
       {automationTemplates.map((t) => (
         <button
           key={t.key}
@@ -131,10 +155,21 @@ export function AutomationList({ orgId }: { orgId: string }) {
   );
 
   const newButton = canWrite ? (
-    <Button type="button" onClick={() => { setCreateError(null); setCreating(true); }}>
-      <PlusIcon />
-      Nova automação
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setAiOpen(true)}
+        className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+      >
+        <SparklesIcon className="size-4" />
+        Criar com IA
+      </Button>
+      <Button type="button" onClick={() => { setCreateError(null); setCreating(true); }}>
+        <PlusIcon />
+        Nova automação
+      </Button>
+    </div>
   ) : null;
 
   return (
@@ -235,6 +270,7 @@ export function AutomationList({ orgId }: { orgId: string }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <AutomationAiDialog open={aiOpen} onOpenChange={setAiOpen} />
         </>
       )}
     </div>
