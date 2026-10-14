@@ -204,3 +204,15 @@ describe("nextNode", () => {
     expect(nextNode(g, "b", "default")).toBeNull();
   });
 });
+
+describe("executeNode: sequências (7B)", () => {
+  const SEQ = "44444444-4444-4444-8444-444444444444";
+  it.each(["sequence_enroll", "sequence_remove"] as const)("%s emite o efeito e segue por default", (type) => {
+    const g = graphOf([node("s", type, { sequenceId: SEQ })]);
+    expect(executeNode(g, "s", ctx())).toEqual({ effects: [{ type, sequenceId: SEQ }], route: { handle: "default" } });
+  });
+  it("recusa config inválida", () => {
+    const g = graphOf([node("s", "sequence_enroll", { sequenceId: "x" })]);
+    expect(() => executeNode(g, "s", ctx())).toThrow("invalid_node_config");
+  });
+});

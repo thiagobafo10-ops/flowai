@@ -134,6 +134,9 @@ function EditorBody({ orgId, detail }: { orgId: string; detail: AutomationDetail
       stageIds: refs.stages.map((s) => s.id),
       userIds: refs.members.map((m) => m.id),
       channelIds: refs.channels.filter((c) => c.type === "instagram").map((c) => c.id),
+      // Preenchidos de verdade na Tarefa 9 (editor de crescimento).
+      sequenceIds: [],
+      entryLinkIds: [],
     }),
     [refs],
   );

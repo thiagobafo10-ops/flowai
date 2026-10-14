@@ -8,6 +8,8 @@ const refs = {
   stageIds: [TEMPLATE_PLACEHOLDER.stageId],
   userIds: [],
   channelIds: [TEMPLATE_PLACEHOLDER.channelId],
+  sequenceIds: [],
+  entryLinkIds: [],
 };
 
 describe("automationTemplates", () => {
@@ -26,7 +28,7 @@ describe("automationTemplates", () => {
 
   it("reports unknown refs when the placeholders are not provided", () => {
     const t = automationTemplates.find((x) => x.key === "qualify_buttons")!;
-    const codes = validateGraph(t.graph, { type: t.triggerType, config: t.triggerConfig }, { tagIds: [], stageIds: [], userIds: [], channelIds: [] }).map((i) => i.code);
+    const codes = validateGraph(t.graph, { type: t.triggerType, config: t.triggerConfig }, { tagIds: [], stageIds: [], userIds: [], channelIds: [], sequenceIds: [], entryLinkIds: [] }).map((i) => i.code);
     expect(codes).toEqual(expect.arrayContaining(["unknown_tag", "unknown_stage"]));
   });
 

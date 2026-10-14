@@ -159,3 +159,41 @@ describe("Instagram buttons: validation", () => {
     await expect(p.sendMessage({ externalId: "9001" }, { text: "á".repeat(501), instagram: { text: "ok" } })).resolves.toEqual({ externalId: "o" });
   });
 });
+
+describe("Instagram referral (7B)", () => {
+  const A = "178414000000001";
+  const standalone = (referral: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ object: "instagram", entry: [{ id: A, time: 1791806400, messaging: [{ sender: { id: "9001" }, recipient: { id: A }, timestamp: 1791806400000, referral, ...extra }] }] });
+  it("parses a standalone referral", () => {
+    expect(parseInstagramEvents(standalone({ ref: "promo1", source: "SHORTLINK", type: "OPEN_THREAD" }))).toEqual([{ kind: "referral", accountId: A, externalId: "referral:1791806400000:9001", senderExternalId: "9001", ref: "promo1", source: "SHORTLINK", occurredAt: "2026-10-12T12:00:00.000Z" }]);
+  });
+  it("uses null source when absent", () => {
+    expect(parseInstagramEvents(standalone({ ref: "promo1" }))[0]).toMatchObject({ kind: "referral", source: null });
+  });
+  it("ignores a referral without ref", () => {
+    expect(parseInstagramEvents(standalone({ ref: "" }))[0]).toMatchObject({ kind: "ignored", reason: "referral_without_ref" });
+    expect(parseInstagramEvents(standalone({}))[0]).toMatchObject({ kind: "ignored", reason: "referral_without_ref" });
+  });
+  it("throws for a referral to the wrong recipient", () => {
+    const p = standalone({ ref: "x" });
+    p.entry[0]!.messaging[0]!.recipient.id = "other";
+    expect(() => parseInstagramEvents(p)).toThrow("Invalid Instagram referral recipient");
+  });
+  it("throws when the account is the sender", () => {
+    const p = standalone({ ref: "x" });
+    p.entry[0]!.messaging[0]!.sender.id = A;
+    expect(() => parseInstagramEvents(p)).toThrow("Invalid Instagram referral recipient");
+  });
+  it("adds context.referral to a message carrying a referral", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m1", text: "Oi", referral: { ref: "promo1", source: "SHORTLINK" } }))[0]).toMatchObject({ kind: "message", text: "Oi", context: { origin: "direct", referral: { ref: "promo1" } } });
+  });
+  it("keeps the origin for a quick reply with referral", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m1", text: "Sim", quick_reply: { payload: "p" }, referral: { ref: "r" } }))[0]).toMatchObject({ context: { origin: "quick_reply", payload: "p", referral: { ref: "r" } } });
+  });
+  it("omits context.referral when the message referral has no ref", () => {
+    const e = parseInstagramEvents(inbound({ mid: "m1", text: "Oi", referral: { ref: "" } }))[0] as { context: Record<string, unknown> };
+    expect(e.context).toEqual({ origin: "direct" });
+  });
+  it("ignores echoes carrying a referral", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m1", text: "Oi", is_echo: true, referral: { ref: "r" } }))[0]).toMatchObject({ kind: "ignored" });
+  });
+});

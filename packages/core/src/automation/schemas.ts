@@ -8,6 +8,7 @@ export const TRIGGER_TYPES = [
   "contact_created",
   "tag_added",
   "stage_changed",
+  "entry_link",
 ] as const;
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
@@ -24,6 +25,8 @@ export const NODE_TYPES = [
   "close_conversation",
   "handoff_ai",
   "handoff_human",
+  "sequence_enroll",
+  "sequence_remove",
   "end",
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -60,6 +63,7 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
   contact_created: z.object({}),
   tag_added: z.object({ tagId: uuid.nullable() }),
   stage_changed: z.object({ stageId: uuid.nullable() }),
+  entry_link: z.object({ linkIds: z.array(uuid).min(1, "Escolha ao menos um link de entrada.") }),
 };
 
 export const optionId = z.string().regex(/^[a-z0-9]{1,12}$/, "Use de 1 a 12 letras minúsculas ou números.");
@@ -137,6 +141,8 @@ export const nodeConfigSchemas: Record<NodeType, z.ZodType> = {
   close_conversation: z.object({}),
   handoff_ai: z.object({}),
   handoff_human: z.object({}),
+  sequence_enroll: z.object({ sequenceId: uuid }),
+  sequence_remove: z.object({ sequenceId: uuid }),
   end: z.object({}),
 };
 

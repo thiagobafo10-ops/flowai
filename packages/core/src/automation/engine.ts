@@ -27,7 +27,9 @@ export type Effect =
   | { type: "webhook"; url: string }
   | { type: "close_conversation" }
   | { type: "handoff_ai" }
-  | { type: "handoff_human" };
+  | { type: "handoff_human" }
+  | { type: "sequence_enroll"; sequenceId: string }
+  | { type: "sequence_remove"; sequenceId: string };
 
 export type NodeOutcome =
   | { effects: Effect[]; route: { handle: string } }
@@ -144,6 +146,11 @@ export function executeNode(graph: AutomationGraph, nodeId: string, ctx: RunCont
     case "handoff_human":
       parseConfig("handoff_human", node.config);
       return next([{ type: "handoff_human" }]);
+    case "sequence_enroll":
+    case "sequence_remove": {
+      const { sequenceId } = parseConfig<{ sequenceId: string }>(node.type, node.config);
+      return next([{ type: node.type, sequenceId }]);
+    }
     case "end":
       return { effects: [], route: { end: true } };
   }

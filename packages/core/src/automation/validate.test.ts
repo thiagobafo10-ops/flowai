@@ -6,9 +6,11 @@ const TAG = "3f2b8c1e-5d4a-4e6b-9c7d-1a2b3c4d5e6f";
 const STAGE = "4a3c9d2f-6e5b-4f7c-8d8e-2b3c4d5e6f70";
 const USER = "5b4d0e3a-7f6c-4a8d-9e9f-3c4d5e6f7081";
 const CHANNEL = "6c5e1f4b-8a7d-4b9e-8fa0-4d5e6f708192";
+const SEQ = "8e7a3b6d-ac9f-4dbf-8bc2-6f708192a3b4";
+const LINK = "9f8b4c7e-bdaf-4ec0-9cd3-708192a3b4c5";
 const OTHER = "7d6f2a5c-9b8e-4cae-9ab1-5e6f708192a3";
 
-const refs: GraphRefs = { tagIds: [TAG], stageIds: [STAGE], userIds: [USER], channelIds: [CHANNEL] };
+const refs: GraphRefs = { tagIds: [TAG], stageIds: [STAGE], userIds: [USER], channelIds: [CHANNEL], sequenceIds: [SEQ], entryLinkIds: [LINK] };
 
 type N = AutomationGraph["nodes"][number];
 const node = (id: string, type: N["type"], config: unknown = {}): N => ({ id, type, config, position: { x: 0, y: 0 } });
@@ -438,5 +440,38 @@ describe("requiredHandles", () => {
     expect(requiredHandles(node("ha", "handoff_ai"))).toEqual([]);
     expect(requiredHandles(node("hh", "handoff_human"))).toEqual([]);
     expect(requiredHandles(node("cc", "close_conversation"))).toEqual(["default"]);
+  });
+});
+
+describe("validateGraph: crescimento (7B)", () => {
+  const entry = (linkIds: string[]) => ({ type: "entry_link" as TriggerType, config: { linkIds } });
+  const seqGraph = (type: "sequence_enroll" | "sequence_remove", sequenceId: string): AutomationGraph => ({
+    nodes: [node("t", "trigger"), node("s", type, { sequenceId }), node("e", "end")],
+    edges: [edge("t", "s"), edge("s", "e")],
+  });
+  it("aceita gatilho entry_link com link conhecido", () => {
+    expect(validateGraph(valid, entry([LINK]), refs)).toEqual([]);
+  });
+  it("recusa link de entrada desconhecido", () => {
+    const issues = validateGraph(valid, entry([OTHER]), refs);
+    expect(issues).toEqual([{ nodeId: "t", code: "unknown_entry_link", message: "Link de entrada não encontrado." }]);
+  });
+  it("recusa entry_link sem links", () => {
+    expect(codes(valid, entry([]))).toContain("invalid_config");
+  });
+  it.each(["sequence_enroll", "sequence_remove"] as const)("valida %s com sequência conhecida", (type) => {
+    expect(validateGraph(seqGraph(type, SEQ), generic, refs)).toEqual([]);
+  });
+  it.each(["sequence_enroll", "sequence_remove"] as const)("recusa %s com sequência desconhecida", (type) => {
+    expect(validateGraph(seqGraph(type, OTHER), generic, refs)).toEqual([
+      { nodeId: "s", code: "unknown_sequence", message: "Sequência não encontrada." },
+    ]);
+  });
+  it("recusa sequenceId inválido", () => {
+    expect(codes(seqGraph("sequence_enroll", "x"))).toContain("invalid_config");
+  });
+  it("requiredHandles dos blocos de sequência é default", () => {
+    expect(requiredHandles(node("s", "sequence_enroll", { sequenceId: SEQ }))).toEqual(["default"]);
+    expect(requiredHandles(node("s", "sequence_remove", { sequenceId: SEQ }))).toEqual(["default"]);
   });
 });

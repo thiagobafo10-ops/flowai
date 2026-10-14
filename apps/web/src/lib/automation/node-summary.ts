@@ -100,6 +100,10 @@ export function nodeSummary(type: NodeType, config: unknown, refs: EditorRefs): 
       return "A IA assume a conversa";
     case "handoff_human":
       return "Um atendente assume a conversa";
+    case "sequence_enroll":
+      return "Inscreve o contato na sequência";
+    case "sequence_remove":
+      return "Remove o contato da sequência";
     case "end":
       return "Fim do fluxo";
     case "trigger":

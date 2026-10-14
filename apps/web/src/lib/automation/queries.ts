@@ -73,6 +73,9 @@ export async function loadGraphRefs(supabase: Supabase, orgId: string): Promise<
       stageIds: stages.map((s) => s.id),
       userIds: (members.data ?? []).map((m) => m.user_id),
       channelIds,
+      // Preenchidos de verdade na Tarefa 9.
+      sequenceIds: [],
+      entryLinkIds: [],
     },
     defaults: {
       channelId: channelIds[0] ?? null,

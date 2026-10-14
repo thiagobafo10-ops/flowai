@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { automationTemplates, validateGraph, type AutomationGraph, type GraphRefs } from "@flowai/core";
 import { friendlyMessage, presentIssues } from "./issue-copy";
 
-const refs: GraphRefs = { tagIds: [], stageIds: [], userIds: [], channelIds: [] };
+const refs: GraphRefs = { tagIds: [], stageIds: [], userIds: [], channelIds: [], sequenceIds: [], entryLinkIds: [] };
 const trigger = { type: "message_received" as const, config: { firstMessageOnly: false } };
 const position = { x: 0, y: 0 };
 const present = (graph: AutomationGraph) => presentIssues(validateGraph(graph, trigger, refs), graph);

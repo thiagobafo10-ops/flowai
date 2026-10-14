@@ -7,7 +7,14 @@ import {
 } from "./schemas.ts";
 import { INSTAGRAM_BUTTON_TEXT_MAX } from "./instagram.ts";
 
-export type GraphRefs = { tagIds: string[]; stageIds: string[]; userIds: string[]; channelIds: string[] };
+export type GraphRefs = {
+  tagIds: string[];
+  stageIds: string[];
+  userIds: string[];
+  channelIds: string[];
+  sequenceIds: string[];
+  entryLinkIds: string[];
+};
 export type GraphIssue = { nodeId: string | null; code: string; message: string };
 
 type GraphNode = AutomationGraph["nodes"][number];
@@ -28,6 +35,8 @@ const NODE_LABELS: Record<NodeType, string> = {
   close_conversation: "Encerrar conversa",
   handoff_ai: "Transferir para IA",
   handoff_human: "Transferir para humano",
+  sequence_enroll: "Inscrever em sequência",
+  sequence_remove: "Remover de sequência",
   end: "Fim",
 };
 
@@ -163,15 +172,24 @@ export function validateGraph(
   }
 
   // Configuração e referências
-  const checkRef = (nodeId: string | null, kind: "tag" | "stage" | "user" | "channel", id: string | null | undefined) => {
+  const checkRef = (nodeId: string | null, kind: "tag" | "stage" | "user" | "channel" | "sequence" | "entry_link", id: string | null | undefined) => {
     if (!id) return;
-    const list = { tag: refs.tagIds, stage: refs.stageIds, user: refs.userIds, channel: refs.channelIds }[kind];
+    const list = {
+      tag: refs.tagIds,
+      stage: refs.stageIds,
+      user: refs.userIds,
+      channel: refs.channelIds,
+      sequence: refs.sequenceIds,
+      entry_link: refs.entryLinkIds,
+    }[kind];
     if (list.includes(id)) return;
     const msg = {
       tag: "A etiqueta usada não existe mais.",
       stage: "A etapa usada não existe mais.",
       user: "O responsável usado não existe mais.",
       channel: "O canal usado não existe mais.",
+      sequence: "Sequência não encontrada.",
+      entry_link: "Link de entrada não encontrado.",
     }[kind];
     add(nodeId, `unknown_${kind}`, msg);
   };
@@ -180,10 +198,15 @@ export function validateGraph(
   if (!triggerParsed.success) {
     add(triggerNodeId, "invalid_config", `Gatilho: ${zodMessage(triggerParsed.error)}`);
   } else {
-    const c = triggerParsed.data as { channelId?: string; tagId?: string | null; stageId?: string | null };
+    const c = triggerParsed.data as { channelId?: string; tagId?: string | null; stageId?: string | null; linkIds?: string[] };
     if (trigger.type === "instagram_comment" || trigger.type === "instagram_story") checkRef(triggerNodeId, "channel", c.channelId);
     if (trigger.type === "tag_added") checkRef(triggerNodeId, "tag", c.tagId);
     if (trigger.type === "stage_changed") checkRef(triggerNodeId, "stage", c.stageId);
+    if (trigger.type === "entry_link") {
+      // Uma única mensagem por gatilho, mesmo com vários links desconhecidos.
+      const unknown = (c.linkIds ?? []).find((id) => !refs.entryLinkIds.includes(id));
+      if (unknown) checkRef(triggerNodeId, "entry_link", unknown);
+    }
   }
 
   const instagram = INSTAGRAM_TRIGGERS.includes(trigger.type);
@@ -205,6 +228,10 @@ export function validateGraph(
         break;
       case "assign_user":
         checkRef(n.id, "user", c.userId as string);
+        break;
+      case "sequence_enroll":
+      case "sequence_remove":
+        checkRef(n.id, "sequence", c.sequenceId as string);
         break;
       case "condition":
         if (c.kind === "has_tag") checkRef(n.id, "tag", c.tagId as string);

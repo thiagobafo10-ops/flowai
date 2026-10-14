@@ -13,6 +13,8 @@ export const NODE_LABEL: Record<NodeType, string> = {
   close_conversation: "Encerrar conversa",
   handoff_ai: "Transferir para IA",
   handoff_human: "Transferir para humano",
+  sequence_enroll: "Inscrever em sequência",
+  sequence_remove: "Remover de sequência",
   end: "Fim",
 };
 

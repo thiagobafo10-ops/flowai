@@ -27,6 +27,8 @@ const ICON: Record<NodeType, LucideIcon> = {
   close_conversation: ArchiveIcon,
   handoff_ai: BotIcon,
   handoff_human: HeadsetIcon,
+  sequence_enroll: ZapIcon,
+  sequence_remove: XIcon,
   end: FlagIcon,
 };
 
