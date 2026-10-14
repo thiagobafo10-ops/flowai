@@ -32,7 +32,9 @@ insert into public.sequences(id,organization_id,name,status,settings) values
   (:'s4',:'oa','Janela','active',jsonb_build_object('channelIds',jsonb_build_array(:'sim1'))),
   (:'s5',:'oa','Pausável','active',jsonb_build_object('channelIds',jsonb_build_array(:'sim1'))),
   (:'s6',:'oa','Editável','active',jsonb_build_object('channelIds',jsonb_build_array(:'sim1'))),
-  (:'sb',:'ob','Outra','active',jsonb_build_object('channelIds',jsonb_build_array(:'simb')));
+  (:'sb',:'ob','Outra','active',jsonb_build_object('channelIds',jsonb_build_array(:'simb'))),
+  ('00000000-0000-0000-0000-000000004818',:'oa','Dois canais','active',jsonb_build_object('channelIds',jsonb_build_array(:'sim1',:'sim2'))),
+  ('00000000-0000-0000-0000-000000004819',:'oa','Própria','active',jsonb_build_object('channelIds',jsonb_build_array(:'sim1'),'exitWords',jsonb_build_array('Tchau')));
 insert into public.sequence_steps(id,organization_id,sequence_id,position,delay_minutes,"window",message) values
   ('00000000-0000-0000-0000-000000004821',:'oa',:'s1',1,60,null,'{"text":"Oi"}'),
   ('00000000-0000-0000-0000-000000004822',:'oa',:'s1',2,1440,'{"days":[1,2,3,4,5],"start":"09:00","end":"18:00"}','{"text":"Dia 2"}'),
@@ -45,7 +47,11 @@ insert into public.sequence_steps(id,organization_id,sequence_id,position,delay_
   ('00000000-0000-0000-0000-000000004829',:'oa',:'s6',1,5,null,'{"text":"E1"}'),
   ('00000000-0000-0000-0000-000000004830',:'oa',:'s6',2,5,null,'{"text":"E2"}'),
   ('00000000-0000-0000-0000-000000004831',:'oa',:'s6',3,5,null,'{"text":"E3"}'),
-  ('00000000-0000-0000-0000-000000004832',:'ob',:'sb',1,5,null,'{"text":"B"}');
+  ('00000000-0000-0000-0000-000000004832',:'ob',:'sb',1,5,null,'{"text":"B"}'),
+  ('00000000-0000-0000-0000-000000004833',:'oa','00000000-0000-0000-0000-000000004818',1,5,null,'{"text":"D"}'),
+  ('00000000-0000-0000-0000-000000004834',:'oa','00000000-0000-0000-0000-000000004819',1,5,null,'{"text":"P"}');
+\set s7 '00000000-0000-0000-0000-000000004818'
+\set s8 '00000000-0000-0000-0000-000000004819'
 
 create function pg_temp.n(p_k text) returns uuid language sql as $$ select md5('048' || p_k)::uuid $$;
 create function pg_temp.contact(p_k text, p_org uuid default null) returns uuid language sql as $$
@@ -75,8 +81,8 @@ create function pg_temp.sent(p_seq uuid, p_k text) returns void language sql as 
 create function pg_temp.notes(p_k text) returns int language sql as $$
   select count(*)::int from public.messages where conversation_id = pg_temp.n('c' || p_k) and sender_type = 'system'
     and direction = 'outbound' and content like 'Saiu da sequência %' $$;
-select pg_temp.contact(k) from unnest(array['01','02','03','04','05','06','07','08','09','10','11']) k;
-select pg_temp.conv(k) from unnest(array['01','03','04','05','06','07','08','09','11']) k;
+select pg_temp.contact(k) from unnest(array['01','02','03','04','05','06','07','08','09','10','11','12','13']) k;
+select pg_temp.conv(k) from unnest(array['01','03','04','05','06','07','08','09','11','12','13']) k;
 
 -- =============================================================== next_send_time (espelha o core)
 \set wd '{"days":[1,2,3,4,5],"start":"09:00","end":"18:00"}'
@@ -154,8 +160,13 @@ select is((pg_temp.pending(:'s1','02')).conversation_id, null, 'entrega sem conv
 
 -- =============================================================== run_after respeita a janela
 select isnt(private.sequence_enroll(:'s4', pg_temp.n('k03'), 'system'), null, 'inscrição direta');
+-- now() não pode ser fixado: o esperado vem de aritmética de datas independente da função (os casos com instantes
+-- literais estão nos testes de next_send_time acima). Janela diária 03:00–03:01 em SP, espera de 1 minuto.
+select ((now() + interval '1 minute') at time zone 'America/Sao_Paulo') as loc48 \gset
 select is((pg_temp.pending(:'s4','03')).run_after,
-  private.next_send_time(now(), 1, '{"days":[1,2,3,4,5,6,7],"start":"03:00","end":"03:01"}', 'America/Sao_Paulo'),
+  case when :'loc48'::timestamp::time >= '03:00' and :'loc48'::timestamp::time < '03:01' then now() + interval '1 minute'
+    else ((:'loc48'::timestamp::date + case when :'loc48'::timestamp::time < '03:00' then 0 else 1 end) + time '03:00')
+      at time zone 'America/Sao_Paulo' end,
   'run_after calculado com a janela e o fuso da organização');
 select is(to_char((pg_temp.pending(:'s4','03')).run_after at time zone 'America/Sao_Paulo', 'HH24:MI'), '03:00',
   'run_after no início da janela');
@@ -186,7 +197,10 @@ create function pg_temp.apply(p_k text, p_node text, p_type text, p_seq uuid) re
     'nodeId', pg_temp.n(p_node), 'iteration', 0, 'handle', 'default',
     'effects', jsonb_build_array(jsonb_build_object('type', p_type, 'sequenceId', p_seq)), 'route', '{"end":true}'::jsonb)) $$;
 select pg_temp.run('a', 'nen'), pg_temp.run('b', 'nen'), pg_temp.run('c', 'nen'), pg_temp.run('d', 'nrm'),
-  pg_temp.run('e', 'nen');
+  pg_temp.run('e', 'nen'), pg_temp.run('f', 'nen');
+create function pg_temp.refused(p_seq uuid, p_reason text) returns int language sql as $$
+  select count(*)::int from public.events where type = 'sequence_enroll_refused' and contact_id = pg_temp.n('k03')
+    and actor_type = 'automation' and payload ->> 'sequence_id' = p_seq::text and payload ->> 'reason' = p_reason $$;
 select is(pg_temp.apply('a', 'nen', 'sequence_enroll', :'s1') ->> 'state', 'completed', 'bloco de inscrição aplicado');
 select is((pg_temp.enr(:'s1','03')).status, 'active', 'bloco inscreve o contato');
 select is((select count(*)::int from pg_temp.dels(:'s1','03') where status = 'pending'), 1, 'bloco agenda o primeiro passo');
@@ -195,6 +209,10 @@ select is((select count(*)::int from public.events where type = 'sequence_enroll
   and actor_type = 'automation'), 1, 'duplicidade pelo bloco registrada');
 select is(pg_temp.apply('c', 'nen', 'sequence_enroll', :'s3') ->> 'state', 'completed', 'bloco com sequência em rascunho não falha');
 select is((pg_temp.enr(:'s3','03')).id, null, 'rascunho: nenhuma inscrição pelo bloco');
+select is(pg_temp.refused(:'s3', 'sequence_not_active'), 1, 'rascunho: recusa registrada (sequence_not_active)');
+select is(pg_temp.apply('f', 'nen', 'sequence_enroll', :'sb') ->> 'state', 'completed', 'bloco com sequência de outra organização não falha');
+select is((select count(*)::int from public.sequence_enrollments where sequence_id = :'sb'), 0, 'outra organização: nenhuma inscrição');
+select is(pg_temp.refused(:'sb', 'sequence_not_found'), 1, 'outra organização: recusa registrada (sequence_not_found)');
 select is(pg_temp.apply('d', 'nrm', 'sequence_remove', :'s1') ->> 'state', 'completed', 'bloco de remoção aplicado');
 select is((pg_temp.enr(:'s1','03')).status, 'removed', 'bloco remove o contato');
 select is((pg_temp.enr(:'s1','03')).exit_reason, 'removed', 'motivo removed');
@@ -236,12 +254,27 @@ select is((select status || ':' || reason from pg_temp.dels(:'s2','05')), 'cance
 select is((pg_temp.enr(:'s1','05')).status, 'active', 'sequência sem exitOnReply mantém a inscrição');
 select is(pg_temp.notes('05'), 0, 'resposta não registra nota');
 
--- canal diferente da inscrição: não sai
+-- qualquer canal da sequência: sai; canal fora da sequência: não sai
 select private.sequence_enroll(:'s1', pg_temp.n('k06'), 'system');
+select private.sequence_enroll(:'s7', pg_temp.n('k06'), 'system');
+select is((pg_temp.enr(:'s7','06')).channel_id, :'sim1'::uuid, 'inscrição de dois canais no canal da conversa');
 select pg_temp.inbound('06', 'sair', :'sim2');
-select is((pg_temp.enr(:'s1','06')).status, 'active', 'palavra de saída em outro canal não remove');
+select is((pg_temp.enr(:'s7','06')).status, 'exited', 'palavra de saída em outro canal da sequência remove');
+select is((pg_temp.enr(:'s7','06')).exit_reason, 'exit_word', 'outro canal da sequência: motivo exit_word');
+select is((select count(*)::int from public.messages where content = 'Saiu da sequência Dois canais'
+  and channel_id = :'sim2' and sender_type = 'system'), 1, 'nota na conversa da mensagem');
+select is((pg_temp.enr(:'s1','06')).status, 'active', 'palavra de saída em canal fora da sequência não remove');
 select pg_temp.inbound('06', 'SAIR');
 select is((pg_temp.enr(:'s1','06')).status, 'exited', 'palavra de saída no canal da inscrição remove');
+
+-- palavras de saída próprias (settings.exitWords substitui o padrão)
+select private.sequence_enroll(:'s8', pg_temp.n('k12'), 'system');
+select pg_temp.inbound('12', 'sair');
+select is((pg_temp.enr(:'s8','12')).status, 'active', 'palavra padrão não vale com exitWords próprias');
+select pg_temp.inbound('12', 'Tchau!');
+select is((pg_temp.enr(:'s8','12')).status, 'exited', 'exitWords próprias removem pelo gatilho');
+select is((pg_temp.enr(:'s8','12')).exit_reason, 'exit_word', 'exitWords próprias: motivo exit_word');
+select is(pg_temp.notes('12'), 1, 'exitWords próprias: nota registrada');
 
 -- =============================================================== agendamento do próximo passo
 select private.sequence_enroll(:'s1', pg_temp.n('k07'), 'system');
@@ -284,12 +317,18 @@ select is((pg_temp.pending(:'s6','08')).run_after, now() + interval '5 minutes',
 -- =============================================================== pausar e retomar
 select tests.authenticate_as(:'uag');
 select isnt(public.enroll_contact_in_sequence(:'s5', pg_temp.n('k09')), null, 'contato 09 inscrito na pausável');
+select isnt(public.enroll_contact_in_sequence(:'s5', pg_temp.n('k13')), null, 'contato 13 inscrito na pausável');
+select tests.clear_authentication();
+update public.outreach_deliveries set status = 'sending', claim_token = gen_random_uuid(),
+  claimed_until = now() + interval '3 minutes' where id = (pg_temp.pending(:'s5','13')).id;
 select tests.authenticate_as(:'ua');
 select public.set_sequence_status(:'s5', 'paused');
 select tests.clear_authentication();
 select is((select status || ':' || reason from pg_temp.dels(:'s5','09')), 'cancelled:paused', 'pausar cancela as entregas pendentes');
 select is((pg_temp.enr(:'s5','09')).status, 'active', 'pausar mantém a inscrição');
 select is((pg_temp.enr(:'s5','09')).next_send_at, null, 'pausada: sem próximo envio');
+select is((select status || ':' || coalesce(reason, '-') || ':' || (claim_token is not null)::text
+  from pg_temp.dels(:'s5','13')), 'sending:-:true', 'pausar não mexe na entrega em sending');
 select tests.authenticate_as(:'uag');
 select throws_ok(format('select public.enroll_contact_in_sequence(%L, %L)', :'s5', pg_temp.n('k10')), '22023', null,
   'sequência pausada recusa inscrição');
@@ -301,6 +340,8 @@ select is((pg_temp.pending(:'s5','09')).step_id, '00000000-0000-0000-0000-000000
 select is((pg_temp.pending(:'s5','09')).reason, null, 'sem motivo');
 select is((pg_temp.pending(:'s5','09')).run_after, now() + interval '60 minutes', 'recalculado a partir de agora');
 select is((pg_temp.enr(:'s5','09')).next_send_at, now() + interval '60 minutes', 'próximo envio recalculado');
+select is((select count(*)::int || ':' || min(status) from pg_temp.dels(:'s5','13')), '1:sending',
+  'retomar não duplica a entrega em sending');
 
 -- =============================================================== contato excluído
 select private.sequence_enroll(:'s1', pg_temp.n('k11'), 'system');

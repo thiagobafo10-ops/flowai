@@ -63,6 +63,15 @@ language sql stable set search_path = '' as $$
 $$;
 
 -- ---------------------------------------------------------------- agendamento
+-- Conversa do contato nos canais dados pela regra da ingestão (private.inbound_conversation): a mais recente por
+-- created_at desc, id desc (qualquer status; a ingestão reabre a fechada). Nula quando não há conversa.
+create function private.sequence_conversation(p_org uuid, p_contact uuid, p_channels uuid[]) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select c.id from public.conversations c
+    where c.organization_id = p_org and c.contact_id = p_contact and c.channel_id = any (p_channels)
+    order by c.created_at desc, c.id desc limit 1
+$$;
+
 -- Cria a entrega do próximo passo da inscrição ativa (run_after a partir de agora) ou a marca completed.
 -- Idempotente: com entrega pending/sending nada muda. Sequência pausada: só posiciona (a retomada agenda).
 create function private.sequence_schedule_next(p_enrollment uuid) returns void
@@ -102,10 +111,8 @@ begin
 
   select o.timezone into v_tz from public.organizations o where o.id = en.organization_id;
   v_at := private.next_send_time(now(), st.delay_minutes, st."window", v_tz);
-  -- conversa mais recente do contato no canal (a mesma regra da ingestão); sem conversa o envio dá no_conversation
-  select c.id into v_conv from public.conversations c
-    where c.organization_id = en.organization_id and c.contact_id = en.contact_id and c.channel_id = en.channel_id
-    order by c.created_at desc, c.id desc limit 1;
+  -- sem conversa o envio dá no_conversation
+  v_conv := private.sequence_conversation(en.organization_id, en.contact_id, array[en.channel_id]);
   -- a entrega cancelada pela pausa é reaproveitada (uma entrega por inscrição e passo)
   insert into public.outreach_deliveries (organization_id, source, enrollment_id, step_id, contact_id, channel_id,
       conversation_id, run_after)
@@ -121,7 +128,8 @@ end $$;
 -- p_actor = actor_type do evento de duplicidade ('user' usa auth.uid() como actor_id).
 -- Erros 22023: sequence_not_active (inexistente, rascunho ou pausada), invalid_contact (outra organização),
 -- invalid_channel (nenhum canal da sequência existe mais).
--- Canal: entre os canais da sequência, o da conversa mais recente do contato; sem conversa, o primeiro canal.
+-- Canal: o da conversa escolhida por private.sequence_conversation entre os canais da sequência (mesma regra do
+-- agendamento); sem conversa, o primeiro canal existente da sequência.
 -- Retorna a inscrição criada ou null quando o contato já está ativo nela (evento sequence_enroll_ignored).
 create function private.sequence_enroll(p_sequence uuid, p_contact uuid, p_actor text) returns uuid
 language plpgsql security definer set search_path = '' as $$
@@ -140,12 +148,9 @@ begin
     raise exception 'invalid_contact' using errcode = '22023';
   end if;
 
-  select c.channel_id into v_channel
-    from public.conversations c
-    join jsonb_array_elements_text(seq.settings -> 'channelIds') ch(id) on ch.id = c.channel_id::text
-    where c.organization_id = seq.organization_id and c.contact_id = p_contact
-    order by c.last_message_at desc nulls last, c.created_at desc, c.id desc
-    limit 1;
+  select c.channel_id into v_channel from public.conversations c
+    where c.id = private.sequence_conversation(seq.organization_id, p_contact,
+      array(select x::uuid from jsonb_array_elements_text(seq.settings -> 'channelIds') x));
   if v_channel is null then
     select ch.id into v_channel
       from jsonb_array_elements_text(seq.settings -> 'channelIds') with ordinality s(id, ord)
@@ -223,7 +228,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- saída por mensagem do contato
--- Inscrições ativas do contato no canal da mensagem: palavra de saída (settings.exitWords; ausente = padrão
+-- Inscrições ativas do contato cuja sequência inclui o canal da mensagem (qualquer canal de settings.channelIds, além
+-- do canal da própria inscrição): palavra de saída (settings.exitWords; ausente = padrão
 -- sair/parar/cancelar) → exited 'exit_word' com nota "Saiu da sequência {nome}"; senão exitOnReply → exited 'replied'.
 -- O gatilho se chama sequence_exit_inbound para rodar depois (ordem alfabética) de aa_automation_inbound,
 -- ai_enqueue_reply, ai_human_takes_over e messages_*: a mensagem dispara automação/IA normalmente e a nota de sistema
@@ -239,8 +245,8 @@ begin
   if v_contact is null then return null; end if;
   for r in
     select e.id, s.name, s.settings from public.sequence_enrollments e join public.sequences s on s.id = e.sequence_id
-      where e.organization_id = new.organization_id and e.contact_id = v_contact and e.channel_id = new.channel_id
-        and e.status = 'active'
+      where e.organization_id = new.organization_id and e.contact_id = v_contact and e.status = 'active'
+        and (e.channel_id = new.channel_id or coalesce(s.settings -> 'channelIds' ? new.channel_id::text, false))
       order by e.created_at, e.id
       for update of e
   loop
@@ -270,7 +276,8 @@ language plpgsql security definer set search_path = '' as $$
 declare v_id uuid;
 begin
   for v_id in select id from public.sequence_enrollments
-      where organization_id = old.organization_id and contact_id = old.id and status = 'active' for update loop
+      where organization_id = old.organization_id and contact_id = old.id and status = 'active'
+      order by created_at, id for update loop
     perform private.sequence_end_enrollment(v_id, 'removed', 'contact_deleted');
   end loop;
   return old;
@@ -471,7 +478,8 @@ begin
   end if;
 end $$;
 
--- Sobre 000009 (mesmo corpo): efeitos sequence_enroll / sequence_remove para o contato da execução.
+-- Sobre 000009 (mesmo corpo): efeitos sequence_enroll / sequence_remove para o contato da execução (e a variável
+-- v_refused).
 create or replace function private.automation_apply_step(p_run uuid, p_token uuid, p_step jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -488,6 +496,7 @@ declare
   v_terminal boolean := false; v_reroute boolean := false;
   v_result text; v_intents uuid[] := '{}'; v_payloads jsonb := '{}'::jsonb; v_status public.run_status; v_error text;
   v_typed boolean;
+  v_refused text;
 begin
   run := private.automation_lock_run(p_run);
   if run.id is null then raise exception 'invalid claim' using errcode = '42501'; end if;
@@ -697,16 +706,27 @@ begin
       if v_send.result in ('sent', 'queued') then
         v_payloads := v_payloads || private.automation_node_payloads(run.id, v_node);
       end if;
-    -- 7B: sequências (ações que não seguram a conversa). Sequência de outra organização, inexistente ou não ativa:
-    -- o bloco segue sem inscrever (22023 de sequence_enroll engolido só aqui).
+    -- 7B: sequências (ações que não seguram a conversa). Sem contato, sequência de outra organização/inexistente ou
+    -- recusa de sequence_enroll (22023: sequence_not_active | invalid_contact | invalid_channel): o bloco segue e a
+    -- recusa fica registrada no evento sequence_enroll_refused {sequence_id, reason (código), run_id}.
     when 'sequence_enroll' then
-      if run.contact_id is not null and exists (select 1 from public.sequences sq
+      v_refused := null;
+      if run.contact_id is null then
+        v_refused := 'no_contact';
+      elsif not exists (select 1 from public.sequences sq
           where sq.id = (e ->> 'sequenceId')::uuid and sq.organization_id = run.organization_id) then
+        v_refused := 'sequence_not_found';
+      else
         begin
           perform private.sequence_enroll((e ->> 'sequenceId')::uuid, run.contact_id, 'automation');
         exception when invalid_parameter_value then
-          null;
+          v_refused := case when sqlerrm ~ '^[a-z0-9_]{1,64}$' then sqlerrm else 'invalid' end;
         end;
+      end if;
+      if v_refused is not null then
+        insert into public.events (organization_id, type, conversation_id, contact_id, actor_type, payload)
+          values (run.organization_id, 'sequence_enroll_refused', conv.id, run.contact_id, 'automation',
+            jsonb_build_object('sequence_id', e ->> 'sequenceId', 'reason', v_refused, 'run_id', run.id));
       end if;
     when 'sequence_remove' then
       if run.contact_id is not null and exists (select 1 from public.sequences sq
@@ -769,6 +789,7 @@ end $$;
 -- ---------------------------------------------------------------- grants
 revoke all on function
   private.next_send_time(timestamptz, int, jsonb, text),
+  private.sequence_conversation(uuid, uuid, uuid[]),
   private.exit_word_strip(text),
   private.is_exit_word(text, jsonb),
   private.sequence_schedule_next(uuid),
