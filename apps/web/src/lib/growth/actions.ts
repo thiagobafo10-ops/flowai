@@ -190,3 +190,133 @@ export async function fetchContactSequences(contactId: string): Promise<ActionRe
     return { ok: false, error: growthError(error as { code?: string; message?: string }) };
   }
 }
+
+export async function saveCampaignDraft({
+  id = null,
+  name,
+  audience,
+  message,
+}: {
+  id?: string | null;
+  name: string;
+  audience: unknown;
+  message: unknown;
+}): Promise<ActionResult<{ id: string }>> {
+  const c = await context();
+  if (!c) return forbidden();
+  const trimmedName = name?.trim() ?? "";
+  if (trimmedName.length < 1 || trimmedName.length > 100) {
+    return { ok: false, error: "O nome deve ter entre 1 e 100 caracteres." };
+  }
+  if (id !== null && !idSchema.safeParse(id).success) {
+    return { ok: false, error: "Identificador de campanha inválido." };
+  }
+
+  const { audienceFilterSchema, outreachMessageSchema } = await import("@flowai/core");
+  const parsedAudience = audienceFilterSchema.safeParse(audience);
+  if (!parsedAudience.success) {
+    return {
+      ok: false,
+      error: "Revise os filtros do público selecionado.",
+      fieldErrors: parsedAudience.error.flatten().fieldErrors,
+    };
+  }
+
+  const parsedMessage = outreachMessageSchema.safeParse(message);
+  if (!parsedMessage.success) {
+    return {
+      ok: false,
+      error: "Revise a mensagem da campanha.",
+      fieldErrors: parsedMessage.error.flatten().fieldErrors,
+    };
+  }
+
+  const { data, error } = await c.db.rpc("save_campaign", {
+    p_org: c.orgId,
+    p_id: id as unknown as string,
+    p_name: trimmedName,
+    p_audience: parsedAudience.data,
+    p_message: parsedMessage.data,
+  });
+
+  if (error) return { ok: false, error: growthError(error) };
+  return { ok: true, data: { id: data } };
+}
+
+export async function deleteCampaign(id: string): Promise<ActionResult> {
+  const c = await context();
+  if (!c) return forbidden();
+  if (!idSchema.safeParse(id).success) return { ok: false, error: "Campanha inválida." };
+
+  const { error } = await c.db.rpc("delete_campaign", { p_id: id });
+  return error ? { ok: false, error: growthError(error) } : { ok: true, data: undefined };
+}
+
+export async function scheduleCampaign({
+  id,
+  scheduledAt = null,
+}: {
+  id: string;
+  scheduledAt?: string | null;
+}): Promise<ActionResult> {
+  const c = await context();
+  if (!c) return forbidden();
+  if (!idSchema.safeParse(id).success) return { ok: false, error: "Campanha inválida." };
+
+  let atIso: string | null = null;
+  if (scheduledAt) {
+    const d = new Date(scheduledAt);
+    if (isNaN(d.getTime())) return { ok: false, error: "Data ou horário de agendamento inválido." };
+    atIso = d.toISOString();
+  }
+
+  const { error } = await c.db.rpc("schedule_campaign", {
+    p_id: id,
+    p_at: atIso as unknown as string,
+  });
+
+  return error ? { ok: false, error: growthError(error) } : { ok: true, data: undefined };
+}
+
+export async function cancelCampaign(id: string): Promise<ActionResult> {
+  const c = await context();
+  if (!c) return forbidden();
+  if (!idSchema.safeParse(id).success) return { ok: false, error: "Campanha inválida." };
+
+  const { error } = await c.db.rpc("cancel_campaign", { p_id: id });
+  return error ? { ok: false, error: growthError(error) } : { ok: true, data: undefined };
+}
+
+export async function previewCampaignAudience(
+  audience: unknown,
+): Promise<ActionResult<{ total: number; inWindow: number; outOfWindow: number }>> {
+  const c = await context(["owner", "admin", "agent"]);
+  if (!c) return forbidden();
+
+  const { audienceFilterSchema } = await import("@flowai/core");
+  const parsedAudience = audienceFilterSchema.safeParse(audience);
+  if (!parsedAudience.success) {
+    return {
+      ok: false,
+      error: "Revise os filtros do público.",
+      fieldErrors: parsedAudience.error.flatten().fieldErrors,
+    };
+  }
+
+  const { data, error } = await c.db.rpc("preview_campaign_audience", {
+    p_org: c.orgId,
+    p_audience: parsedAudience.data,
+  });
+
+  if (error) return { ok: false, error: growthError(error) };
+  type PreviewData = { total?: number; inWindow?: number; outOfWindow?: number };
+  const preview = data as unknown as PreviewData | null;
+  return {
+    ok: true,
+    data: {
+      total: Number(preview?.total ?? 0),
+      inWindow: Number(preview?.inWindow ?? 0),
+      outOfWindow: Number(preview?.outOfWindow ?? 0),
+    },
+  };
+}

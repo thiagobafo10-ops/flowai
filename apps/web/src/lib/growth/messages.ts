@@ -2,9 +2,26 @@ export const GROWTH_FORBIDDEN = "Você não tem permissão para esta ação.";
 export const GROWTH_UNEXPECTED = "Não foi possível concluir. Tente novamente.";
 export const INSTAGRAM_USERNAME_REQUIRED = "Informe o usuário do Instagram em Canais para gerar o link.";
 
+export const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
+  draft: "Rascunho",
+  scheduled: "Agendada",
+  sending: "Enviando",
+  completed: "Concluída",
+  cancelled: "Cancelada",
+};
+
+export const DELIVERY_REASON_LABEL: Record<string, string> = {
+  window_closed: "Fora da janela de 24h",
+  invalid_content: "Conteúdo inválido",
+  invalid_step: "Passo inválido",
+  rate_limited: "Limite de envio da Meta",
+  campaign_cancelled: "Campanha cancelada",
+  unknown: "Desconhecido",
+};
+
 export function growthError(error: { code?: string; message?: string }): string {
   if (error.code === "42501") return GROWTH_FORBIDDEN;
-  if (error.code === "P0002") return "O link ou canal não está mais disponível.";
+  if (error.code === "P0002") return "O item ou recurso não está mais disponível.";
   if (error.code === "22023") {
     switch (error.message) {
       case "code_taken": return "Este código já está em uso neste canal.";
@@ -17,6 +34,10 @@ export function growthError(error: { code?: string; message?: string }): string 
       case "invalid_step":
       case "invalid_steps": return "Revise os passos configurados.";
       case "no_steps": return "Adicione ao menos um passo antes de ativar.";
+      case "campaign_not_draft": return "A campanha já foi agendada ou enviada.";
+      case "invalid_audience": return "Revise os filtros do público selecionado.";
+      case "invalid_message": return "Revise a mensagem configurada.";
+      case "invalid_pagination": return "Paginação inválida.";
       default: return "Confira os dados informados.";
     }
   }

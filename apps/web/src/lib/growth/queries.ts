@@ -359,3 +359,178 @@ export async function getContactSequences(orgId: string, contactId: string): Pro
 
   return { enrollments, availableSequences };
 }
+
+export type CampaignStatus = "draft" | "scheduled" | "sending" | "completed" | "cancelled";
+
+export type CampaignListItem = {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  scheduledAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  sentCount: number;
+  totalRecipients: number;
+};
+
+export async function listCampaigns(orgId: string): Promise<CampaignListItem[]> {
+  const db = await createServerClient();
+
+  const [campaignsRes, deliveriesRes] = await Promise.all([
+    db
+      .from("campaigns")
+      .select("id, name, status, scheduled_at, finished_at, created_at")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false }),
+    db
+      .from("outreach_deliveries")
+      .select("campaign_id, status")
+      .eq("organization_id", orgId)
+      .not("campaign_id", "is", null),
+  ]);
+
+  if (campaignsRes.error) throw campaignsRes.error;
+  if (deliveriesRes.error) throw deliveriesRes.error;
+
+  const totalMap = new Map<string, number>();
+  const sentMap = new Map<string, number>();
+
+  for (const d of deliveriesRes.data ?? []) {
+    if (!d.campaign_id) continue;
+    totalMap.set(d.campaign_id, (totalMap.get(d.campaign_id) ?? 0) + 1);
+    if (d.status === "sent") {
+      sentMap.set(d.campaign_id, (sentMap.get(d.campaign_id) ?? 0) + 1);
+    }
+  }
+
+  return (campaignsRes.data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status as CampaignStatus,
+    scheduledAt: c.scheduled_at,
+    finishedAt: c.finished_at,
+    createdAt: c.created_at,
+    sentCount: sentMap.get(c.id) ?? 0,
+    totalRecipients: totalMap.get(c.id) ?? 0,
+  }));
+}
+
+export type CampaignDetails = {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  audience: import("@flowai/core").AudienceFilter;
+  message: import("@flowai/core").OutreachMessage;
+  scheduledAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getCampaign(orgId: string, id: string): Promise<CampaignDetails | null> {
+  const db = await createServerClient();
+  const { data, error } = await db
+    .from("campaigns")
+    .select("id, name, status, audience, message, scheduled_at, finished_at, created_at, updated_at")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    status: data.status as CampaignStatus,
+    audience: data.audience as import("@flowai/core").AudienceFilter,
+    message: data.message as import("@flowai/core").OutreachMessage,
+    scheduledAt: data.scheduled_at,
+    finishedAt: data.finished_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export type CampaignReportPayload = {
+  counts: {
+    sent: number;
+    cancelled: number;
+    skipped: Record<string, number>;
+    failed: Record<string, number>;
+  };
+  clicks: Record<string, number>;
+  recipients: Array<{
+    id: string;
+    contact_id: string;
+    contact_name: string | null;
+    channel_id: string;
+    conversation_id: string;
+    status: string;
+    reason: string | null;
+    run_after: string;
+    message_id: string | null;
+    created_at: string;
+  }>;
+};
+
+export async function getCampaignReport(
+  id: string,
+  limit = 50,
+  offset = 0,
+): Promise<CampaignReportPayload> {
+  const db = await createServerClient();
+  const { data, error } = await db.rpc("campaign_report", {
+    p_id: id,
+    p_limit: limit,
+    p_offset: offset,
+  });
+
+  if (error) throw error;
+  return data as CampaignReportPayload;
+}
+
+export type CampaignFilterRefs = {
+  channels: { id: string; name: string; type: string }[];
+  tags: { id: string; name: string }[];
+  stages: { id: string; name: string }[];
+  entryLinks: { id: string; name: string }[];
+  automations: { id: string; name: string }[];
+};
+
+export async function loadCampaignFilterRefs(orgId: string): Promise<CampaignFilterRefs> {
+  const db = await createServerClient();
+  const [channelsRes, tagsRes, pipelineRes, linksRes, automationsRes] = await Promise.all([
+    db.from("channels").select("id, name, type").eq("organization_id", orgId).order("name"),
+    db.from("tags").select("id, name").eq("organization_id", orgId).order("name"),
+    db.from("pipelines").select("id").eq("organization_id", orgId).eq("is_default", true).maybeSingle(),
+    db.from("entry_links").select("id, name").eq("organization_id", orgId).order("name"),
+    db.from("automations").select("id, name").eq("organization_id", orgId).eq("status", "active").order("name"),
+  ]);
+
+  if (channelsRes.error) throw channelsRes.error;
+  if (tagsRes.error) throw tagsRes.error;
+  if (pipelineRes.error) throw pipelineRes.error;
+  if (linksRes.error) throw linksRes.error;
+  if (automationsRes.error) throw automationsRes.error;
+
+  let stages: { id: string; name: string }[] = [];
+  if (pipelineRes.data?.id) {
+    const stagesRes = await db
+      .from("pipeline_stages")
+      .select("id, name")
+      .eq("organization_id", orgId)
+      .eq("pipeline_id", pipelineRes.data.id)
+      .order("position");
+    if (stagesRes.error) throw stagesRes.error;
+    stages = stagesRes.data ?? [];
+  }
+
+  return {
+    channels: channelsRes.data ?? [],
+    tags: tagsRes.data ?? [],
+    stages,
+    entryLinks: linksRes.data ?? [],
+    automations: automationsRes.data ?? [],
+  };
+}
