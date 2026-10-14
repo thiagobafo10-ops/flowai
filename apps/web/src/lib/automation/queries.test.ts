@@ -85,6 +85,7 @@ test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela o
     memberships: [{ user_id: "u1", profiles: { full_name: " Ana " } }, { user_id: "u2", profiles: null }],
     channels: [{ id: "c1", name: "Loja", type: "instagram" }],
     entry_links: [{ id: "l1", name: "Promoção" }],
+    sequences: [{ id: "seq1", name: "Boas-vindas" }],
   };
   const refs = await loadEditorRefs(fakeClient() as never, "org-1");
   expect(refs).toEqual({
@@ -93,6 +94,7 @@ test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela o
     members: [{ id: "u1", name: "Ana" }, { id: "u2", name: "Sem nome" }],
     channels: [{ id: "c1", name: "Loja", type: "instagram" }],
     entryLinks: [{ id: "l1", name: "Promoção" }],
+    sequences: [{ id: "seq1", name: "Boas-vindas" }],
   });
   for (const call of state.calls) expect(call.filters).toContainEqual(["organization_id", "org-1"]);
   expect(state.calls.find((c) => c.table === "pipelines")!.filters).toContainEqual(["is_default", true]);

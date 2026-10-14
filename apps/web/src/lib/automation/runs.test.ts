@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { STEPS_LIMIT, buildRunViews, buildStepViews, handleLabel, loadRunSteps } from "./runs";
 
-const REFS = { tags: [{ id: "tag1", name: "vip" }], stages: [], members: [], channels: [], entryLinks: [] };
+const REFS = { tags: [{ id: "tag1", name: "vip" }], stages: [], members: [], channels: [], entryLinks: [], sequences: [] };
 const TRIGGER = "00000000-0000-4000-8000-0000000000a0";
 const MSG = "00000000-0000-4000-8000-0000000000a1";
 const TAG = "00000000-0000-4000-8000-0000000000a2";

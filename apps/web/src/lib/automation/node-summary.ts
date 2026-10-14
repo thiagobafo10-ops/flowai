@@ -49,6 +49,9 @@ export function triggerSummary(type: TriggerType, config: unknown, refs: EditorR
       break;
     case "contact_created":
       break;
+    case "entry_link":
+      lines.push("Via link de entrada");
+      break;
   }
   return lines;
 }
@@ -101,9 +104,9 @@ export function nodeSummary(type: NodeType, config: unknown, refs: EditorRefs): 
     case "handoff_human":
       return "Um atendente assume a conversa";
     case "sequence_enroll":
-      return "Inscreve o contato na sequência";
+      return `Inscrever em: ${nameOf(refs.sequences ?? [], c.sequenceId, "Escolha a sequência")}`;
     case "sequence_remove":
-      return "Remove o contato da sequência";
+      return `Remover de: ${nameOf(refs.sequences ?? [], c.sequenceId, "Escolha a sequência")}`;
     case "end":
       return "Fim do fluxo";
     case "trigger":

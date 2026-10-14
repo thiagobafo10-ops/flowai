@@ -93,18 +93,20 @@ export type EditorRefs = {
   members: RefOption[];
   channels: (RefOption & { type: string })[];
   entryLinks: RefOption[];
+  sequences: RefOption[];
 };
 
-/** Opções nomeadas para os seletores do editor (etiquetas, etapas do funil padrão, membros e canais). */
+/** Opções nomeadas para os seletores do editor (etiquetas, etapas do funil padrão, membros, canais e sequências). */
 export async function loadEditorRefs(supabase: Supabase, orgId: string): Promise<EditorRefs> {
-  const [tags, pipeline, members, channels, links] = await Promise.all([
+  const [tags, pipeline, members, channels, links, sequences] = await Promise.all([
     supabase.from("tags").select("id, name").eq("organization_id", orgId).order("name"),
     supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("is_default", true).maybeSingle(),
     supabase.from("memberships").select("user_id, profiles(full_name)").eq("organization_id", orgId),
     supabase.from("channels").select("id, name, type").eq("organization_id", orgId).order("created_at"),
     supabase.from("entry_links").select("id, name").eq("organization_id", orgId).order("name"),
+    supabase.from("sequences").select("id, name").eq("organization_id", orgId).order("name"),
   ]);
-  for (const r of [tags, pipeline, members, channels, links]) if (r.error) throw r.error;
+  for (const r of [tags, pipeline, members, channels, links, sequences]) if (r.error) throw r.error;
   let stages: RefOption[] = [];
   if (pipeline.data) {
     const res = await supabase
@@ -124,6 +126,7 @@ export async function loadEditorRefs(supabase: Supabase, orgId: string): Promise
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     channels: (channels.data ?? []).map((c) => ({ id: c.id, name: c.name, type: c.type as string })),
     entryLinks: links.data ?? [],
+    sequences: sequences.data ?? [],
   };
 }
 

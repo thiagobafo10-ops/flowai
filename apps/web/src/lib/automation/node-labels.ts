@@ -27,6 +27,8 @@ export const PALETTE_TYPES: Exclude<NodeType, "trigger">[] = [
   "remove_tag",
   "assign_user",
   "move_stage",
+  "sequence_enroll",
+  "sequence_remove",
   "webhook",
   "close_conversation",
   "handoff_ai",
@@ -54,6 +56,9 @@ export function defaultNodeConfig(type: NodeType): unknown {
     case "tag":
     case "remove_tag":
       return { tagId: "" };
+    case "sequence_enroll":
+    case "sequence_remove":
+      return { sequenceId: "" };
     case "assign_user":
       return { userId: "" };
     case "move_stage":

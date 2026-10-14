@@ -64,6 +64,10 @@ export function NodePanel({ node, refs, triggerType, triggerConfig, issues, read
     case "assign_user":
       form = <RefForm key={node.id} type={type} kind="members" refs={refs} config={config} onChange={change} />;
       break;
+    case "sequence_enroll":
+    case "sequence_remove":
+      form = <RefForm key={node.id} type={type} kind="sequences" refs={refs} config={config} onChange={change} />;
+      break;
     case "webhook":
       form = <WebhookForm key={node.id} config={config} onChange={change} />;
       break;

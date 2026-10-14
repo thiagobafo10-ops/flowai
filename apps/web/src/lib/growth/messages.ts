@@ -12,6 +12,11 @@ export function growthError(error: { code?: string; message?: string }): string 
       case "channel_immutable": return "O canal de um link existente não pode ser alterado.";
       case "not_simulator": return "Escolha um link do canal Simulador.";
       case "invalid_username": return "Informe um usuário do Instagram válido.";
+      case "invalid_name": return "O nome deve ter entre 1 e 100 caracteres.";
+      case "invalid_settings": return "Revise as configurações da sequência.";
+      case "invalid_step":
+      case "invalid_steps": return "Revise os passos configurados.";
+      case "no_steps": return "Adicione ao menos um passo antes de ativar.";
       default: return "Confira os dados informados.";
     }
   }

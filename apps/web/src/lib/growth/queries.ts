@@ -1,3 +1,4 @@
+import type { OutreachMessage, SendWindow, SequenceSettings } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { readyEntryLink } from "./link";
 
@@ -150,4 +151,211 @@ export async function listEntryLinks(orgId: string, now = new Date()): Promise<E
     channels,
     tags,
   };
+}
+
+export type SequenceListItem = {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "paused";
+  settings: SequenceSettings;
+  stepsCount: number;
+  activeEnrollments: number;
+  sent7d: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SequenceDetail = {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "paused";
+  settings: SequenceSettings;
+  steps: {
+    id: string;
+    position: number;
+    delayMinutes: number;
+    window: SendWindow | null;
+    message: OutreachMessage;
+  }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContactSequenceEnrollment = {
+  id: string;
+  sequenceId: string;
+  sequenceName: string;
+  currentPosition: number;
+  nextSendAt: string | null;
+  status: "active" | "completed" | "exited" | "removed";
+  createdAt: string;
+};
+
+export type ContactSequencesPayload = {
+  enrollments: ContactSequenceEnrollment[];
+  availableSequences: { id: string; name: string }[];
+};
+
+export async function listSequences(
+  orgId: string,
+  now = new Date(),
+): Promise<{ sequences: SequenceListItem[]; channels: GrowthChannel[] }> {
+  const db = await createServerClient();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const [seqRes, stepsRes, enrollRes, delivRes, chRes] = await Promise.all([
+    db
+      .from("sequences")
+      .select("id, name, status, settings, created_at, updated_at")
+      .eq("organization_id", orgId)
+      .order("updated_at", { ascending: false }),
+    db
+      .from("sequence_steps")
+      .select("id, sequence_id")
+      .eq("organization_id", orgId)
+      .is("removed_at", null),
+    db
+      .from("sequence_enrollments")
+      .select("id, sequence_id")
+      .eq("organization_id", orgId)
+      .eq("status", "active"),
+    db
+      .from("outreach_deliveries")
+      .select("id, step_id")
+      .eq("organization_id", orgId)
+      .eq("source", "sequence")
+      .eq("status", "sent")
+      .gte("created_at", sevenDaysAgo.toISOString()),
+    db
+      .from("channels")
+      .select("id, name, type, status, instagram_username")
+      .eq("organization_id", orgId),
+  ]);
+
+  if (seqRes.error) throw seqRes.error;
+  if (stepsRes.error) throw stepsRes.error;
+  if (enrollRes.error) throw enrollRes.error;
+  if (delivRes.error) throw delivRes.error;
+  if (chRes.error) throw chRes.error;
+
+  const stepToSeq = new Map<string, string>();
+  const stepsPerSeq = new Map<string, number>();
+  for (const s of stepsRes.data ?? []) {
+    stepToSeq.set(s.id, s.sequence_id);
+    stepsPerSeq.set(s.sequence_id, (stepsPerSeq.get(s.sequence_id) ?? 0) + 1);
+  }
+
+  const enrollPerSeq = new Map<string, number>();
+  for (const e of enrollRes.data ?? []) {
+    enrollPerSeq.set(e.sequence_id, (enrollPerSeq.get(e.sequence_id) ?? 0) + 1);
+  }
+
+  const sentPerSeq = new Map<string, number>();
+  for (const d of delivRes.data ?? []) {
+    if (d.step_id) {
+      const seqId = stepToSeq.get(d.step_id);
+      if (seqId) sentPerSeq.set(seqId, (sentPerSeq.get(seqId) ?? 0) + 1);
+    }
+  }
+
+  const sequences: SequenceListItem[] = (seqRes.data ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    status: s.status as "draft" | "active" | "paused",
+    settings: s.settings as SequenceSettings,
+    stepsCount: stepsPerSeq.get(s.id) ?? 0,
+    activeEnrollments: enrollPerSeq.get(s.id) ?? 0,
+    sent7d: sentPerSeq.get(s.id) ?? 0,
+    createdAt: s.created_at,
+    updatedAt: s.updated_at,
+  }));
+
+  return { sequences, channels: (chRes.data ?? []) as GrowthChannel[] };
+}
+
+export async function getSequence(orgId: string, sequenceId: string): Promise<SequenceDetail | null> {
+  const db = await createServerClient();
+
+  const [seqRes, stepsRes] = await Promise.all([
+    db
+      .from("sequences")
+      .select("id, name, status, settings, created_at, updated_at")
+      .eq("organization_id", orgId)
+      .eq("id", sequenceId)
+      .maybeSingle(),
+    db
+      .from("sequence_steps")
+      .select("id, position, delay_minutes, window, message")
+      .eq("organization_id", orgId)
+      .eq("sequence_id", sequenceId)
+      .is("removed_at", null)
+      .order("position", { ascending: true }),
+  ]);
+
+  if (seqRes.error) throw seqRes.error;
+  if (stepsRes.error) throw stepsRes.error;
+  if (!seqRes.data) return null;
+
+  return {
+    id: seqRes.data.id,
+    name: seqRes.data.name,
+    status: seqRes.data.status as "draft" | "active" | "paused",
+    settings: seqRes.data.settings as SequenceSettings,
+    steps: (stepsRes.data ?? []).map((step) => ({
+      id: step.id,
+      position: step.position ?? 1,
+      delayMinutes: step.delay_minutes,
+      window: step.window as SendWindow | null,
+      message: step.message as OutreachMessage,
+    })),
+    createdAt: seqRes.data.created_at,
+    updatedAt: seqRes.data.updated_at,
+  };
+}
+
+export async function getContactSequences(orgId: string, contactId: string): Promise<ContactSequencesPayload> {
+  const db = await createServerClient();
+
+  const [enrollRes, activeSeqRes] = await Promise.all([
+    db
+      .from("sequence_enrollments")
+      .select("id, sequence_id, current_position, next_send_at, status, created_at, sequences(name)")
+      .eq("organization_id", orgId)
+      .eq("contact_id", contactId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false }),
+    db
+      .from("sequences")
+      .select("id, name")
+      .eq("organization_id", orgId)
+      .eq("status", "active")
+      .order("name", { ascending: true }),
+  ]);
+
+  if (enrollRes.error) throw enrollRes.error;
+  type EnrollmentRow = {
+    id: string;
+    sequence_id: string;
+    current_position: number;
+    next_send_at: string | null;
+    status: "active" | "completed" | "exited" | "removed";
+    created_at: string;
+    sequences: { name: string } | null;
+  };
+
+  const rawRows = (enrollRes.data ?? []) as unknown as EnrollmentRow[];
+  const enrollments: ContactSequenceEnrollment[] = rawRows.map((e) => ({
+    id: e.id,
+    sequenceId: e.sequence_id,
+    sequenceName: e.sequences?.name ?? "Sequência",
+    currentPosition: e.current_position,
+    nextSendAt: e.next_send_at,
+    status: e.status,
+    createdAt: e.created_at,
+  }));
+
+  const enrolledSeqIds = new Set(enrollments.map((e) => e.sequenceId));
+  const availableSequences = (activeSeqRes.data ?? []).filter((s) => !enrolledSeqIds.has(s.id));
+
+  return { enrollments, availableSequences };
 }

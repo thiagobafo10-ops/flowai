@@ -24,15 +24,16 @@ export function DelayForm({ config, onChange }: FormProps) {
   );
 }
 
-type RefKind = "tags" | "stages" | "members";
-const REF_FIELD: Record<RefKind, { key: "tagId" | "stageId" | "userId"; label: string; empty: string }> = {
+type RefKind = "tags" | "stages" | "members" | "sequences";
+const REF_FIELD: Record<RefKind, { key: "tagId" | "stageId" | "userId" | "sequenceId"; label: string; empty: string }> = {
   tags: { key: "tagId", label: "Etiqueta", empty: "Escolha a etiqueta" },
   stages: { key: "stageId", label: "Etapa do funil", empty: "Escolha a etapa" },
   members: { key: "userId", label: "Responsável", empty: "Escolha o responsável" },
+  sequences: { key: "sequenceId", label: "Sequência", empty: "Escolha a sequência" },
 };
 
-/** Etiqueta (adicionar/remover), etapa ou responsável: um único seletor alimentado por `refs`. */
-export function RefForm({ type, kind, refs, config, onChange }: FormProps & { type: "tag" | "remove_tag" | "move_stage" | "assign_user"; kind: RefKind; refs: EditorRefs }) {
+/** Etiqueta (adicionar/remover), etapa, responsável ou sequência: um único seletor alimentado por `refs`. */
+export function RefForm({ type, kind, refs, config, onChange }: FormProps & { type: "tag" | "remove_tag" | "move_stage" | "assign_user" | "sequence_enroll" | "sequence_remove"; kind: RefKind; refs: EditorRefs }) {
   const { key, label, empty } = REF_FIELD[kind];
   type V = { value: string };
   const toConfig = (v: V) => ({ [key]: v.value });
