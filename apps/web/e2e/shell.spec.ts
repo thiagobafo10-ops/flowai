@@ -52,16 +52,17 @@ test("no celular a gaveta abre e fecha ao navegar", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 
-test("módulos não construídos mostram Em construção", async ({ page }) => {
+test("módulos não construídos mostram Em construção; Automações abre o módulo real", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Placeholder");
-  for (const [href, title, text] of [
-    ["/automacoes", "Automações", "Crie fluxos automáticos de atendimento e vendas."],
-  ]) {
-    await gotoReady(page, href);
-    await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-    await expect(page.getByText(text)).toBeVisible();
-    await expect(page.getByText("Em construção")).toBeVisible();
-  }
+  await gotoReady(page, "/analytics");
+  await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
+  await expect(page.getByText("Relatórios detalhados de atendimento e vendas.")).toBeVisible();
+  await expect(page.getByText("Em construção")).toBeVisible();
+
+  await gotoReady(page, "/automacoes");
+  await expect(page.getByRole("heading", { level: 1, name: "Automações" })).toBeVisible();
+  await expect(page.getByText("Nenhuma automação ainda. Comece por um modelo:")).toBeVisible();
+  await expect(page.getByText("Em construção")).toHaveCount(0);
 });
 
 test("menu do usuário mostra e-mail e sai", async ({ page }) => {

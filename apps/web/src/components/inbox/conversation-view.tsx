@@ -4,7 +4,8 @@ import { formatDaySeparator } from "@flowai/core";
 import type { getConversation, MessageItem } from "@/lib/inbox/queries";
 import type { MemberOption } from "@/lib/crm/queries";
 import type { ActionResult } from "@/lib/action-result";
-import { addInternalNote, assignConversation, closeConversation, reopenConversation, retryMessage, returnToAi, sendReply, takeOver } from "@/lib/inbox/actions";
+import { addInternalNote, assignConversation, clickAutomationButton, closeConversation, reopenConversation, retryMessage, returnToAi, sendReply, takeOver } from "@/lib/inbox/actions";
+import { stopAutomation } from "@/lib/automation/actions";
 import { Button } from "@/components/ui/button";
 import { ConversationHeader } from "./conversation-header";
 import { MessageBubble } from "./message-bubble";
@@ -59,7 +60,7 @@ export function ConversationView({ data, userId, members, canWrite, busy, now, t
     finally { setLoadingOlder(false); }
   }
   return <section role="region" aria-label="Conversa" aria-busy={busy || loadingOlder} className="flex h-full min-h-0 min-w-0 flex-col">
-    <ConversationHeader conversation={conversation} userId={userId} canWrite={canWrite} busy={busy} onBack={onBack} onContact={onContact} onTakeOver={() => { void onAction(() => takeOver(conversation.id)); }} onReturnToAi={() => { void onAction(() => returnToAi(conversation.id)); }} onTransfer={() => setTransfer(true)} onClose={() => { void onAction(() => closeConversation(conversation.id)); }} onReopen={() => { void onAction(() => reopenConversation(conversation.id)); }} />
+    <ConversationHeader conversation={conversation} userId={userId} canWrite={canWrite} busy={busy} onBack={onBack} onContact={onContact} onTakeOver={() => { void onAction(() => takeOver(conversation.id)); }} onReturnToAi={() => { void onAction(() => returnToAi(conversation.id)); }} onTransfer={() => setTransfer(true)} onClose={() => { void onAction(() => closeConversation(conversation.id)); }} onReopen={() => { void onAction(() => reopenConversation(conversation.id)); }} onStopAutomation={() => { void onAction(() => stopAutomation(conversation.id)); }} />
     {handoffBanner && <p role="status" data-testid="handoff-banner" className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{handoffBanner}</p>}
     <div ref={scroll} className="min-h-0 flex-1 overflow-y-auto p-4" onScroll={() => {
       const element = scroll.current;
@@ -75,7 +76,7 @@ export function ConversationView({ data, userId, members, canWrite, busy, now, t
       <div role="log" aria-label="Histórico de mensagens" aria-live="polite" className="space-y-3">{messages.map((message, index) => {
         const day = formatDaySeparator(message.createdAt, new Date(now), timezone);
         const previousDay = index > 0 ? formatDaySeparator(messages[index - 1]!.createdAt, new Date(now), timezone) : null;
-        return <Fragment key={message.id}>{day !== previousDay && <p className="py-2 text-center text-xs text-muted-foreground">{day}</p>}<MessageBubble message={message} userId={userId} timezone={timezone} canWrite={canWrite} busy={busy} onRetry={(id) => { void onAction(() => retryMessage(id)); }} /></Fragment>;
+        return <Fragment key={message.id}>{day !== previousDay && <p className="py-2 text-center text-xs text-muted-foreground">{day}</p>}<MessageBubble message={message} userId={userId} timezone={timezone} canWrite={canWrite} channelType={conversation.channel.type} busy={busy} onRetry={(id) => { void onAction(() => retryMessage(id)); }} onOptionClick={(id, option) => { void onAction(() => clickAutomationButton(id, option)); }} /></Fragment>;
       })}</div>
     </div>
     {!atBottom && lastId !== seenId && <div className="flex justify-center pb-2"><Button size="sm" variant="secondary" onClick={() => { setAtBottom(true); if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; setSeenId(lastId); }}>Novas mensagens ↓</Button></div>}

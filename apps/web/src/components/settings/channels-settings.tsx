@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { SimulateForm } from "@/components/inbox/simulate-dialog";
 import { createSimulatorChannel, setSimulatorActive } from "@/lib/inbox/channel-actions";
 import type { ChannelRow } from "@/lib/inbox/queries";
-import type { InstagramConnectionView, InstagramRuleView } from "@/lib/instagram/queries";
+import type { InstagramConnectionView } from "@/lib/instagram/queries";
 import { InstagramSettings } from "./instagram/instagram-settings";
 
-export function ChannelsSettings({ channels, instagram }: { channels: ChannelRow[]; instagram: { connections: InstagramConnectionView[]; rules: InstagramRuleView[] } }) {
+export function ChannelsSettings({ channels, instagram }: { channels: ChannelRow[]; instagram: { connections: InstagramConnectionView[] } }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export function ChannelsSettings({ channels, instagram }: { channels: ChannelRow
         )}
       </section>
 
-      <InstagramSettings connections={instagram.connections} rules={instagram.rules} />
+      <InstagramSettings connections={instagram.connections} />
       <section aria-labelledby="social-heading" className="space-y-2 rounded-lg border p-4">
         <h2 id="social-heading" className="text-lg font-medium">
           WhatsApp

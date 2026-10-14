@@ -2,6 +2,7 @@ import { z } from "zod";
 import { type ChannelType, type InboxTab } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { listMembers } from "@/lib/crm/queries";
+import type { ConversationAutomation } from "@/lib/inbox/automation-display";
 
 export type ChannelRow = {
   id: string;
@@ -50,7 +51,8 @@ export type MessageItem = {
   status: "pending" | "sent" | "delivered" | "read" | "failed";
   error: string | null;
   createdAt: string;
-  context?: { origin?: string; storyId?: string; commentId?: string };
+  /** `automation` vem de mensagens da automação (botões e respostas rápidas exibidos sob a bolha). */
+  context?: { origin?: string; storyId?: string; commentId?: string; automation?: unknown };
 };
 
 export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInboundAt" | "channel"> & {
@@ -58,13 +60,16 @@ export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInb
   /** Última mensagem recebida do contato (abre a janela de 24h do Instagram). */
   lastInboundAt: string | null;
   closedAt: string | null;
-  /** Código da transferência feita pela IA (rótulo em HANDOFF_LABELS). */
+  /** Código da transferência feita pela IA ou pela automação (rótulo em HANDOFF_LABELS). */
   handoffReason: string | null;
+  /** Execução ligada à conversa (qualquer status; o aviso só aparece para execuções ativas). */
+  automation: ConversationAutomation | null;
 };
 
 const CONVERSATION_COLUMNS =
   "id, status, handled_by, assigned_to, last_message_at, last_read_at, closed_at, handoff_reason, " +
-  "contacts(id, name, phone, email), channels(id, type, name)";
+  "contacts(id, name, phone, email), channels(id, type, name), " +
+  "automation_runs!conversations_automation_run_fk(id, status, automations(name))";
 
 type ConversationRow = {
   id: string;
@@ -77,6 +82,7 @@ type ConversationRow = {
   handoff_reason: string | null;
   contacts: { id: string; name: string | null; phone: string | null; email: string | null } | null;
   channels: { id: string; type: ChannelType; name: string } | null;
+  automation_runs: { id: string; status: string; automations: { name: string } | null } | null;
 };
 
 /** The timestamp is kept verbatim: Date would discard PostgreSQL microseconds. */
@@ -190,6 +196,9 @@ export async function getConversation(
       lastReadAt: r.last_read_at,
       closedAt: r.closed_at,
       handoffReason: r.handoff_reason,
+      automation: r.automation_runs
+        ? { runId: r.automation_runs.id, status: r.automation_runs.status, name: r.automation_runs.automations?.name ?? "Automação" }
+        : null,
       lastInboundAt: inbound[0]?.created_at ?? null,
     },
     messages,

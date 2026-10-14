@@ -56,6 +56,22 @@ describe("Instagram Send API", () => {
     expect(await p.sendPrivateReply("c1", "Seu guia")).toEqual({ externalId: "out2", recipientId: "9001" });
     expect(body).toEqual({ recipient: { comment_id: "c1" }, message: { text: "Seu guia" } });
   });
+  it("sends a private reply template unchanged to comment_id", async () => {
+    let body: unknown;
+    const p = provider(async (_input, init) => { body = JSON.parse(String(init?.body)); return Response.json({ recipient_id: "9001", message_id: "out2" }); });
+    const message = { attachment: { type: "template", payload: { template_type: "button", text: "Quer seu guia?", buttons: [{ type: "postback", title: "Quero", payload: "signed-a1" }] } } };
+    expect(await p.sendPrivateReply("c1", "Fallback", message)).toEqual({ externalId: "out2", recipientId: "9001" });
+    expect(body).toEqual({ recipient: { comment_id: "c1" }, message });
+  });
+  it("validates private reply body text and UTF-8 limit before sending", async () => {
+    let calls = 0;
+    const p = provider(async () => { calls++; return Response.json({ recipient_id: "9001", message_id: "out2" }); });
+    for (const message of [{ text: "á".repeat(501) }, { attachment: { payload: { text: "á".repeat(501) } } }, { quick_replies: [] }]) {
+      await expect(p.sendPrivateReply("c1", "Curto", message)).rejects.toMatchObject({ code: "invalid_content", certainty: "rejected" });
+    }
+    expect(calls).toBe(0);
+    await expect(p.sendPrivateReply("c1", "á".repeat(501), { text: "á".repeat(500) })).resolves.toEqual({ externalId: "out2", recipientId: "9001" });
+  });
   it("enforces 1000 UTF-8 bytes rather than 1000 characters before making a request", async () => {
     let calls = 0;
     const p = provider(async () => { calls++; return Response.json({ message_id: "out1" }); });
@@ -88,5 +104,58 @@ describe("Instagram Send API", () => {
     const p = provider(async (input) => { url = String(input); return Response.json({ name: "Cliente", username: "cliente" }); });
     expect(await p.getContact("9001")).toEqual({ name: "Cliente" });
     expect(url).toBe("https://graph.instagram.com/v26.0/9001?fields=name%2Cusername");
+  });
+});
+
+describe("Instagram buttons and quick replies", () => {
+  const postback = (extra: Record<string, unknown> = {}, sender = "9001") => ({ object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, messaging: [{ sender: { id: sender }, recipient: { id: sender === "9001" ? "178414000000001" : "9001" }, timestamp: 1791806400000, postback: { mid: "pb1", title: "Quero", payload: "signed.payload", ...extra } }] }] });
+  it("parses a quick reply as a message keeping its text and payload", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m9", text: "Sim", quick_reply: { payload: "signed.q" } }))).toEqual([{ kind: "message", accountId: "178414000000001", externalId: "m9", senderExternalId: "9001", senderName: null, text: "Sim", occurredAt: "2026-10-12T12:00:00.000Z", context: { origin: "quick_reply", payload: "signed.q" } }]);
+  });
+  it("parses a postback as a button event", () => {
+    expect(parseInstagramEvents(postback())).toEqual([{ kind: "button", accountId: "178414000000001", externalId: "pb1", senderExternalId: "9001", title: "Quero", payload: "signed.payload", occurredAt: "2026-10-12T12:00:00.000Z" }]);
+  });
+  it("derives an external id when the postback has no mid", () => {
+    expect(parseInstagramEvents(postback({ mid: undefined }))[0]).toMatchObject({ kind: "button", externalId: "postback:1791806400000:9001" });
+  });
+  it("ignores flagged echo postbacks", () => {
+    expect(parseInstagramEvents(postback({ is_echo: true }, "178414000000001"))[0]).toMatchObject({ kind: "ignored", reason: "echo" });
+    expect(parseInstagramEvents(postback({ is_echo: true }))[0]).toMatchObject({ kind: "ignored" });
+  });
+  it("rejects a postback without payload", () => {
+    expect(() => parseInstagramEvents(postback({ payload: "" }))).toThrow();
+  });
+  it("sends the instagram body verbatim", async () => {
+    let body: unknown;
+    const p = new InstagramProvider({ accountId: "178414000000001", accessToken: "t", apiVersion: "v26.0", fetch: async (_i, init) => { body = JSON.parse(String(init?.body)); return Response.json({ message_id: "out9" }); }, now });
+    const message = { text: "Quer?", quick_replies: [{ content_type: "text", title: "Sim", payload: "p" }] };
+    await p.sendMessage({ externalId: "9001" }, { text: "Quer?", instagram: message });
+    expect(body).toEqual({ recipient: { id: "9001" }, message });
+  });
+});
+
+describe("Instagram buttons: validation", () => {
+  const withMessaging = (m: Record<string, unknown>) => ({ object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, messaging: [{ timestamp: 1791806400000, ...m }] }] });
+  const prov = (fetcher: typeof fetch) => new InstagramProvider({ accountId: "178414000000001", accessToken: "t", apiVersion: "v26.0", fetch: fetcher, now });
+  it("throws for a postback to a different recipient", () => {
+    expect(() => parseInstagramEvents(withMessaging({ sender: { id: "9001" }, recipient: { id: "other" }, postback: { mid: "p", title: "Q", payload: "x" } }))).toThrow("Invalid Instagram postback recipient");
+  });
+  it("throws for a non-echo postback sent by the account itself", () => {
+    expect(() => parseInstagramEvents(withMessaging({ sender: { id: "178414000000001" }, recipient: { id: "9001" }, postback: { mid: "p", title: "Q", payload: "x" } }))).toThrow();
+  });
+  it("throws for a quick reply to a wrong recipient", () => {
+    expect(() => parseInstagramEvents(withMessaging({ sender: { id: "9001" }, recipient: { id: "other" }, message: { mid: "m", text: "Sim", quick_reply: { payload: "p" } } }))).toThrow("Invalid Instagram message recipient");
+  });
+  it("uses a fallback text for a quick reply without text", () => {
+    expect(parseInstagramEvents(inbound({ mid: "m", quick_reply: { payload: "p" } }))[0]).toMatchObject({ kind: "message", text: "[Resposta rápida]", context: { origin: "quick_reply" } });
+  });
+  it("validates the text inside the instagram body, not content.text", async () => {
+    let calls = 0;
+    const p = prov(async () => { calls++; return Response.json({ message_id: "o" }); });
+    await expect(p.sendMessage({ externalId: "9001" }, { text: "curto", instagram: { text: "á".repeat(501) } })).rejects.toMatchObject({ code: "invalid_content" });
+    await expect(p.sendMessage({ externalId: "9001" }, { text: "curto", instagram: { attachment: { type: "template", payload: { template_type: "button", text: "á".repeat(501), buttons: [] } } } })).rejects.toMatchObject({ code: "invalid_content" });
+    await expect(p.sendMessage({ externalId: "9001" }, { text: "curto", instagram: { quick_replies: [] } })).rejects.toMatchObject({ code: "invalid_content" });
+    expect(calls).toBe(0);
+    await expect(p.sendMessage({ externalId: "9001" }, { text: "á".repeat(501), instagram: { text: "ok" } })).resolves.toEqual({ externalId: "o" });
   });
 });

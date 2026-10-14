@@ -34,6 +34,7 @@ describe("decideHandoff", () => {
   });
   it("labels", () => {
     expect(HANDOFF_LABELS.window_closed).toBe("Fora da janela de 24h do Instagram");
+    expect(HANDOFF_LABELS.automation).toBe("Automação transferiu para atendimento humano");
   });
   it("reply present but factCheck missing fails closed", () => {
     expect(decideHandoff({ ...base, factCheck: null })).toMatchObject({ handoff: true, reason: "ai_failure" });

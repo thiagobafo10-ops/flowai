@@ -3,8 +3,10 @@ import { instagramEnvelopeSchema } from "./schemas.ts";
 import type { InstagramEvent, InstagramMessageContext } from "./types.ts";
 
 const identity = z.object({ id: z.string().min(1).max(100) });
-const messagingSchema = z.object({ sender: identity, recipient: identity, timestamp: z.number(), message: z.record(z.string(), z.unknown()).optional(), read: z.object({ mid: z.string().min(1) }).optional() }).passthrough();
-const messageSchema = z.object({ mid: z.string().min(1).max(1024), text: z.string().max(4096).optional(), is_echo: z.boolean().optional(), is_self: z.boolean().optional(), is_deleted: z.boolean().optional(), is_unsupported: z.boolean().optional(), attachments: z.array(z.object({ type: z.string().max(100) }).passthrough()).optional(), reply_to: z.object({ story: z.object({ id: z.string().optional() }).passthrough().optional() }).passthrough().optional() }).passthrough();
+const messagingSchema = z.object({ sender: identity, recipient: identity, timestamp: z.number(), message: z.record(z.string(), z.unknown()).optional(), read: z.object({ mid: z.string().min(1) }).optional(), postback: z.record(z.string(), z.unknown()).optional() }).passthrough();
+const postbackSchema = z.object({ mid: z.string().min(1).max(1024).optional(), title: z.string().max(1000), payload: z.string().min(1).max(2000), is_echo: z.boolean().optional(), is_self: z.boolean().optional() }).passthrough();
+const quickReplySchema = z.object({ payload: z.string().min(1).max(2000) }).passthrough();
+const messageSchema = z.object({ mid: z.string().min(1).max(1024), text: z.string().max(4096).optional(), is_echo: z.boolean().optional(), is_self: z.boolean().optional(), is_deleted: z.boolean().optional(), is_unsupported: z.boolean().optional(), quick_reply: quickReplySchema.optional(), attachments: z.array(z.object({ type: z.string().max(100) }).passthrough()).optional(), reply_to: z.object({ story: z.object({ id: z.string().optional() }).passthrough().optional() }).passthrough().optional() }).passthrough();
 const changeSchema = z.object({ field: z.string(), value: z.unknown() });
 const commentSchema = z.object({ id: z.string().min(1).max(1024), from: z.object({ id: z.string().min(1).max(100), username: z.string().max(255).optional() }), text: z.string().max(4096).optional(), media: z.object({ id: z.string().min(1).max(100), media_product_type: z.string().optional() }) });
 
@@ -31,11 +33,21 @@ export function parseInstagramEvents(raw: unknown): InstagramEvent[] {
         if (event.recipient.id !== entry.id || event.sender.id === entry.id) throw new Error("Invalid Instagram message recipient");
         const attachment = message.attachments?.[0];
         let context: InstagramMessageContext = { origin: "direct" };
-        if (message.reply_to?.story) context = { origin: "story_reply", ...(message.reply_to.story.id ? { storyId: message.reply_to.story.id } : {}) };
+        if (message.quick_reply) context = { origin: "quick_reply", payload: message.quick_reply.payload };
+        else if (message.reply_to?.story) context = { origin: "story_reply", ...(message.reply_to.story.id ? { storyId: message.reply_to.story.id } : {}) };
         else if (attachment?.type === "story_mention") context = { origin: "story_mention", attachmentType: attachment.type };
         else if (attachment) context = { origin: "attachment", attachmentType: attachment.type };
-        const text = message.text?.trim() ? message.text : context.origin === "story_mention" ? "[Menção em story]" : message.is_unsupported ? "[Conteúdo não suportado]" : "[Mídia recebida]";
+        const text = message.text?.trim() ? message.text : context.origin === "story_mention" ? "[Menção em story]" : context.origin === "quick_reply" ? "[Resposta rápida]" : message.is_unsupported ? "[Conteúdo não suportado]" : "[Mídia recebida]";
         events.push({ ...base, kind: "message", externalId: message.mid, senderExternalId: event.sender.id, senderName: null, text, context });
+      } else if (event.postback) {
+        const postback = postbackSchema.parse(event.postback);
+        const externalId = postback.mid ?? `postback:${event.timestamp}:${event.sender.id}`;
+        if (postback.is_echo || postback.is_self) {
+          events.push({ ...base, kind: "ignored", externalId, reason: "echo" });
+          continue;
+        }
+        if (event.recipient.id !== entry.id || event.sender.id === entry.id) throw new Error("Invalid Instagram postback recipient");
+        events.push({ ...base, kind: "button", externalId, senderExternalId: event.sender.id, title: postback.title, payload: postback.payload });
       } else if (event.read) {
         if (event.recipient.id !== entry.id) throw new Error("Invalid Instagram receipt recipient");
         events.push({ ...base, kind: "status", externalId: `${event.read.mid}:read:${event.timestamp}`, messageExternalId: event.read.mid, state: "read" });

@@ -57,6 +57,7 @@ vi.mock("@/lib/supabase/server", () => ({
     rpc: async (...args: unknown[]) => {
       state.logs.push(args);
       if (args[0] === "return_to_ai" && state.returnError) return { data: null, error: state.returnError };
+      if ((args[0] === "click_automation_button" || args[0] === "stop_automation") && state.returnError) return { data: null, error: state.returnError };
       if (args[0] === "create_instagram_send_intent" && state.intentError) return { data: null, error: state.intentError };
       return {
         data: args[0] === "create_instagram_send_intent" ? "00000000-0000-4000-8000-000000000003" : null,
@@ -113,7 +114,8 @@ vi.mock("@/lib/supabase/server", () => ({
     }
   })
 }));
-import { takeOver, closeConversation, reopenConversation, sendReply, addInternalNote, markRead, returnToAi } from "./actions";
+import { takeOver, closeConversation, reopenConversation, sendReply, addInternalNote, markRead, returnToAi, clickAutomationButton } from "./actions";
+import { stopAutomation } from "@/lib/automation/actions";
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {
@@ -232,4 +234,38 @@ test("returnToAi maps 42501 and unexpected errors", async () => {
 test("returnToAi rejects an invalid id without calling the RPC", async () => {
   expect(await returnToAi("nope")).toEqual({ ok: false, error: "Esta conversa não existe mais." });
   expect(state.logs).toEqual([]);
+});
+const MSG = "00000000-0000-4000-8000-000000000004";
+test("clickAutomationButton calls the RPC for agents", async () => {
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: true, data: undefined });
+  expect(state.logs).toContainEqual(["click_automation_button", { p_message_id: MSG, p_option_id: "a1" }]);
+});
+test("clickAutomationButton blocks viewers and malformed input without calling the RPC", async () => {
+  state.role = "viewer";
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
+  state.role = "agent";
+  expect(await clickAutomationButton("nope", "a1")).toEqual({ ok: false, error: "Este botão não está mais disponível." });
+  expect(await clickAutomationButton(MSG, "A B")).toEqual({ ok: false, error: "Este botão não está mais disponível." });
+  expect(state.logs).toEqual([]);
+});
+test("clickAutomationButton maps server errors to Portuguese copy", async () => {
+  state.returnError = { code: "22023", message: "not_waiting" };
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Este botão não está mais disponível." });
+  state.returnError = { code: "22023", message: "unknown_option" };
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Este botão não está mais disponível." });
+  state.returnError = { code: "22023", message: "not_simulator" };
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Só é possível clicar nos botões em conversas do Simulador." });
+  state.returnError = { code: "42501", message: "forbidden" };
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
+  state.returnError = { code: "XX000", message: "boom" };
+  expect(await clickAutomationButton(MSG, "a1")).toEqual({ ok: false, error: "Não foi possível concluir. Tente novamente." });
+});
+test("stopAutomation (Parar automação) works for agents and maps errors", async () => {
+  expect(await stopAutomation(CONV)).toEqual({ ok: true, data: undefined });
+  expect(state.logs).toContainEqual(["stop_automation", { p_conversation: CONV }]);
+  state.returnError = { code: "42501", message: "forbidden" };
+  expect(await stopAutomation(CONV)).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
+  state.returnError = null;
+  state.role = "viewer";
+  expect(await stopAutomation(CONV)).toEqual({ ok: false, error: "Você não tem permissão para esta ação." });
 });

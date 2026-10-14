@@ -86,11 +86,10 @@ select is((select actor_id from public.audit_logs where action = 'channels.inser
 
 -- automation insert (admin via API)
 select tests.authenticate_as(:'uadmin');
-insert into public.automations (id, organization_id, name, trigger_type)
-  values ('00000000-0000-0000-0000-0000000a0701', :'org', 'Auto', 'contact_created');
+select public.save_automation(:'org', null, 'Auto', 'contact_created', '{}', '{"nodes":[],"edges":[]}') as auto_id \gset
 select tests.clear_authentication();
 select is((select (count(*), min(actor_id::text), min(organization_id::text))::text from public.audit_logs
-  where action = 'automations.insert' and entity_id = '00000000-0000-0000-0000-0000000a0701'),
+  where action = 'automations.insert' and entity_id = :'auto_id'),
   format('(1,%s,%s)', :'uadmin', :'org'), 'insert de automação gera um audit com ator e org');
 
 -- ai_agents update

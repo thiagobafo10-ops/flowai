@@ -1,4 +1,8 @@
 /** Test-only local proxy. Real Auth/REST/RLS; Graph boundary is injected here. */
+import { createOpenAIProvider } from "../_shared/openai.ts";
+import { createFakeOpenAIFetch } from "./fake-openai.ts";
+import { DbError, handleAutomationWorker, type AppliedStep, type PreparedRun, type RunClaim } from "../automation-worker/handler.ts";
+import type { KnowledgeHit } from "../../../packages/core/src/ai/index.ts";
 import { createAuthorize } from "../_shared/auth.ts";
 import { createMetaRepository } from "../_shared/meta-repository.ts";
 import { handleMetaConnection } from "../meta-connection/handler.ts";
@@ -15,7 +19,11 @@ const repo = createMetaRepository(url, service, fetch);
 const authorize = createAuthorize(url, anon, fetch);
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const response = await fetch(`${url}/rest/v1/rpc/${name}`, { method: "POST", headers, body: JSON.stringify(args) });
-  if (!response.ok) throw new Error(`Test RPC failed: ${name}`);
+  if (!response.ok) {
+    let code: string | null = null;
+    try { const body = await response.json(); if (typeof body?.code === "string") code = body.code; } catch { /* no payload in errors */ }
+    throw new DbError(code);
+  }
   const text = await response.text(); return (text ? JSON.parse(text) : undefined) as T;
 }
 const graphCalls: { accountId: string; body: unknown }[] = [];
@@ -37,7 +45,7 @@ const graphFetch: typeof fetch = async (input, init) => {
     return Response.json({ message_id: `e2e-out-${crypto.randomUUID()}`, recipient_id: recipientId });
   }
   if (endpoint.searchParams.get("fields") === "name,username") return Response.json({ name: "Cliente Instagram", username: "cliente_ig" });
-  if (endpoint.searchParams.get("fields") === "id,owner") return Response.json({ id: resource, owner: { id: token } });
+  if (endpoint.searchParams.get("fields") === "id,owner") return Response.json({ id: resource, owner: { id: resource === "80099" ? "foreign-account" : token } });
   const response = await fetch(`${url}/rest/v1/instagram_events?kind=eq.comment&external_id=eq.${encodeURIComponent(resource)}&select=payload,created_at`, { headers });
   const [event] = await response.json();
   return event ? Response.json({ id: resource, timestamp: event.created_at, from: { id: event.payload.senderExternalId }, media: { id: event.payload.mediaId, media_product_type: "REELS" } }) : Response.json({ error: { code: 100 } }, { status: 404 });
@@ -59,7 +67,25 @@ const workerDeps = {
   finishWork: (id: number, state: string, error: string | null) => rpc<void>("finish_instagram_work", { p_queue_id: id, p_state: state, p_error_code: error }),
 };
 
-Deno.serve({ hostname: "127.0.0.1", port: 54326 }, async (request) => {
+const fakeFetch = createFakeOpenAIFetch();
+const provider = createOpenAIProvider({ apiKey: "e2e-fake", chatModel: "gpt-4.1-mini", fetch: fakeFetch });
+const automationDeps = {
+  ...sendDeps,
+  readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_automation_worker_config", {}))?.workerSecret ?? null,
+  claimRuns: (limit: number) => rpc<RunClaim[]>("claim_automation_runs", { p_limit: limit }),
+  prepareRun: (run: string, token: string) => rpc<PreparedRun>("prepare_automation_run", { p_run: run, p_token: token }),
+  buttonPayloads: (run: string, token: string, node: string) => rpc<Record<string, string>>("automation_button_payloads", { p_run: run, p_token: token, p_node_id: node }),
+  applyStep: (run: string, token: string, step: unknown) => rpc<AppliedStep>("apply_automation_step", { p_run: run, p_token: token, p_step: step }),
+  failRun: (run: string, token: string, code: string, retryable: boolean) => rpc<void>("fail_automation_run", { p_run: run, p_token: token, p_code: code, p_retryable: retryable }),
+  yieldRun: (run: string, token: string) => rpc<void>("yield_automation_run", { p_run: run, p_token: token }),
+  searchKnowledge: async (org: string, embedding: number[]): Promise<KnowledgeHit[]> => {
+    const rows = await rpc<{ id: string; document_title: string; content: string; similarity: number }[]>("match_knowledge_chunks", { p_org: org, p_embedding: "[" + embedding.join(",") + "]", p_k: 5, p_min_similarity: 0.3 });
+    return rows.map((row) => ({ id: row.id, documentTitle: row.document_title, content: row.content, similarity: row.similarity }));
+  },
+  claimSend: sendDeps.claim, provider, chatModel: "gpt-4.1-mini",
+};
+
+Deno.serve({ hostname: "127.0.0.1", port: Number(Deno.env.get("FLOWAI_E2E_PROXY_PORT") ?? "54328") }, async (request) => {
   const parsed = new URL(request.url);
   if (request.headers.get("upgrade") === "websocket") {
     const { socket, response } = Deno.upgradeWebSocket(request);
@@ -72,6 +98,13 @@ Deno.serve({ hostname: "127.0.0.1", port: 54326 }, async (request) => {
     upstream.onclose = () => { if (socket.readyState === WebSocket.OPEN) socket.close(); };
     return response;
   }
+  if (parsed.pathname === "/__test__/openai-calls") return Response.json(fakeFetch.calls.map((call) => ({ path: call.path })));
+  if (parsed.pathname === "/__test__/run-automation-worker") {
+    const secret = await automationDeps.readWorkerSecret();
+    return handleAutomationWorker(new Request("http://local/worker", { method: "POST", headers: { "x-flowai-worker": secret ?? "" } }), automationDeps);
+  }
+  if (parsed.pathname === "/functions/v1/automation-worker") return handleAutomationWorker(request, automationDeps);
+  if (parsed.pathname === "/functions/v1/instagram-worker") return handleInstagramWorker(request, workerDeps);
   if (parsed.pathname === "/__test__/graph-calls") return Response.json(graphCalls);
   if (parsed.pathname === "/__test__/run-worker") {
     const secret = await workerDeps.readWorkerSecret();

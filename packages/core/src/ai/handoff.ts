@@ -4,7 +4,11 @@ export type HandoffReason =
   | "needs_human" | "no_knowledge" | "unverified_fact" | "injection" | "quota_exceeded"
   | "not_configured" | "ai_failure" | "window_closed" | "reply_too_long";
 
-export const HANDOFF_LABELS: Record<HandoffReason, string> = {
+/** Motivos gravados em conversations.handoff_reason: os da IA e o da automação (bloco "Transferir para humano"). */
+export type ConversationHandoffReason = HandoffReason | "automation";
+
+export const HANDOFF_LABELS: Record<ConversationHandoffReason, string> = {
+  automation: "Automação transferiu para atendimento humano",
   needs_human: "Cliente precisa de atendimento humano",
   no_knowledge: "IA sem informação na base de conhecimento",
   unverified_fact: "IA citou um valor que não está na base",

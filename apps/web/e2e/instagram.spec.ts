@@ -2,23 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 import { newEmail, signUpWithOrg } from "./support/auth";
 import { gotoReady } from "./support/nav";
 import { clearRateLimits, psql } from "./support/local-db";
-import { confirmWebhook, connectionFor, runInstagramWorker, sendInstagramComment, sendInstagramEvent } from "./support/instagram";
+import { confirmWebhook, connectionFor, runInstagramWorker, sendInstagramComment, sendInstagramEvent, connectInstagram, INSTAGRAM_TEST_URL } from "./support/instagram";
+
+import { authorComment, drainAutomationRuns, selectNode } from "./support/automation";
 
 test.beforeEach(() => clearRateLimits());
 async function connect(page: Page, email: string) {
   await signUpWithOrg(page, email, "Instagram E2E");
-  await gotoReady(page, "/configuracoes/canais");
-  await page.getByLabel("Nome do canal Instagram").fill("Minha conta");
-  const account = String(Date.now());
-  await page.getByLabel("ID do app Meta", { exact: true }).fill(account + "1");
-  await page.getByLabel("ID da conta profissional", { exact: true }).fill(account);
-  await page.getByLabel("Versão da Graph API", { exact: true }).fill("v26.0");
-  await page.getByLabel("App Secret", { exact: true }).fill("e2e-app-secret");
-  await page.getByLabel("Access Token", { exact: true }).fill(`e2e-account-${account}`);
-  await page.getByRole("button", { name: "Salvar conexão Instagram" }).click();
-  await expect(page.getByTestId("instagram-connection")).toBeVisible();
-  await page.getByRole("button", { name: "Testar conexão Instagram" }).click();
-  await expect(page.getByText("Token verificado", { exact: true })).toBeVisible();
+  await connectInstagram(page);
 }
 test("Instagram: conexão separa token e webhook e apaga segredos do formulário", async ({ page }) => {
   const email = newEmail(); await connect(page, email);
@@ -66,39 +57,46 @@ test("Instagram: fora da janela de 24h o composer só permite nota interna", asy
 });
 test("Instagram: palavra-chave acentuada gera uma resposta privada única", async ({ page }) => {
   const email = newEmail(); await connect(page, email); await confirmWebhook(email); await page.reload();
-  await page.getByLabel("Palavra-chave", { exact: true }).fill("preço");
-  await page.getByLabel("Resposta no Direct", { exact: true }).fill("Aqui está seu guia");
-  await page.getByRole("button", { name: "Salvar regra" }).click();
-  const rule = page.getByTestId("instagram-rule"); await expect(rule).toContainText("Desativada");
-  await expect(page.getByText(/mais antiga ativa/)).toBeVisible();
-  await rule.getByRole("button", { name: "Ativar regra" }).click(); await expect(rule.getByText("Ativa", { exact: true })).toBeVisible();
-  const id = String(Date.now()); await sendInstagramComment(email, id, "QUERO PRECO!"); await runInstagramWorker();
-  await sendInstagramComment(email, id, "QUERO PRECO!"); await runInstagramWorker();
+  await expect(page.getByText("As regras de comentário agora são automações.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Gerenciar em Automações" })).toHaveAttribute("href", "/automacoes");
+  await authorComment(page, "preço", "Aqui está seu guia");
+  const id = String(Date.now()); await sendInstagramComment(email, id, "QUERO PRECO!"); await drainAutomationRuns(email, true);
+  await sendInstagramComment(email, id, "QUERO PRECO!"); await drainAutomationRuns(email, true);
   const c = connectionFor(email);
   expect(Number(psql(`select count(*) from public.messages where channel_id='${c.channelId}' and content='Aqui está seu guia' and sender_type='automation'`))).toBe(1);
+  const calls = await (await fetch(`${INSTAGRAM_TEST_URL}/__test__/graph-calls`)).json();
+  expect(calls.filter((call: { body: { recipient: { comment_id?: string } } }) => call.body.recipient.comment_id === id)).toHaveLength(1);
 });
-test("Instagram: desativar regra antes do worker descarta resposta antiga", async ({ page }) => {
-  const email = newEmail(); await connect(page, email); await confirmWebhook(email); await page.reload();
-  await page.getByLabel("Palavra-chave", { exact: true }).fill("guia"); await page.getByLabel("Resposta no Direct", { exact: true }).fill("Não enviar depois de desativar");
-  await page.getByRole("button", { name: "Salvar regra" }).click(); const rule=page.getByTestId("instagram-rule");
-  await rule.getByRole("button", { name: "Ativar regra" }).click(); await expect(rule.getByText("Ativa", { exact: true })).toBeVisible();
-  await sendInstagramComment(email, String(Date.now()), "guia"); await rule.getByRole("button", { name: "Desativar regra" }).click(); await expect(rule).toContainText("Desativada");
-  await runInstagramWorker(); const c=connectionFor(email);
+test("Instagram: pausar automação antes do worker descarta resposta antiga", async ({ page }) => {
+  const email = newEmail(); await connect(page, email); await confirmWebhook(email);
+  await authorComment(page, "guia", "Não enviar depois de pausar");
+  await sendInstagramComment(email, String(Date.now()), "guia");
+  await page.getByRole("button", { name: "Pausar", exact: true }).click();
+  await expect(page.locator("header").getByText("Pausada", { exact: true })).toBeVisible();
+  await drainAutomationRuns(email, true); const c = connectionFor(email);
   expect(Number(psql(`select count(*) from public.messages where channel_id='${c.channelId}' and sender_type='automation'`))).toBe(0);
 });
-test("Instagram: regra de post próprio pode ser desligada mesmo com token expirado", async ({ page }) => {
-  const email = newEmail(); await connect(page, email); await confirmWebhook(email); await page.reload();
-  await page.getByLabel("Palavra-chave", { exact: true }).fill("post");
-  await page.getByLabel("Resposta no Direct", { exact: true }).fill("Resposta de post específico");
-  await page.getByLabel("Aplicar regra em", { exact: true }).selectOption("post");
-  await page.getByLabel("ID do post ou Reel", { exact: true }).fill("80001");
-  await page.getByRole("button", { name: "Salvar regra" }).click();
-  const rule = page.getByTestId("instagram-rule"); await expect(rule).toContainText("Post/Reel 80001");
-  await rule.getByRole("button", { name: "Ativar regra" }).click(); await expect(rule.getByText("Ativa", { exact: true })).toBeVisible();
+test("Instagram: automação de post próprio pausa mesmo com token expirado", async ({ page }) => {
+  const email = newEmail(); await connect(page, email); await confirmWebhook(email);
+  const automation = await authorComment(page, "post", "Resposta de post específico");
   const c = connectionFor(email);
+  // Ownership is checked by the worker before the first private reply.
+  const foreign = String(Date.now());
+  await sendInstagramComment(email, foreign, "post", "80099");
+  await drainAutomationRuns(email, true);
+  expect(psql(`select last_error from public.instagram_events where channel_id='${c.channelId}' and external_id='${foreign}'`)).toBe("media_not_owned");
+  expect(Number(psql(`select count(*) from public.instagram_send_intents where channel_id='${c.channelId}' and state='sent'`))).toBe(0);
+  await selectNode(page, "trigger");
+  await page.getByLabel("ID da publicação (opcional)").fill("80001");
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
+  await expect(page.getByText("Automação salva.").first()).toBeVisible();
+  const owned = String(Date.now());
+  await sendInstagramComment(email, owned, "post"); await drainAutomationRuns(email, true);
+  expect(Number(psql(`select count(*) from public.instagram_send_intents where channel_id='${c.channelId}' and state='sent'`))).toBe(1);
   psql(`select vault.update_secret(access_token_secret_id,'expired-token') from public.channels where id='${c.channelId}'; select public.set_meta_connection_verification('${c.id}','token',false,'invalid_token',1)`);
-  await page.reload();
+  await gotoReady(page, "/configuracoes/canais");
   await expect(page.getByTestId("instagram-connection").getByRole("alert")).toHaveText("O token do Instagram é inválido ou expirou. Atualize as credenciais.");
-  await rule.getByRole("button", { name: "Desativar regra" }).click();
-  await expect(rule.getByText("Desativada", { exact: true })).toBeVisible();
+  await gotoReady(page, `/automacoes/${automation}`);
+  await page.getByRole("button", { name: "Pausar", exact: true }).click();
+  await expect(page.locator("header").getByText("Pausada", { exact: true })).toBeVisible();
 });

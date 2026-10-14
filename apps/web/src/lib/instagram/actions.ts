@@ -1,6 +1,6 @@
 "use server";
 import { z } from "zod";
-import { instagramTextSchema, instagramVersionSchema, instagramIdSchema } from "@flowai/core";
+import { instagramVersionSchema, instagramIdSchema } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org/active-org";
 import type { ActionResult } from "@/lib/action-result";
@@ -54,28 +54,14 @@ export async function revealInstagramVerifyToken(id: string): Promise<ActionResu
   const result = await invoke(c, { action: "reveal_verify_token", connectionId: id });
   return result.ok && typeof result.data.verifyToken === "string" ? { ok: true, data: { token: result.data.verifyToken } } : result.ok ? { ok: false, error: "Não foi possível obter o verify token." } : result;
 }
-const ruleSchema = z.object({ id: z.uuid().optional(), channelId: z.uuid(), keyword: z.string().trim().min(1).max(100), replyText: instagramTextSchema, mediaId: instagramIdSchema.nullable(), active: z.boolean() });
+// A tela de Canais não chama mais estas ações (regras de comentário viraram automações); elas continuam
+// respondendo com o aviso para clientes antigos ainda abertos.
+const RULES_MOVED = "As regras de comentário agora são automações.";
 export async function saveCommentRule(input: unknown): Promise<ActionResult> {
-  const c = await admin(); if (!c) return { ok: false, error: FORBIDDEN };
-  const parsed = ruleSchema.safeParse(input); if (!parsed.success) return { ok: false, error: "Preencha a palavra-chave e uma resposta com até 1.000 bytes." };
-  const { data: channel } = await c.db.from("channels").select("id,meta_connection_id").eq("organization_id", c.orgId).eq("id", parsed.data.channelId).eq("type", "instagram").maybeSingle();
-  if (!channel?.meta_connection_id) return { ok: false, error: FORBIDDEN };
-  let disablingUnchangedMedia = false;
-  if (parsed.data.id && !parsed.data.active) {
-    const { data: original } = await c.db.from("instagram_comment_rules").select("media_id,channel_id").eq("organization_id", c.orgId).eq("id", parsed.data.id).maybeSingle();
-    disablingUnchangedMedia = original?.channel_id === channel.id && original.media_id === parsed.data.mediaId;
-  }
-  if (parsed.data.mediaId && !disablingUnchangedMedia) {
-    const verified = await invoke(c, { action: "validate_media", connectionId: channel.meta_connection_id, channelId: channel.id, mediaId: parsed.data.mediaId });
-    if (!verified.ok) return verified;
-  }
-  const { error } = await c.db.rpc("save_instagram_comment_rule", { p_input: parsed.data });
-  return error ? { ok: false, error: error.code === "42501" ? FORBIDDEN : "Não foi possível salvar. Confira o canal e o post selecionado." } : { ok: true, data: undefined };
+  void input;
+  return { ok: false, error: RULES_MOVED };
 }
 export async function setCommentRuleActive(id: string, active: boolean): Promise<ActionResult> {
-  const c = await admin(); if (!c) return { ok: false, error: FORBIDDEN };
-  if (!z.uuid().safeParse(id).success || typeof active !== "boolean") return { ok: false, error: "Regra inválida." };
-  const { data: rule } = await c.db.from("instagram_comment_rules").select("id,channel_id,keyword,reply_text,media_id").eq("organization_id", c.orgId).eq("id", id).maybeSingle();
-  if (!rule) return { ok: false, error: FORBIDDEN };
-  return saveCommentRule({ id: rule.id, channelId: rule.channel_id, keyword: rule.keyword, replyText: rule.reply_text, mediaId: rule.media_id, active });
+  void id; void active;
+  return { ok: false, error: RULES_MOVED };
 }

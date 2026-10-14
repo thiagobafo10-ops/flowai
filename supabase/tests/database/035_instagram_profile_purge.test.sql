@@ -1,4 +1,23 @@
 begin;
+-- Authenticated automation authoring fixture (no privileged write bypass).
+create function pg_temp.save_comment_automation(p_input jsonb) returns uuid
+language plpgsql as $$
+declare org uuid; aid uuid; t uuid:=gen_random_uuid(); m uuid:=gen_random_uuid(); e uuid:=gen_random_uuid();
+begin
+  select organization_id into org from public.channels where id=(p_input->>'channelId')::uuid;
+  aid:=public.save_automation(org,(p_input->>'id')::uuid,'Comentário','instagram_comment',
+    jsonb_build_object('channelId',p_input->>'channelId','mediaId',p_input->>'mediaId',
+      'keywords',jsonb_build_array(p_input->>'keyword'),'mode','contains'),
+    jsonb_build_object('nodes',jsonb_build_array(
+      jsonb_build_object('id',t,'type','trigger','config','{}'::jsonb),
+      jsonb_build_object('id',m,'type','message','config',jsonb_build_object('mode','text','text',p_input->>'replyText')),
+      jsonb_build_object('id',e,'type','end','config','{}'::jsonb)),
+      'edges',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'source',t,'target',m,'sourceHandle','default'),
+        jsonb_build_object('id',gen_random_uuid(),'source',m,'target',e,'sourceHandle','default'))));
+  if (p_input->>'active')::boolean then perform public.activate_automation(aid);
+  else perform public.pause_automation(aid); end if;
+  return aid;
+end $$;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
 select tests.create_user('owner35@t.test','Owner') as ua \gset
@@ -32,7 +51,7 @@ select is((select count(*)::int from pgmq.q_instagram_work where message->>'task
 
 -- Item 10: comentário ignorado encerra o intent pendente.
 select tests.authenticate_as(:'ua');
-select public.save_instagram_comment_rule(jsonb_build_object('channelId',:'chan','keyword','guia','replyText','Aqui','active',true));
+select pg_temp.save_comment_automation(jsonb_build_object('channelId',:'chan','keyword','guia','replyText','Aqui','active',true));
 select tests.clear_authentication();
 select (public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78935','externalId','c35','commentId','c35','mediaId','80035','senderExternalId','936','senderName','Ana','text','guia','occurredAt',now()))->>'eventId') as cev \gset
 select public.prepare_instagram_comment_send(:'cev');

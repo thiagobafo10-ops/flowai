@@ -14,20 +14,21 @@ insert into public.instagram_comment_rules(id,organization_id,channel_id,keyword
   ('00000000-0000-4000-8000-000000003402',:'oa',:'chan','guia','Resposta R2',true,now()-interval '1 hour',now()-interval '1 hour'),
   ('00000000-0000-4000-8000-000000003403',:'oa',:'chan','futuro','Resposta R3',true,now()-interval '3 hours',now()+interval '1 hour'),
   ('00000000-0000-4000-8000-000000003404',:'oa',:'chan','futuro','Resposta R4',true,now()-interval '1 hour',now()-interval '1 hour');
+select private.migrate_instagram_comment_rules();
 
 select ok(not has_function_privilege('authenticated','public.reselect_instagram_comment_rule(uuid,timestamptz)','execute'), 'reseleção é só de serviço');
 -- Ingestão: regra mais antiga cuja vigência começou até o recebimento.
 select (public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78934','externalId','c34b','commentId','c34b','mediaId','80034','senderExternalId','934','text','futuro','occurredAt',now()))->>'eventId') as ev_future \gset
-select is((select rule_id from public.instagram_events where id=:'ev_future'), '00000000-0000-4000-8000-000000003404'::uuid, 'regra com vigência futura não é escolhida na ingestão');
+select is((select automation_id from public.instagram_events where id=:'ev_future'), '00000000-0000-4000-8000-000000003404'::uuid, 'automação com vigência futura não é escolhida na ingestão');
 select (public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78934','externalId','c34','commentId','c34','mediaId','80034','senderExternalId','934','text','quero o guia','occurredAt',now()))->>'eventId') as ev \gset
-select is((select rule_id from public.instagram_events where id=:'ev'), '00000000-0000-4000-8000-000000003401'::uuid, 'ingestão escolhe a regra mais antiga vigente');
+select is((select automation_id from public.instagram_events where id=:'ev'), '00000000-0000-4000-8000-000000003402'::uuid, 'ingestão escolhe a ativação mais antiga vigente');
 select public.prepare_instagram_comment_send(:'ev');
-select is((select text from public.instagram_send_intents where event_id=:'ev'), 'Resposta R1', 'intent nasce com a regra escolhida');
+select is((select text from public.instagram_send_intents where event_id=:'ev'), 'Resposta R2', 'intent nasce com a automação escolhida');
 
 -- Worker: o comentário real é de 30 min atrás, antes da reativação de R1 → cai para R2.
 select public.reselect_instagram_comment_rule(:'ev', now()-interval '30 minutes') as reselected \gset
 select is((:'reselected'::jsonb->>'state'), 'pending', 'reseleção devolve trabalho preparado');
-select is((select rule_id from public.instagram_events where id=:'ev'), '00000000-0000-4000-8000-000000003402'::uuid, 'evento passa para a próxima regra elegível');
+select is((select automation_id from public.instagram_events where id=:'ev'), '00000000-0000-4000-8000-000000003402'::uuid, 'evento preserva a automação elegível ao horário real');
 select is((select text from public.instagram_send_intents where event_id=:'ev'), 'Resposta R2', 'intent usa a resposta da nova regra');
 select ok((:'reselected'::jsonb->>'ruleEffectiveAt')::timestamptz <= now()-interval '30 minutes', 'nova vigência cobre o comentário');
 -- Comentário anterior a todas as regras: nenhuma elegível.

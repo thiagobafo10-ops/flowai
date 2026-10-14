@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeBrazilianPhone } from "@flowai/core";
+import { DEFAULT_GRANTS } from "../../../../scripts/lib/default-grants.mjs";
 
 // Apenas para e2e: acessa o Postgres do Supabase LOCAL via docker exec.
 const DB_CONTAINER = "supabase_db_flowai";
@@ -67,6 +68,14 @@ export function countAuditLogins(email: string): number {
          and a.entity_type = 'user' and a.entity_id = u.id`,
     ),
   );
+}
+
+/**
+ * Idempotente: garante os grants padrão que breakMembershipsRead/breakDashboardRpc revogam.
+ * Uma execução interrompida pode pular o finally da fixture; o globalSetup restaura no início.
+ */
+export function ensureDefaultGrants(): void {
+  psql(DEFAULT_GRANTS);
 }
 
 /** Simula falha do banco na leitura de memberships (somente Supabase local). */
