@@ -68,15 +68,59 @@ describe("validateGraph", () => {
         edge("tag", "au"),
         edge("rt", "ms"),
         edge("au", "d"),
-        edge("ms", "d"),
+        edge("ms", "ha"),
         edge("d", "w"),
         edge("w", "cc"),
-        edge("cc", "ha"),
-        edge("ha", "e"),
-        edge("hh", "e"),
+        edge("cc", "e"),
       ],
     };
     expect(validateGraph(g, generic, refs)).toEqual([]);
+  });
+
+  describe("blocos terminais", () => {
+    it("transferências não têm saída: conexão a partir delas é extra_handle", () => {
+      for (const type of ["handoff_ai", "handoff_human"] as const) {
+        const g: AutomationGraph = { nodes: [node("t", "trigger"), node("h", type), node("e", "end")], edges: [edge("t", "h"), edge("h", "e")] };
+        expect(validateGraph(g, generic, refs)).toEqual([expect.objectContaining({ code: "extra_handle", nodeId: "h" })]);
+        const ok: AutomationGraph = { nodes: [node("t", "trigger"), node("h", type)], edges: [edge("t", "h")] };
+        expect(validateGraph(ok, generic, refs)).toEqual([]);
+      }
+    });
+
+    it("after_close: nada além do Fim depois de encerrar a conversa", () => {
+      const g: AutomationGraph = {
+        nodes: [node("t", "trigger"), node("cc", "close_conversation"), node("tag", "tag", { tagId: TAG }), node("e", "end")],
+        edges: [edge("t", "cc"), edge("cc", "tag"), edge("tag", "e")],
+      };
+      expect(validateGraph(g, generic, refs)).toEqual([
+        { nodeId: "cc", code: "after_close", message: "Nada é executado depois de fechar a conversa." },
+      ]);
+      const ok: AutomationGraph = { nodes: [node("t", "trigger"), node("cc", "close_conversation"), node("e", "end")], edges: [edge("t", "cc"), edge("cc", "e")] };
+      expect(validateGraph(ok, generic, refs)).toEqual([]);
+    });
+  });
+
+  describe("button_text_too_long_instagram", () => {
+    const buttons = (s: string, kind: "path" | "url" = "path"): AutomationGraph => ({
+      nodes: [
+        node("t", "trigger"),
+        node("m", "message", text({ text: s, buttons: [kind === "path" ? { id: "a", title: "Sim", kind } : { id: "a", title: "Site", kind, url: "https://x.com" }] })),
+        node("e", "end"),
+      ],
+      edges: kind === "path" ? [edge("t", "m"), edge("m", "e", "opt:a"), edge("m", "e", "no_reply")] : [edge("t", "m"), edge("m", "e")],
+    });
+    it("mensagem com botões no Instagram aceita até 640 caracteres", () => {
+      expect(codes(buttons("a".repeat(640)), story)).toEqual([]);
+      expect(validateGraph(buttons("a".repeat(641)), story, refs)).toEqual([
+        { nodeId: "m", code: "button_text_too_long_instagram", message: "Mensagens com botões no Instagram aceitam até 640 caracteres. Encurte o texto." },
+      ]);
+      expect(codes(buttons("é".repeat(641), "url"), story)).toContain("button_text_too_long_instagram");
+    });
+    it("não se aplica sem botões nem fora do Instagram", () => {
+      expect(codes(buttons("a".repeat(700)))).toEqual([]);
+      const plain: AutomationGraph = { nodes: [node("t", "trigger"), node("m", "message", text({ text: "a".repeat(700) })), node("e", "end")], edges: [edge("t", "m"), edge("m", "e")] };
+      expect(codes(plain, story)).toEqual([]);
+    });
   });
 
   it("no_trigger", () => {
@@ -391,5 +435,8 @@ describe("requiredHandles", () => {
     expect(requiredHandles(node("e", "end"))).toEqual([]);
     expect(requiredHandles(node("t", "trigger"))).toEqual(["default"]);
     expect(requiredHandles(node("d", "delay", { minutes: 1 }))).toEqual(["default"]);
+    expect(requiredHandles(node("ha", "handoff_ai"))).toEqual([]);
+    expect(requiredHandles(node("hh", "handoff_human"))).toEqual([]);
+    expect(requiredHandles(node("cc", "close_conversation"))).toEqual(["default"]);
   });
 });

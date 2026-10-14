@@ -5,6 +5,7 @@ import {
   type NodeType,
   type TriggerType,
 } from "./schemas.ts";
+import { INSTAGRAM_BUTTON_TEXT_MAX } from "./instagram.ts";
 
 export type GraphRefs = { tagIds: string[]; stageIds: string[]; userIds: string[]; channelIds: string[] };
 export type GraphIssue = { nodeId: string | null; code: string; message: string };
@@ -50,7 +51,8 @@ function messageOptions(config: unknown): { text: string | null; pathIds: string
 
 export function requiredHandles(node: GraphNode): string[] {
   if (node.type === "condition") return ["true", "false"];
-  if (node.type === "end") return [];
+  // Fim e transferências são terminais: a execução termina neles e o editor não mostra saída.
+  if (node.type === "end" || node.type === "handoff_ai" || node.type === "handoff_human") return [];
   if (node.type === "message") {
     if (isRecord(node.config) && node.config.mode === "ai") return ["sent", "handoff"];
     const opts = messageOptions(node.config);
@@ -214,7 +216,20 @@ export function validateGraph(
         if (instagram && c.mode === "text" && encoder.encode(c.text as string).length > INSTAGRAM_MAX_BYTES) {
           add(n.id, "message_too_long_instagram", "A mensagem passa de 1000 bytes, o limite do Instagram. Encurte o texto.");
         }
+        if (instagram && c.mode === "text" && Array.isArray(c.buttons) && c.buttons.length > 0
+          && [...(c.text as string)].length > INSTAGRAM_BUTTON_TEXT_MAX) {
+          add(n.id, "button_text_too_long_instagram", "Mensagens com botões no Instagram aceitam até 640 caracteres. Encurte o texto.");
+        }
         break;
+    }
+  }
+
+  // Encerrar a conversa termina a execução: só o Fim pode vir depois.
+  for (const n of graph.nodes) {
+    if (n.type !== "close_conversation") continue;
+    const after = walk(targetsOf(n.id));
+    if ([...after].some((id) => byId.get(id)!.type !== "end")) {
+      add(n.id, "after_close", "Nada é executado depois de fechar a conversa.");
     }
   }
 

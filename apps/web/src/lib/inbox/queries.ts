@@ -60,7 +60,7 @@ export type ConversationDetail = Omit<ConversationListItem, "preview" | "lastInb
   /** Última mensagem recebida do contato (abre a janela de 24h do Instagram). */
   lastInboundAt: string | null;
   closedAt: string | null;
-  /** Código da transferência feita pela IA (rótulo em HANDOFF_LABELS). */
+  /** Código da transferência feita pela IA ou pela automação (rótulo em HANDOFF_LABELS). */
   handoffReason: string | null;
   /** Execução ligada à conversa (qualquer status; o aviso só aparece para execuções ativas). */
   automation: ConversationAutomation | null;

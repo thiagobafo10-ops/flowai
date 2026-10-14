@@ -14,6 +14,9 @@ test("handoff banner uses the label, falls back to the raw code and hides withou
   expect(handoffBannerText("novo_codigo")).toBe("Transferida pela IA: novo_codigo");
   expect(handoffBannerText(null)).toBeNull();
 });
+test("automation handoff banner names the automation, not the AI", () => {
+  expect(handoffBannerText("automation")).toBe("Automação transferiu para atendimento humano");
+});
 test("return-to-AI button visibility matrix", () => {
   for (const canWrite of [true, false]) for (const status of ["open", "pending_human", "closed"] as const) for (const handledBy of ["human", "ai"] as const) {
     expect(canReturnToAi({ canWrite, status, handledBy })).toBe(canWrite && status !== "closed" && handledBy === "human");

@@ -38,6 +38,13 @@ describe("automationTemplates", () => {
     expect(t.graph.nodes.find((n) => n.id === silent.target)!.type).toBe("end");
   });
 
+  it("qualify_buttons ends at the human handoff (terminal block without outputs)", () => {
+    const t = automationTemplates.find((x) => x.key === "qualify_buttons")!;
+    const handoff = t.graph.nodes.find((n) => n.type === "handoff_human")!;
+    expect(t.graph.edges.filter((e) => e.source === handoff.id)).toEqual([]);
+    expect(t.graph.edges.some((e) => e.target === handoff.id)).toBe(true);
+  });
+
   it("uses fixed v4-shaped placeholder UUIDs", () => {
     for (const id of Object.values(TEMPLATE_PLACEHOLDER)) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });

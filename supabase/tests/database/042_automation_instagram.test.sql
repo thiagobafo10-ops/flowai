@@ -46,9 +46,14 @@ select is(private.automation_verify_payload(:'quickbody'::jsonb#>>'{quick_replie
 select tests.authenticate_as(:'ua');
 select public.pause_automation(:'auto');
 select tests.clear_authentication();
+-- 000009: a paused automation never sends a queued private reply (Phase 5 parity)
+select is(public.claim_instagram_send(:'intent'),'null'::jsonb,'paused flow does not claim queued private reply');
+select tests.authenticate_as(:'ua');
+select public.activate_automation(:'auto');
+select tests.clear_authentication();
 select public.claim_instagram_send(:'intent') as claim \gset
 select (select automation_run_id from public.instagram_send_intents where id=:'intent') as run \gset
-select is((select version from public.automation_runs where id=:'run'),1,'paused flow claims frozen version');
+select is((select version from public.automation_runs where id=:'run'),1,'reactivated flow claims frozen version');
 select is((select resume_at from public.automation_runs where id=:'run'),null::timestamptz,'unconfirmed first send is parked');
 select is((select output->>'result' from public.automation_run_steps where run_id=:'run'),'private_reply_pending','unconfirmed send not recorded as sent');
 select is(public.claim_instagram_send(:'intent'),'null'::jsonb,'private reply cannot be claimed twice');
@@ -62,8 +67,10 @@ select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','butto
 select is((select input from public.automation_runs where id=:'run'),null::jsonb,'forged payload cannot resume');
 select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','wrongsender42','senderExternalId','946','title','Sim','payload',:'payload','occurredAt',now()))->>'state','ignored','valid payload from wrong sender ignored');
 select is((select count(*)::int from public.contacts where organization_id=:'oa' and instagram_id='946'),0,'rejected click creates no contact');
-select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','wrongnode42','senderExternalId','944','title','Sim','payload',private.automation_payload(:'run',gen_random_uuid(),'yes'),'occurredAt',now()))->>'state','ignored','valid signature for wrong node ignored');
-select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','wrongoption42','senderExternalId','944','title','Sim','payload',private.automation_payload(:'run',:'node','absent'),'occurredAt',now()))->>'state','ignored','valid signature for nonexistent option ignored');
+select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','wrongnode42','senderExternalId','944','title','Sim','payload',private.automation_payload(:'run',gen_random_uuid(),'yes'),'occurredAt',now()))->>'state','done','000009: authentic signature for wrong node becomes plain text');
+select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','wrongoption42','senderExternalId','944','title','Sim','payload',private.automation_payload(:'run',:'node','absent'),'occurredAt',now()))->>'state','done','000009: authentic signature for nonexistent option becomes plain text');
+select is((select count(*)::int from public.messages where external_id in ('wrongnode42','wrongoption42') and not context ? 'payload'),2,'stale authentic clicks stored without payload');
+select is((select input from public.automation_runs where id=:'run'),null::jsonb,'stale authentic clicks never resume by title');
 select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','resume42','senderExternalId','944','title','Sim','payload',:'payload','occurredAt',now())) as resumed \gset
 select is((select input->>'optionId' from public.automation_runs where id=:'run'),'yes','signed postback resumes with option');
 select is(public.ingest_instagram_event(:'conn',jsonb_build_object('kind','button','accountId','78942','externalId','resume42','senderExternalId','944','title','DUP','payload',:'payload','occurredAt',now())),:'resumed'::jsonb,'signed postback duplicate ignored');
@@ -152,9 +159,9 @@ select pg_temp.comment_intent(:'conn','scopeB42','952') as bi \gset
 select public.claim_instagram_send(:'bi') as bc \gset
 select public.complete_instagram_send(:'bi',jsonb_build_object('claimToken',:'bc'::jsonb->>'claimToken','state','sent','externalId','privateScopeB42','recipientId','952'));
 select (select automation_run_id from public.instagram_send_intents where id=:'bi') as brun \gset
-select is(public.ingest_inbound_message(:'chan','stale7arg42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'7-arg stale A payload rejected while B waits');
+select isnt(public.ingest_inbound_message(:'chan','stale7arg42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'000009: 7-arg stale A payload becomes plain text while B waits');
 select is((select input from public.automation_runs where id=:'brun'),null::jsonb,'stale signed A title does not resume B');
-select is((select count(*)::int from public.messages where external_id='stale7arg42'),0,'rejected stale context creates no inbound');
+select is((select count(*)::int from public.messages where external_id='stale7arg42' and not context ? 'payload'),1,'stale context stored once, without payload');
 select is(public.ingest_inbound_message(:'chan','forged7arg42','952',null,'Sim',now(),'{"origin":"quick_reply","payload":"forged"}'),null::uuid,'7-arg forged quick-reply title rejected');
 select is((select input from public.automation_runs where id=:'brun'),null::jsonb,'forged context does not resume B');
 insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,external_id,context)
@@ -173,12 +180,15 @@ insert into public.automations(organization_id,name,status,trigger_type,trigger_
  values(:'oa','Other flow','active','keyword_detected','{"keywords":["Sim"],"mode":"equals"}',1,now()) returning id as otherflow \gset
 insert into public.automation_versions(organization_id,automation_id,version,trigger_type,trigger_config,graph)
  values(:'oa',:'otherflow',1,'keyword_detected','{"keywords":["Sim"],"mode":"equals"}','{"nodes":[{"id":"00000000-0000-4000-8000-000000004251","type":"trigger","config":{}}],"edges":[]}');
-select is(public.ingest_inbound_message(:'chan','staleNoRun42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'stale context with no waiting run is ignored');
-select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),0,'stale context cannot trigger another keyword flow');
-select is((select count(*)::int from public.ai_jobs where conversation_id=:'scopeconv'),0,'stale context cannot enqueue AI');
+select isnt(public.ingest_inbound_message(:'chan','staleNoRun42','952',null,'Sim',now(),jsonb_build_object('origin','button','payload',:'spayload')),null::uuid,'000009: stale context with no waiting run is ordinary text');
+select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),1,'ordinary text may start a keyword flow');
+select is((select count(*)::int from public.ai_jobs where conversation_id=:'scopeconv'),0,'the started flow keeps priority over AI');
+select tests.authenticate_as(:'ua');
+select public.stop_automation(:'scopeconv');
+select tests.clear_authentication();
 insert into public.messages(organization_id,conversation_id,channel_id,direction,sender_type,content,status,external_id,context)
  values(:'oa',:'scopeconv',:'chan','inbound','contact','Sim','delivered','rawForged42','{"origin":"button","payload":"forged"}');
-select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),0,'shared trigger cannot dispatch keyword flow for invalid supplied context');
+select is((select count(*)::int from public.automation_runs where automation_id=:'otherflow'),1,'shared trigger cannot dispatch keyword flow for invalid supplied context');
 select is((select count(*)::int from public.ai_jobs where conversation_id=:'scopeconv'),0,'AI trigger independently ignores invalid supplied context');
 insert into public.automations(organization_id,name,status,trigger_type,current_version,activated_at)
  values(:'oa','Contact flow','active','contact_created',1,now()) returning id as contactflow \gset

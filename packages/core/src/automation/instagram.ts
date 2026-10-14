@@ -6,6 +6,8 @@ export type OutboundButtons = {
 };
 
 const MAX_BYTES = 1000;
+/** Limite da Meta para o texto do template de botões (caracteres). */
+export const INSTAGRAM_BUTTON_TEXT_MAX = 640;
 const MAX_BUTTONS = 3;
 const MAX_QUICK_REPLIES = 13;
 const MAX_TITLE = 20;
@@ -51,7 +53,7 @@ export function toInstagramMessage(text: string, opts: OutboundButtons): Record<
     };
   }
   if (buttons.length) {
-    if (buttons.length > MAX_BUTTONS) invalid();
+    if (buttons.length > MAX_BUTTONS || [...text].length > INSTAGRAM_BUTTON_TEXT_MAX) invalid();
     return {
       attachment: {
         type: "template",

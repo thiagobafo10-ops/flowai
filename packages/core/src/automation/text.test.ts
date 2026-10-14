@@ -10,9 +10,22 @@ describe("matchKeyword", () => {
     expect(matchKeyword("  Promoção ", ["promocao"], "equals")).toBe(true);
     expect(matchKeyword("promoção já", ["promocao"], "equals")).toBe(false);
   });
-  it("equals não ignora pontuação e contains é por substring", () => {
+  it("equals não ignora pontuação e contains é por palavra inteira", () => {
     expect(matchKeyword("Promoção!", ["promocao"], "equals")).toBe(false);
-    expect(matchKeyword("superpromocao", ["promocao"], "contains")).toBe(true);
+    expect(matchKeyword("superpromocao", ["promocao"], "contains")).toBe(false);
+  });
+  it("contains respeita limites de palavra, como as regras da Fase 5", () => {
+    expect(matchKeyword("assim não", ["sim"], "contains")).toBe(false);
+    expect(matchKeyword("Sim, quero", ["sim"], "contains")).toBe(true);
+    expect(matchKeyword("me segue no linkedin", ["link"], "contains")).toBe(false);
+    expect(matchKeyword("manda o link!", ["link"], "contains")).toBe(true);
+    expect(matchKeyword("quero_link", ["link"], "contains")).toBe(false);
+    expect(matchKeyword("assim, sim", ["sim"], "contains")).toBe(true);
+  });
+  it("contains casa frases inteiras nos limites", () => {
+    expect(matchKeyword("Olá, QUERO   o Link agora", ["quero o link"], "contains")).toBe(true);
+    expect(matchKeyword("quero o linkedin", ["quero o link"], "contains")).toBe(false);
+    expect(matchKeyword("requero o link", ["quero o link"], "contains")).toBe(false);
   });
   it("starts_with", () => {
     expect(matchKeyword("Cupom 10", ["cupom"], "starts_with")).toBe(true);

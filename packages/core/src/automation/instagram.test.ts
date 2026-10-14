@@ -65,6 +65,12 @@ describe("toInstagramMessage limits", () => {
     expect(() => toInstagramMessage("x", { buttons: [{ id: "a", title: "x".repeat(21), kind: "path" }], payloads: { a: "p" } })).toThrow("invalid_content");
     expect(() => toInstagramMessage("x", { quickReplies: [{ id: "a", title: "x".repeat(20) }], payloads: { a: "p" } })).not.toThrow();
   });
+  it("limits button template text to 640 characters (quick replies keep the 1000-byte limit)", () => {
+    const b = [{ id: "a", title: "A", kind: "path" as const }];
+    expect(() => toInstagramMessage("x".repeat(641), { buttons: b, payloads: { a: "p" } })).toThrow("invalid_content");
+    expect(() => toInstagramMessage("x".repeat(640), { buttons: b, payloads: { a: "p" } })).not.toThrow();
+    expect(() => toInstagramMessage("x".repeat(641), { quickReplies: [{ id: "a", title: "A" }], payloads: { a: "p" } })).not.toThrow();
+  });
   it("rejects buttons together with quick replies", () => {
     expect(() => toInstagramMessage("x", { buttons: [{ id: "a", title: "A", kind: "path" }], quickReplies: [{ id: "b", title: "B" }], payloads: ok.payloads })).toThrow("invalid_content");
   });

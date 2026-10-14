@@ -40,13 +40,13 @@ describe("updateNodeConfig", () => {
     const config = { ...(ask.data.config as Record<string, unknown>), quickReplies: [{ id: "sim", title: "Sim" }] };
     const next = updateNodeConfig(nodes, edges, "ask", config);
     expect(next.nodes.find((n) => n.id === "ask")!.data.config).toEqual(config);
-    expect(next.edges.map((e) => e.id)).toEqual(["e1", "e2", "e4", "e5", "e6", "e7"]);
+    expect(next.edges.map((e) => e.id)).toEqual(["e1", "e2", "e4", "e5", "e6"]);
   });
 
   test("trocar a mensagem para IA remove as saídas de opção e de sem resposta", () => {
     const { nodes, edges } = toFlow(template("qualify_buttons").graph);
     const next = updateNodeConfig(nodes, edges, "ask", { mode: "ai" });
-    expect(next.edges.map((e) => e.id)).toEqual(["e1", "e5", "e6", "e7"]);
+    expect(next.edges.map((e) => e.id)).toEqual(["e1", "e5", "e6"]);
   });
 });
 
@@ -77,6 +77,8 @@ describe("nodeHandles", () => {
     ]);
     expect(nodeHandles({ id: "d", type: "delay", config: { minutes: 5 }, position })).toEqual([{ id: "default", label: "" }]);
     expect(nodeHandles({ id: "e", type: "end", config: {}, position })).toEqual([]);
+    expect(nodeHandles({ id: "h", type: "handoff_human", config: {}, position })).toEqual([]);
+    expect(nodeHandles({ id: "a", type: "handoff_ai", config: {}, position })).toEqual([]);
     expect(nodeHandles({ id: "q", type: "message", config: { mode: "text", text: "Oi", quickReplies: [{ id: "x1", title: " " }] }, position })[0]).toEqual({
       id: "opt:x1",
       label: "Sem título",

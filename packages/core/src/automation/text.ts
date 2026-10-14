@@ -10,13 +10,26 @@ export function normalizeText(s: string): string {
     .trim();
 }
 
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+
+/** `k` aparece em `t` como palavra/frase inteira (mesma regra de instagram_keyword_matches da Fase 5). */
+function containsWhole(t: string, k: string): boolean {
+  for (let at = t.indexOf(k); at !== -1; at = t.indexOf(k, at + 1)) {
+    const before = at === 0 ? "" : t[at - 1]!;
+    const after = t[at + k.length] ?? "";
+    if (!WORD_CHAR.test(before) && !WORD_CHAR.test(after)) return true;
+  }
+  return false;
+}
+
+/** contains = palavra ou frase inteira; equals = texto inteiro; starts_with = prefixo. Sem maiúsculas/acentos. */
 export function matchKeyword(text: string, keywords: string[], mode: KeywordMode): boolean {
   const t = normalizeText(text);
   if (!t) return false;
   for (const raw of keywords) {
     const k = normalizeText(raw);
     if (!k) continue;
-    if (mode === "equals" ? t === k : mode === "starts_with" ? t.startsWith(k) : t.includes(k)) return true;
+    if (mode === "equals" ? t === k : mode === "starts_with" ? t.startsWith(k) : containsWhole(t, k)) return true;
   }
   return false;
 }

@@ -103,7 +103,7 @@ function isTimeout(e: unknown, signal: AbortSignal): boolean {
 export async function postSafeWebhook(
   url: string,
   body: unknown,
-  deps: { fetch: typeof fetch; resolve?: Resolver; timeoutMs?: number },
+  deps: { fetch: typeof fetch; resolve?: Resolver; timeoutMs?: number; headers?: Record<string, string> },
 ): Promise<WebhookResult> {
   let u: URL;
   try { u = new URL(url); } catch { return fail("invalid_url", false); }
@@ -132,7 +132,7 @@ export async function postSafeWebhook(
   try {
     const res = await deps.fetch(u.toString(), {
       method: "POST",
-      headers: { "content-type": "application/json", "user-agent": "FlowAI-Webhook/1" },
+      headers: { ...deps.headers, "content-type": "application/json", "user-agent": "FlowAI-Webhook/1" },
       body: payload,
       redirect: "manual",
       signal,

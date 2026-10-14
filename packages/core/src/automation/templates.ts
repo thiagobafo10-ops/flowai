@@ -107,8 +107,8 @@ const qualifyButtons: AutomationTemplate = {
       },
       { id: "tag", type: "tag", config: { tagId: TEMPLATE_PLACEHOLDER.tagId }, position: pos(-160, 300) },
       { id: "stage", type: "move_stage", config: { stageId: TEMPLATE_PLACEHOLDER.stageId }, position: pos(-160, 440) },
+      // Transferência é terminal (sem saída): a execução termina aqui.
       { id: "handoff", type: "handoff_human", config: {}, position: pos(-160, 580) },
-      { id: "end_done", type: "end", config: {}, position: pos(-160, 720) },
       { id: "end_later", type: "end", config: {}, position: pos(0, 300) },
       { id: "end_silent", type: "end", config: {}, position: pos(160, 300) },
     ],
@@ -119,7 +119,6 @@ const qualifyButtons: AutomationTemplate = {
       { id: "e4", source: "ask", target: "end_silent", sourceHandle: "no_reply" },
       { id: "e5", source: "tag", target: "stage", sourceHandle: "default" },
       { id: "e6", source: "stage", target: "handoff", sourceHandle: "default" },
-      { id: "e7", source: "handoff", target: "end_done", sourceHandle: "default" },
     ],
   },
 };

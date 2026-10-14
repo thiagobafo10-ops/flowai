@@ -63,6 +63,28 @@ describe("presentIssues", () => {
   });
 });
 
+describe("blocos terminais", () => {
+  test("conexão depois de transferir e passos depois de encerrar mostram textos em pt-BR", () => {
+    const graph: AutomationGraph = {
+      nodes: [
+        { id: "t", type: "trigger", config: {}, position },
+        { id: "cc", type: "close_conversation", config: {}, position },
+        { id: "h", type: "handoff_human", config: {}, position },
+        { id: "e", type: "end", config: {}, position },
+      ],
+      edges: [
+        { id: "e1", source: "t", target: "cc", sourceHandle: "default" },
+        { id: "e2", source: "cc", target: "h", sourceHandle: "default" },
+        { id: "e3", source: "h", target: "e", sourceHandle: "default" },
+      ],
+    };
+    expect(present(graph).map((i) => [i.code, i.message])).toEqual(expect.arrayContaining([
+      ["extra_handle", '"Transferir para humano" tem uma conexão em uma saída que não existe mais.'],
+      ["after_close", "Nada é executado depois de fechar a conversa."],
+    ]));
+  });
+});
+
 describe("friendlyMessage", () => {
   test("seleção vazia e número em branco em pt-BR", () => {
     expect(friendlyMessage("Gatilho: Identificador inválido. Informe ao menos uma palavra-chave.")).toBe(

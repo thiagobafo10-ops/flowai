@@ -82,10 +82,15 @@ async function buildStep(run: RunClaim, prepared: Extract<PreparedRun, { action:
       // Do not let the transport formatter turn that documented result into a failure.
       if (new TextEncoder().encode(effect.text).byteLength <= 1000) {
         const payloads = await deps.buttonPayloads(run.runId, run.claimToken, nodeId);
-        effect.instagram = toInstagramMessage(effect.text, { buttons: effect.buttons, quickReplies: effect.quickReplies, payloads });
+        try {
+          effect.instagram = toInstagramMessage(effect.text, { buttons: effect.buttons, quickReplies: effect.quickReplies, payloads });
+        } catch { throw new RunError("invalid_content"); }
       }
     } else if (effect.type === "webhook") {
-      const result = await postSafeWebhook(effect.url, { runId: run.runId, nodeId, organizationId: prepared.organizationId, context: prepared.context }, { fetch: deps.fetch, resolve: deps.resolve });
+      // Same run/node/iteration on a retry: receivers can deduplicate with the Idempotency-Key.
+      const result = await postSafeWebhook(effect.url, { runId: run.runId, nodeId, iteration: prepared.iteration, organizationId: prepared.organizationId, context: prepared.context }, {
+        fetch: deps.fetch, resolve: deps.resolve, headers: { "idempotency-key": `${run.runId}:${nodeId}:${prepared.iteration}` },
+      });
       if (!result.ok) throw new RunError(`webhook_${result.code}`, result.retryable);
       step.handle = "default";
     } else if (effect.type === "ai_message") {
@@ -144,8 +149,10 @@ async function processRun(run: RunClaim, deps: AutomationWorkerDeps, deadline: n
     if (error instanceof DbError && error.code === "42501") {
       log(deps, "claim_lost", { runId: run.runId, code: error.code }); return;
     }
-    const code = error instanceof DbError && error.code === "22023" ? "invalid_step" : error instanceof RunError || error instanceof AIProviderError ? error.code : "worker_error";
-    const retryable = error instanceof RunError || error instanceof AIProviderError ? error.retryable : false;
+    // Deadlock / serialization failure: the transaction rolled back, so the step can be retried as is.
+    const conflict = error instanceof DbError && (error.code === "40P01" || error.code === "40001");
+    const code = conflict ? "db_conflict" : error instanceof DbError && error.code === "22023" ? "invalid_step" : error instanceof RunError || error instanceof AIProviderError ? error.code : "worker_error";
+    const retryable = conflict || (error instanceof RunError || error instanceof AIProviderError ? error.retryable : false);
     log(deps, "run_failed", { runId: run.runId, code });
     try { await deps.failRun(run.runId, run.claimToken, code, retryable); }
     catch (inner) { log(deps, "failure_not_recorded", { runId: run.runId, code: inner instanceof DbError ? inner.code : null }); }

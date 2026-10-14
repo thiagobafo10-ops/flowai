@@ -44,8 +44,9 @@ select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment'
 select tests.authenticate_as(:'ua');
 select pg_temp.save_comment_automation(jsonb_build_object('id',:'rule','channelId',:'chan','keyword','guia','replyText','Changed','active',false));
 select tests.clear_authentication();
-select is(public.prepare_instagram_comment_send((:'evt2'::jsonb->>'eventId')::uuid)->>'state','pending','paused automation preserves frozen ongoing work');
-select is((select text from public.instagram_send_intents where event_id=(:'evt2'::jsonb->>'eventId')::uuid),'Aqui','draft edits preserve old private reply text');
+-- 000009 (Fase 5 parity): pausing the automation discards replies still waiting in the queue
+select is(public.prepare_instagram_comment_send((:'evt2'::jsonb->>'eventId')::uuid),'null'::jsonb,'paused automation discards queued private reply');
+select is((select count(*)::int from public.instagram_send_intents where event_id=(:'evt2'::jsonb->>'eventId')::uuid),0,'no private reply is queued after pausing');
 select ok(not has_function_privilege('authenticated','public.read_instagram_work(integer)','execute'),'user cannot consume queue');
 select public.read_instagram_work(10) as jobs \gset
 select public.finish_instagram_work((:'jobs'::jsonb->0->>'queueId')::bigint,'done',null);

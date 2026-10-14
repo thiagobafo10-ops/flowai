@@ -109,6 +109,26 @@ for (const [label, url, status, failCode, retryable] of [
     if (label === "blocked") assert(fetched === 0);
   });
 }
+Deno.test("webhook body carries iteration and an Idempotency-Key per run/node/iteration", async () => {
+  const f = fixture({ currentNodeId: "w", graph: graph([node("t", "trigger"), node("w", "webhook", { url: "https://example.test/hook" }), node("e", "end")], [edge("t", "w"), edge("w", "e")]) });
+  let body: Record<string, unknown> = {}; let key: string | null = null;
+  f.deps.fetch = async (_url, init) => { body = JSON.parse(String(init?.body)); key = new Headers(init?.headers).get("idempotency-key"); return new Response(null, { status: 204 }); };
+  await handleAutomationWorker(request(), f.deps);
+  assert(body.runId === "run" && body.nodeId === "w" && body.iteration === 2, JSON.stringify(body));
+  assert(key === "run:w:2", String(key));
+});
+for (const code of ["40P01", "40001"]) {
+  Deno.test(`SQLSTATE ${code} (deadlock/serialization) fails retryably`, async () => {
+    const f = fixture(); f.deps.applyStep = async () => { throw new DbError(code); };
+    await handleAutomationWorker(request(), f.deps);
+    assert(f.failures[0]?.code === "db_conflict" && f.failures[0].retryable === true, JSON.stringify(f.failures));
+  });
+}
+Deno.test("Instagram button template over 640 characters fails with a fixed code before applying", async () => {
+  const f = fixture({ graph: graph([node("t", "trigger"), node("m", "message", { mode: "text", text: "a".repeat(641), buttons: [{ id: "a1", title: "Sim", kind: "path" }], replyTimeoutHours: 24 }), node("e", "end")], [edge("t", "m"), edge("m", "e", "opt:a1"), edge("m", "e", "no_reply")]) });
+  await handleAutomationWorker(request(), f.deps);
+  assert(f.steps.length === 0 && f.sends.length === 0 && f.failures[0]?.code === "invalid_content" && !f.failures[0].retryable, JSON.stringify(f.failures));
+});
 function aiGraph() { return graph([node("t", "trigger"), node("m", "message", { mode: "ai" }), node("h", "handoff_human"), node("e", "end")], [edge("t", "m"), edge("m", "e", "sent"), edge("m", "h", "handoff")]); }
 Deno.test("AI sent passes aiReply with knowledge ids", async () => {
   const f = fixture({ graph: aiGraph() }); await handleAutomationWorker(request(), f.deps);
