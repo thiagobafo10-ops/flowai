@@ -1,4 +1,5 @@
 import { AutomationList } from "@/components/automation/automation-list";
+import { AutomationTabs } from "@/components/growth/automation-tabs";
 import { RequireOrg } from "@/components/require-org";
 import { getActiveOrg } from "@/lib/org/active-org";
 
@@ -15,6 +16,7 @@ export default function Page() {
           <h1 className="text-2xl font-semibold">Automações</h1>
           <p className="max-w-prose text-muted-foreground">Fluxos que respondem, etiquetam e transferem conversas automaticamente.</p>
         </div>
+        <AutomationTabs />
         <Content />
       </main>
     </RequireOrg>

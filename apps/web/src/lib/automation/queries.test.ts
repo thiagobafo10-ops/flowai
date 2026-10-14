@@ -54,6 +54,8 @@ test("loadGraphRefs escopa pela organização e escolhe os padrões dos modelos"
     pipelines: [{ id: "p1" }],
     memberships: [{ user_id: "u1" }, { user_id: "u2" }],
     channels: [{ id: "c1" }, { id: "c2" }],
+    sequences: [{ id: "seq1" }],
+    entry_links: [{ id: "link1" }],
     pipeline_stages: [
       { id: "s-won", is_won: true, is_lost: false },
       { id: "s-lost", is_won: false, is_lost: true },
@@ -61,7 +63,7 @@ test("loadGraphRefs escopa pela organização e escolhe os padrões dos modelos"
     ],
   };
   const { refs, defaults } = await loadGraphRefs(fakeClient() as never, "org-1");
-  expect(refs).toEqual({ tagIds: ["t1", "t2"], stageIds: ["s-won", "s-lost", "s-open"], userIds: ["u1", "u2"], channelIds: ["c1", "c2"], sequenceIds: [], entryLinkIds: [] });
+  expect(refs).toEqual({ tagIds: ["t1", "t2"], stageIds: ["s-won", "s-lost", "s-open"], userIds: ["u1", "u2"], channelIds: ["c1", "c2"], sequenceIds: ["seq1"], entryLinkIds: ["link1"] });
   expect(defaults).toEqual({ channelId: "c1", tagId: "t1", stageId: "s-open" });
   for (const call of state.calls) expect(call.filters).toContainEqual(["organization_id", "org-1"]);
   expect(state.calls.find((c) => c.table === "channels")!.filters).toContainEqual(["type", "instagram"]);
@@ -82,6 +84,7 @@ test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela o
     pipeline_stages: [{ id: "s1", name: "Novo" }],
     memberships: [{ user_id: "u1", profiles: { full_name: " Ana " } }, { user_id: "u2", profiles: null }],
     channels: [{ id: "c1", name: "Loja", type: "instagram" }],
+    entry_links: [{ id: "l1", name: "Promoção" }],
   };
   const refs = await loadEditorRefs(fakeClient() as never, "org-1");
   expect(refs).toEqual({
@@ -89,6 +92,7 @@ test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela o
     stages: [{ id: "s1", name: "Novo" }],
     members: [{ id: "u1", name: "Ana" }, { id: "u2", name: "Sem nome" }],
     channels: [{ id: "c1", name: "Loja", type: "instagram" }],
+    entryLinks: [{ id: "l1", name: "Promoção" }],
   });
   for (const call of state.calls) expect(call.filters).toContainEqual(["organization_id", "org-1"]);
   expect(state.calls.find((c) => c.table === "pipelines")!.filters).toContainEqual(["is_default", true]);

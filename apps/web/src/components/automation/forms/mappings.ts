@@ -123,7 +123,7 @@ export function delayToConfig(v: DelayValues): unknown {
 }
 
 // ── Gatilho ────────────────────────────────────────────────────────────
-export type TriggerValues = { firstMessageOnly: boolean; keywords: string[]; mode: string; channelId: string; mediaId: string; tagId: string; stageId: string };
+export type TriggerValues = { firstMessageOnly: boolean; keywords: string[]; mode: string; channelId: string; mediaId: string; tagId: string; stageId: string; linkIds: string[] };
 
 export function triggerToValues(config: unknown): TriggerValues {
   const c = rec(config);
@@ -135,6 +135,7 @@ export function triggerToValues(config: unknown): TriggerValues {
     mediaId: str(c.mediaId),
     tagId: str(c.tagId),
     stageId: str(c.stageId),
+    linkIds: Array.isArray(c.linkIds) ? c.linkIds.filter((id): id is string => typeof id === "string") : [],
   };
 }
 
@@ -154,5 +155,7 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
       return { tagId: v.tagId || null };
     case "stage_changed":
       return { stageId: v.stageId || null };
+    case "entry_link":
+      return { linkIds: v.linkIds ?? [] };
   }
 }

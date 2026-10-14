@@ -81,5 +81,7 @@ export function defaultTriggerConfig(type: TriggerType, firstChannelId: string |
       return { tagId: null };
     case "stage_changed":
       return { stageId: null };
+    case "entry_link":
+      return { linkIds: [] };
   }
 }

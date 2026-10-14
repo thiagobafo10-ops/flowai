@@ -47,13 +47,15 @@ export type RefsBundle = {
 
 /** Referências da organização ativa usadas por `validateGraph` e pelos modelos. */
 export async function loadGraphRefs(supabase: Supabase, orgId: string): Promise<RefsBundle> {
-  const [tags, pipeline, members, channels] = await Promise.all([
+  const [tags, pipeline, members, channels, sequences, links] = await Promise.all([
     supabase.from("tags").select("id").eq("organization_id", orgId).order("created_at"),
     supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("is_default", true).maybeSingle(),
     supabase.from("memberships").select("user_id").eq("organization_id", orgId),
     supabase.from("channels").select("id").eq("organization_id", orgId).eq("type", "instagram").order("created_at"),
+    supabase.from("sequences").select("id").eq("organization_id", orgId),
+    supabase.from("entry_links").select("id").eq("organization_id", orgId),
   ]);
-  for (const r of [tags, pipeline, members, channels]) if (r.error) throw r.error;
+  for (const r of [tags, pipeline, members, channels, sequences, links]) if (r.error) throw r.error;
   let stages: { id: string; is_won: boolean; is_lost: boolean }[] = [];
   if (pipeline.data) {
     const res = await supabase
@@ -73,9 +75,8 @@ export async function loadGraphRefs(supabase: Supabase, orgId: string): Promise<
       stageIds: stages.map((s) => s.id),
       userIds: (members.data ?? []).map((m) => m.user_id),
       channelIds,
-      // Preenchidos de verdade na Tarefa 9.
-      sequenceIds: [],
-      entryLinkIds: [],
+      sequenceIds: (sequences.data ?? []).map((s) => s.id),
+      entryLinkIds: (links.data ?? []).map((l) => l.id),
     },
     defaults: {
       channelId: channelIds[0] ?? null,
@@ -91,17 +92,19 @@ export type EditorRefs = {
   stages: RefOption[];
   members: RefOption[];
   channels: (RefOption & { type: string })[];
+  entryLinks: RefOption[];
 };
 
 /** Opções nomeadas para os seletores do editor (etiquetas, etapas do funil padrão, membros e canais). */
 export async function loadEditorRefs(supabase: Supabase, orgId: string): Promise<EditorRefs> {
-  const [tags, pipeline, members, channels] = await Promise.all([
+  const [tags, pipeline, members, channels, links] = await Promise.all([
     supabase.from("tags").select("id, name").eq("organization_id", orgId).order("name"),
     supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("is_default", true).maybeSingle(),
     supabase.from("memberships").select("user_id, profiles(full_name)").eq("organization_id", orgId),
     supabase.from("channels").select("id, name, type").eq("organization_id", orgId).order("created_at"),
+    supabase.from("entry_links").select("id, name").eq("organization_id", orgId).order("name"),
   ]);
-  for (const r of [tags, pipeline, members, channels]) if (r.error) throw r.error;
+  for (const r of [tags, pipeline, members, channels, links]) if (r.error) throw r.error;
   let stages: RefOption[] = [];
   if (pipeline.data) {
     const res = await supabase
@@ -120,6 +123,7 @@ export async function loadEditorRefs(supabase: Supabase, orgId: string): Promise
       .map((m) => ({ id: m.user_id, name: m.profiles?.full_name?.trim() || "Sem nome" }))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     channels: (channels.data ?? []).map((c) => ({ id: c.id, name: c.name, type: c.type as string })),
+    entryLinks: links.data ?? [],
   };
 }
 

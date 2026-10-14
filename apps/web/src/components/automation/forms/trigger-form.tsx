@@ -84,6 +84,14 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
       );
     case "instagram_story":
       return channelField;
+    case "entry_link":
+      return (
+        <Field id="trigger-links" label="Links de entrada" error={err("linkIds")} hint="Selecione um ou mais links. Use Ctrl ou Command para selecionar vários.">
+          <select id="trigger-links" multiple className={`${selectClass} h-32`} {...invalidProps("trigger-links", err("linkIds"))} {...register("linkIds")}>
+            {refs.entryLinks.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}
+          </select>
+        </Field>
+      );
     case "contact_created":
       return <p className="text-sm text-muted-foreground">Começa quando um contato novo é criado.</p>;
     case "tag_added":
