@@ -70,7 +70,7 @@ async function rpcCalls(file: string): Promise<Call[]> {
 
 const FILES = [
   "automation-worker/index.ts", "ai-worker/index.ts", "ai-playground/index.ts", "instagram-worker/index.ts",
-  "tests/serve-automation-e2e.ts", "tests/serve-ai-e2e.ts",
+  "tests/serve-automation-e2e.ts", "tests/serve-ai-e2e.ts", "_shared/meta-repository.ts",
 ];
 
 Deno.test("rpc argument names match the latest SQL signatures", async () => {

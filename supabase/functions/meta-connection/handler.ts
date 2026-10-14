@@ -4,6 +4,7 @@ import { BodyTooLarge, readLimitedBody } from "../_shared/http.ts";
 
 export type MetaConnectionDeps = { authorize: Authorize; repository: MetaConnectionRepository; fetch: typeof fetch };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const instagramUsername = /^[A-Za-z0-9._]{1,30}$/;
 function json(data: unknown, status = 200): Response { return Response.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
 
 export async function handleMetaConnection(request: Request, deps: MetaConnectionDeps): Promise<Response> {
@@ -64,6 +65,10 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       }
     } catch { errorCode = "provider_unavailable"; }
     await deps.repository.verifyConnection(secrets.connectionId, "token", errorCode === null, errorCode, secrets.generation);
+    // Usuário da conta (link ig.me): melhor esforço; se faltar, o admin informa em Canais.
+    if (errorCode === null && username !== null && instagramUsername.test(username)) {
+      try { await deps.repository.recordInstagramUsername(channel.channelId, username); } catch { /* opcional */ }
+    }
     return errorCode ? json({ error: errorCode }, 422) : json({ verified: true, accountId: channel.accountId, username });
   } catch (error) {
     if (error instanceof RepositoryError) {

@@ -10,6 +10,7 @@ export interface MetaConnectionRepository {
   disconnectConnection(actorId: string, organizationId: string, connectionId: string): Promise<void>;
   verifyMedia(connectionId: string, channelId: string, mediaId: string, generation: number): Promise<void>;
   removeConnection(actorId: string, organizationId: string, connectionId: string): Promise<{ removed: boolean; disconnected: boolean }>;
+  recordInstagramUsername(channelId: string, username: string): Promise<void>;
 }
 export class RepositoryError extends Error {
   /** `hint` carries only fixed, server-defined tokens (e.g. same_organization). */
@@ -32,5 +33,6 @@ export function createMetaRepository(url: string, serviceKey: string, fetcher: t
     disconnectConnection: (actorId, orgId, id) => rpc("disconnect_instagram_connection", { p_actor_id: actorId, p_org_id: orgId, p_connection_id: id }),
     verifyMedia: (connectionId, channelId, mediaId, generation) => rpc("verify_instagram_media", { p_connection_id: connectionId, p_channel_id: channelId, p_media_id: mediaId, p_generation: generation }),
     removeConnection: (actorId, orgId, id) => rpc("remove_instagram_connection", { p_actor_id: actorId, p_org_id: orgId, p_connection_id: id }),
+    recordInstagramUsername: (channelId, username) => rpc("record_instagram_username", { p_channel_id: channelId, p_username: username }),
   };
 }

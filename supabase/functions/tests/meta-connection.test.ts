@@ -17,6 +17,7 @@ function fixture() {
       disconnectConnection: async (...args) => { writes.push(args); },
       verifyMedia: async (...args) => { writes.push(args); },
       removeConnection: async (...args) => { writes.push(["remove", ...args]); return { removed: true, disconnected: false }; },
+      recordInstagramUsername: async (...args) => { writes.push(["username", ...args]); },
     },
     fetch: async (input) => String(input).includes("/me?") ? Response.json({ user_id: "789", username: "empresa" }) : Response.json({ success: true }),
   };
@@ -103,4 +104,28 @@ Deno.test("streamed body without Content-Length is cut at 32 KiB", async () => {
   const body = new ReadableStream<Uint8Array>({ pull(controller) { if (sent++ < 4) controller.enqueue(chunk); else controller.close(); } });
   const request = new Request("http://local/meta-connection", { method: "POST", headers: { Authorization: "Bearer user-jwt" }, body });
   assert((await handleMetaConnection(request, f.deps)).status === 413); assert(sent < 5, "reader stopped before draining the stream");
+});
+Deno.test("verified account stores the Instagram username for the channel", async () => {
+  const f = fixture();
+  const response = await handleMetaConnection(f.request("test"), f.deps);
+  assert(response.status === 200);
+  assert(JSON.stringify(f.writes) === JSON.stringify([[conn, "token", true, null, 1], ["username", "channel", "empresa"]]));
+  assert((await response.json()).username === "empresa");
+});
+Deno.test("missing or invalid username is not stored", async () => {
+  for (const profile of [{ user_id: "789" }, { user_id: "789", username: "não válido" }]) {
+    const f = fixture(); f.deps.fetch = async (input) => String(input).includes("/me?") ? Response.json(profile) : Response.json({ success: true });
+    assert((await handleMetaConnection(f.request("test"), f.deps)).status === 200);
+    assert(!JSON.stringify(f.writes).includes("username"));
+  }
+});
+Deno.test("failed verification does not store the username", async () => {
+  const f = fixture(); f.deps.fetch = async (input) => String(input).includes("/me?") ? Response.json({ user_id: "789", username: "empresa" }) : Response.json({ success: false });
+  assert((await handleMetaConnection(f.request("test"), f.deps)).status === 422);
+  assert(!JSON.stringify(f.writes).includes("username"));
+});
+Deno.test("username storage failure keeps the verification result", async () => {
+  const f = fixture(); f.deps.repository.recordInstagramUsername = async () => { throw new RepositoryError("22023"); };
+  const response = await handleMetaConnection(f.request("test"), f.deps);
+  assert(response.status === 200); assert((await response.json()).verified === true);
 });

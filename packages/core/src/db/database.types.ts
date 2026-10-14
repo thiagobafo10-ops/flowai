@@ -339,16 +339,36 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"channels": {
+                },"campaigns": {
                   Row: {
-                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                    "audience": NonNullable<Json>,"counters": NonNullable<Json>,"created_at": string,"finished_at": string | null,"id": string,"message": NonNullable<Json>,"name": string,"organization_id": string,"scheduled_at": string | null,"started_at": string | null,"status": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "audience"?: NonNullable<Json>,"counters"?: NonNullable<Json>,"created_at"?: string,"finished_at"?: string | null,"id"?: string,"message"?: NonNullable<Json>,"name": string,"organization_id": string,"scheduled_at"?: string | null,"started_at"?: string | null,"status"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "audience"?: NonNullable<Json>,"counters"?: NonNullable<Json>,"created_at"?: string,"finished_at"?: string | null,"id"?: string,"message"?: NonNullable<Json>,"name"?: string,"organization_id"?: string,"scheduled_at"?: string | null,"started_at"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "campaigns_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"channels": {
+                  Row: {
+                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                  }
+                  Update: {
+                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -535,6 +555,76 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "pipeline_stages"
       referencedColumns: ["organization_id","pipeline_id","id"]
+    }
+                  ]
+                },"entry_link_hits": {
+                  Row: {
+                    "contact_id": string | null,"conversation_id": string | null,"created_at": string,"external_id": string,"id": string,"link_id": string,"organization_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"external_id": string,"id"?: string,"link_id": string,"organization_id": string
+                  }
+                  Update: {
+                    "contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"external_id"?: string,"id"?: string,"link_id"?: string,"organization_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "entry_link_hits_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "entry_link_hits_organization_id_conversation_id_fkey"
+      columns: ["organization_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "entry_link_hits_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "entry_link_hits_organization_id_link_id_fkey"
+      columns: ["organization_id","link_id"]
+isOneToOne: false
+      referencedRelation: "entry_links"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"entry_links": {
+                  Row: {
+                    "channel_id": string,"code": string,"created_at": string,"id": string,"name": string,"organization_id": string,"status": string,"tag_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel_id": string,"code": string,"created_at"?: string,"id"?: string,"name": string,"organization_id": string,"status"?: string,"tag_id"?: string | null
+                  }
+                  Update: {
+                    "channel_id"?: string,"code"?: string,"created_at"?: string,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: string,"tag_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "entry_links_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "entry_links_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "entry_links_organization_id_tag_id_fkey"
+      columns: ["organization_id","tag_id"]
+isOneToOne: false
+      referencedRelation: "tags"
+      referencedColumns: ["organization_id","id"]
     }
                   ]
                 },"events": {
@@ -853,6 +943,74 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"outreach_deliveries": {
+                  Row: {
+                    "attempts": number,"campaign_id": string | null,"channel_id": string,"claim_token": string | null,"claimed_until": string | null,"contact_id": string | null,"conversation_id": string | null,"created_at": string,"enrollment_id": string | null,"id": string,"intent_id": string | null,"message_id": string | null,"organization_id": string,"postponements": number,"reason": string | null,"run_after": string,"source": string,"status": string,"step_id": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"campaign_id"?: string | null,"channel_id": string,"claim_token"?: string | null,"claimed_until"?: string | null,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"enrollment_id"?: string | null,"id"?: string,"intent_id"?: string | null,"message_id"?: string | null,"organization_id": string,"postponements"?: number,"reason"?: string | null,"run_after"?: string,"source": string,"status"?: string,"step_id"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "attempts"?: number,"campaign_id"?: string | null,"channel_id"?: string,"claim_token"?: string | null,"claimed_until"?: string | null,"contact_id"?: string | null,"conversation_id"?: string | null,"created_at"?: string,"enrollment_id"?: string | null,"id"?: string,"intent_id"?: string | null,"message_id"?: string | null,"organization_id"?: string,"postponements"?: number,"reason"?: string | null,"run_after"?: string,"source"?: string,"status"?: string,"step_id"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "outreach_deliveries_intent_id_fkey"
+      columns: ["intent_id"]
+isOneToOne: false
+      referencedRelation: "instagram_send_intents"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_campaign_id_fkey"
+      columns: ["organization_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_conversation_id_fkey"
+      columns: ["organization_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_enrollment_id_fkey"
+      columns: ["organization_id","enrollment_id"]
+isOneToOne: false
+      referencedRelation: "sequence_enrollments"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_message_id_fkey"
+      columns: ["organization_id","message_id"]
+isOneToOne: false
+      referencedRelation: "messages"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "outreach_deliveries_organization_id_step_id_fkey"
+      columns: ["organization_id","step_id"]
+isOneToOne: false
+      referencedRelation: "sequence_steps"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
                 },"pipeline_stages": {
                   Row: {
                     "created_at": string,"id": string,"is_lost": boolean,"is_won": boolean,"name": string,"organization_id": string,"pipeline_id": string,"position": number,"updated_at": string
@@ -927,6 +1085,90 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"sequence_enrollments": {
+                  Row: {
+                    "channel_id": string,"contact_id": string,"created_at": string,"current_position": number,"exit_reason": string | null,"id": string,"next_send_at": string | null,"organization_id": string,"sequence_id": string,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel_id": string,"contact_id": string,"created_at"?: string,"current_position"?: number,"exit_reason"?: string | null,"id"?: string,"next_send_at"?: string | null,"organization_id": string,"sequence_id": string,"status"?: string
+                  }
+                  Update: {
+                    "channel_id"?: string,"contact_id"?: string,"created_at"?: string,"current_position"?: number,"exit_reason"?: string | null,"id"?: string,"next_send_at"?: string | null,"organization_id"?: string,"sequence_id"?: string,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sequence_enrollments_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "sequence_enrollments_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "sequence_enrollments_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sequence_enrollments_organization_id_sequence_id_fkey"
+      columns: ["organization_id","sequence_id"]
+isOneToOne: false
+      referencedRelation: "sequences"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"sequence_steps": {
+                  Row: {
+                    "created_at": string,"delay_minutes": number,"id": string,"message": NonNullable<Json>,"organization_id": string,"position": number | null,"removed_at": string | null,"sequence_id": string,"window": Json | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"delay_minutes": number,"id"?: string,"message": NonNullable<Json>,"organization_id": string,"position"?: number | null,"removed_at"?: string | null,"sequence_id": string,"window"?: Json | null
+                  }
+                  Update: {
+                    "created_at"?: string,"delay_minutes"?: number,"id"?: string,"message"?: NonNullable<Json>,"organization_id"?: string,"position"?: number | null,"removed_at"?: string | null,"sequence_id"?: string,"window"?: Json | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sequence_steps_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sequence_steps_organization_id_sequence_id_fkey"
+      columns: ["organization_id","sequence_id"]
+isOneToOne: false
+      referencedRelation: "sequences"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"sequences": {
+                  Row: {
+                    "created_at": string,"id": string,"name": string,"organization_id": string,"settings": NonNullable<Json>,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"name": string,"organization_id": string,"settings"?: NonNullable<Json>,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"name"?: string,"organization_id"?: string,"settings"?: NonNullable<Json>,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sequences_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"tags": {
                   Row: {
                     "color": string,"created_at": string,"id": string,"name": string,"organization_id": string,"updated_at": string
@@ -961,6 +1203,9 @@ isOneToOne: false
                            },
 "apply_automation_step":
 { Args: { "p_run": string,"p_step": Json,"p_token": string }; Returns: Json
+                           },
+"archive_entry_link":
+{ Args: { "p_id": string }; Returns: undefined
                            },
 "automation_button_payloads":
 { Args: { "p_node_id": string,"p_run": string,"p_token": string }; Returns: Json
@@ -1025,6 +1270,12 @@ isOneToOne: false
 { Args: { "p_days": number,"p_org": string }; Returns: Json
                            },
 "delete_automation":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
+"delete_campaign":
+{ Args: { "p_id": string }; Returns: undefined
+                           },
+"delete_sequence":
 { Args: { "p_id": string }; Returns: undefined
                            },
 "delete_stage_moving_deals":
@@ -1141,6 +1392,9 @@ isOneToOne: false
 "read_meta_connection_secrets":
 { Args: { "p_connection_id": string }; Returns: Json
                            },
+"record_instagram_username":
+{ Args: { "p_channel_id": string,"p_username": string }; Returns: undefined
+                           },
 "remove_instagram_connection":
 { Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: Json
                            },
@@ -1168,8 +1422,14 @@ isOneToOne: false
 "save_automation":
 { Args: { "p_graph": Json,"p_id": string,"p_name": string,"p_org": string,"p_trigger_config": Json,"p_trigger_type": Database["public"]['Enums']["automation_trigger_type"] }; Returns: string
                            },
+"save_campaign":
+{ Args: { "p_audience": Json,"p_id": string,"p_message": Json,"p_name": string,"p_org": string }; Returns: string
+                           },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
+                           },
+"save_entry_link":
+{ Args: { "p_id": string,"p_input": Json,"p_org": string }; Returns: string
                            },
 "save_instagram_comment_rule":
 { Args: { "p_input": Json }; Returns: string
@@ -1183,13 +1443,22 @@ isOneToOne: false
 "save_knowledge_document":
 { Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
                            },
+"save_sequence":
+{ Args: { "p_id": string,"p_name": string,"p_org": string,"p_settings": Json,"p_steps": Json }; Returns: string
+                           },
 "search_contacts":
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
               "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
             }[]
                            },
+"set_instagram_username":
+{ Args: { "p_channel": string,"p_username": string }; Returns: undefined
+                           },
 "set_meta_connection_verification":
 { Args: { "p_connection_id": string,"p_error_code": string,"p_generation": number,"p_kind": string,"p_success": boolean }; Returns: undefined
+                           },
+"set_sequence_status":
+{ Args: { "p_id": string,"p_status": string }; Returns: undefined
                            },
 "set_stage_outcome":
 { Args: { "p_outcome": string,"p_stage": string }; Returns: undefined
@@ -1223,7 +1492,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end"|"handoff_ai"|"handoff_human","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created"|"instagram_comment"|"instagram_story","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram"|"simulator","contact_source": "whatsapp"|"instagram"|"manual"|"simulator","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
+            "automation_node_type": "trigger"|"condition"|"message"|"delay"|"tag"|"remove_tag"|"assign_user"|"move_stage"|"ai"|"webhook"|"close_conversation"|"end"|"handoff_ai"|"handoff_human"|"sequence_enroll"|"sequence_remove","automation_status": "draft"|"active"|"paused","automation_trigger_type": "message_received"|"keyword_detected"|"conversation_created"|"tag_added"|"stage_changed"|"contact_created"|"instagram_comment"|"instagram_story"|"entry_link","channel_status": "needs_setup"|"active"|"error","channel_type": "whatsapp"|"instagram"|"simulator","contact_source": "whatsapp"|"instagram"|"manual"|"simulator","contact_status": "lead"|"customer"|"inactive","conversation_status": "open"|"pending_human"|"closed","deal_status": "open"|"won"|"lost","handler_type": "ai"|"human","knowledge_status": "processing"|"ready"|"error","message_direction": "inbound"|"outbound","message_status": "pending"|"sent"|"delivered"|"read"|"failed","org_role": "owner"|"admin"|"agent"|"viewer","run_status": "pending"|"running"|"waiting"|"completed"|"failed"|"cancelled","sender_type": "contact"|"ai"|"human"|"system"|"automation","sentiment": "positive"|"neutral"|"negative"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1343,7 +1612,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end", "handoff_ai", "handoff_human"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created", "instagram_comment", "instagram_story"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram", "simulator"],"contact_source": ["whatsapp", "instagram", "manual", "simulator"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
+            "automation_node_type": ["trigger", "condition", "message", "delay", "tag", "remove_tag", "assign_user", "move_stage", "ai", "webhook", "close_conversation", "end", "handoff_ai", "handoff_human", "sequence_enroll", "sequence_remove"],"automation_status": ["draft", "active", "paused"],"automation_trigger_type": ["message_received", "keyword_detected", "conversation_created", "tag_added", "stage_changed", "contact_created", "instagram_comment", "instagram_story", "entry_link"],"channel_status": ["needs_setup", "active", "error"],"channel_type": ["whatsapp", "instagram", "simulator"],"contact_source": ["whatsapp", "instagram", "manual", "simulator"],"contact_status": ["lead", "customer", "inactive"],"conversation_status": ["open", "pending_human", "closed"],"deal_status": ["open", "won", "lost"],"handler_type": ["ai", "human"],"knowledge_status": ["processing", "ready", "error"],"message_direction": ["inbound", "outbound"],"message_status": ["pending", "sent", "delivered", "read", "failed"],"org_role": ["owner", "admin", "agent", "viewer"],"run_status": ["pending", "running", "waiting", "completed", "failed", "cancelled"],"sender_type": ["contact", "ai", "human", "system", "automation"],"sentiment": ["positive", "neutral", "negative"]
           }
         }
 } as const

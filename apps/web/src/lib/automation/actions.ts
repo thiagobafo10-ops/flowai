@@ -99,7 +99,7 @@ export async function createAutomation(input: { templateKey?: TemplateKey; name?
     // A RPC aceita null (criação); os tipos gerados não marcam o argumento como opcional.
     p_id: null as unknown as string,
     p_name: name.data,
-    p_trigger_type: triggerType as never,
+    p_trigger_type: triggerType,
     p_trigger_config: triggerConfig as never,
     p_graph: graph as never,
   });
@@ -137,7 +137,7 @@ export async function saveAutomation(input: SaveInput): Promise<ActionResult<{ i
     p_org: c.orgId,
     p_id: id.data,
     p_name: name.data,
-    p_trigger_type: trigger.data as never,
+    p_trigger_type: trigger.data,
     p_trigger_config: input.triggerConfig as never,
     p_graph: graph.data as never,
   });
