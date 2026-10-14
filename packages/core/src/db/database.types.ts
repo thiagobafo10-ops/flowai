@@ -1299,6 +1299,9 @@ isOneToOne: false
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
                            },
+"enroll_contact_in_sequence":
+{ Args: { "p_contact": string,"p_sequence": string }; Returns: string
+                           },
 "fail_ai_job":
 { Args: { "p_error_code": string,"p_job": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
                            },
@@ -1394,6 +1397,9 @@ isOneToOne: false
                            },
 "record_instagram_username":
 { Args: { "p_channel_id": string,"p_username": string }; Returns: undefined
+                           },
+"remove_contact_from_sequence":
+{ Args: { "p_contact": string,"p_sequence": string }; Returns: undefined
                            },
 "remove_instagram_connection":
 { Args: { "p_actor_id": string,"p_connection_id": string,"p_org_id": string }; Returns: Json
