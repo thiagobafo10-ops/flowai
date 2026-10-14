@@ -1,32 +1,10 @@
 import type { NextConfig } from "next";
+import { buildSecurityHeaders } from "./src/lib/security/headers";
 
 const isProd = process.env.NODE_ENV === "production";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
-const supabaseWs = supabaseUrl.replace(/^http/, "ws");
 
-const csp = [
-  "default-src 'self'",
-  // Next injeta scripts inline; 'unsafe-eval' somente em desenvolvimento (React refresh).
-  `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self' ${supabaseUrl} ${supabaseWs}${isProd ? "" : " ws://localhost:* ws://127.0.0.1:*"}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
-const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
-  { key: "X-Frame-Options", value: "DENY" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  // HSTS só em produção: em localhost (http) fixaria HTTPS no navegador do dev.
-  ...(isProd
-    ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]
-    : []),
-];
+const securityHeaders = buildSecurityHeaders({ isProd, supabaseUrl });
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
