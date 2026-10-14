@@ -56,6 +56,8 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 
 ## Arquitetura
 
+- Referências selecionadas para as telas de crescimento e compatibilidade Instagram: [mapa de aproveitamento do ChatbotX](docs/superpowers/referencias-chatbotx.md).
+
 - Spec do MVP (todas as fases): [`docs/superpowers/specs/2026-10-07-flowai-mvp-design.md`](docs/superpowers/specs/2026-10-07-flowai-mvp-design.md)
 - Plano da Fase 1 (fundação): [`docs/superpowers/plans/2026-10-07-fase-1-fundacao.md`](docs/superpowers/plans/2026-10-07-fase-1-fundacao.md)
 - Fase 2 (layout e dashboard): spec [`docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md`](docs/superpowers/specs/2026-10-09-fase-2-layout-dashboard-design.md), plano [`docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md`](docs/superpowers/plans/2026-10-09-fase-2-layout-dashboard.md)

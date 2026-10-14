@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-14-fase-7b-crescimento-design.md` (base: spec e código da 7A).
 
+**Referências de execução:** [mapa ChatbotX](../referencias-chatbotx.md), autorizado em 2026-10-14. Consultar nas Tasks 9–11 para padrões de interface e testes; a spec e os contratos do FlowAI prevalecem. Na Task 12, avaliar os cenários candidatos de referral descritos no mapa. Isso não autoriza importar backend, dependências ou recursos fora do escopo.
+
 ## Global Constraints
 
 - Ambiente: Docker PATH prefix; `DENO_BIN`/`DENO_DIR` do workspace da Fase 5; e2e local com `FLOWAI_E2E_SLOW_HOST=1` (host de 8 GB); rodar suítes uma de cada vez.
