@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsMetricsSchema, analyticsPeriodSchema } from "./schemas.js";
+import { analyticsMetricsSchema, analyticsPeriodSchema } from "./schemas.ts";
 
 describe("analyticsPeriodSchema", () => {
   it("valida períodos suportados (1d, 7d, 30d, 90d)", () => {

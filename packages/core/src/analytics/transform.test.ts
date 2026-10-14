@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateTrendPercentage, formatAnalyticsCsv, analyticsPeriodToDays, parseAnalyticsPeriod } from "./transform.js";
-import type { AnalyticsMetrics } from "./schemas.js";
+import { calculateTrendPercentage, formatAnalyticsCsv, analyticsPeriodToDays, parseAnalyticsPeriod } from "./transform.ts";
+import type { AnalyticsMetrics } from "./schemas.ts";
 
 describe("calculateTrendPercentage", () => {
   it("calcula delta positivo corretamente", () => {

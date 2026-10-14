@@ -2,7 +2,7 @@ import {
   analyticsPeriodSchema,
   type AnalyticsMetrics,
   type AnalyticsPeriod,
-} from "./schemas.js";
+} from "./schemas.ts";
 
 /**
  * Calcula a variação percentual (delta %) entre o período atual e o anterior.
