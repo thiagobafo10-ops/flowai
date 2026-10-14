@@ -3,7 +3,7 @@ import base from "./playwright.config";
 
 export default defineConfig({
   ...base,
-  testMatch: "automation.spec.ts",
+  testMatch: ["automation.spec.ts", "automation-ai.spec.ts"],
   testIgnore: [],
   use: { ...base.use, baseURL: "http://localhost:3103" },
   webServer: {
