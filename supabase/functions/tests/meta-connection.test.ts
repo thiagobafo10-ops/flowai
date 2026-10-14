@@ -126,6 +126,9 @@ Deno.test("failed verification does not store the username", async () => {
 });
 Deno.test("username storage failure keeps the verification result", async () => {
   const f = fixture(); f.deps.repository.recordInstagramUsername = async () => { throw new RepositoryError("22023"); };
+  const logs: unknown[][] = []; f.deps.log = (...args) => { logs.push(args); };
   const response = await handleMetaConnection(f.request("test"), f.deps);
   assert(response.status === 200); assert((await response.json()).verified === true);
+  assert(JSON.stringify(logs) === JSON.stringify([["meta-connection", "instagram_username_record_failed", "22023"]]));
+  assert(!JSON.stringify(logs).includes("empresa"));
 });

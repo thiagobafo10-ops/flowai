@@ -165,6 +165,8 @@ create table public.outreach_deliveries (
     on delete set null (conversation_id),
   foreign key (organization_id, message_id) references public.messages (organization_id, id)
     on delete set null (message_id),
+  -- Exceção às FKs compostas: instagram_send_intents não tem unique (organization_id, id); o intent é
+  -- criado pela própria função de entrega na mesma organização.
   foreign key (intent_id) references public.instagram_send_intents (id) on delete set null
 );
 create unique index outreach_deliveries_campaign_contact_key
@@ -296,13 +298,14 @@ begin
   return true;
 end $$;
 
--- Configurações de sequência: canais da organização, exitOnReply e palavras de saída.
+-- Configurações de sequência: canais Instagram/Simulador da organização, exitOnReply e palavras de saída.
 create function private.valid_sequence_settings(p_org uuid, p jsonb) returns boolean
 language plpgsql stable security definer set search_path = '' as $$
 begin
   if jsonb_typeof(p) is distinct from 'object' or not private.is_uuid_array(p -> 'channelIds', 1) then return false; end if;
   if exists (select 1 from jsonb_array_elements_text(p -> 'channelIds') c
-      where not exists (select 1 from public.channels ch where ch.id = c::uuid and ch.organization_id = p_org)) then
+      where not exists (select 1 from public.channels ch where ch.id = c::uuid and ch.organization_id = p_org
+        and ch.type in ('instagram', 'simulator'))) then
     return false;
   end if;
   if coalesce(jsonb_typeof(p -> 'exitOnReply'), 'boolean') <> 'boolean' then return false; end if;
@@ -434,6 +437,7 @@ declare
   v_pos bigint;
   v_sid uuid;
   v_ids uuid[] := '{}';
+  v_status text;
 begin
   if not public.has_role(p_org, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
   if char_length(v_name) not between 1 and 100 then raise exception 'invalid_name' using errcode = '22023'; end if;
@@ -442,8 +446,11 @@ begin
   end if;
   if jsonb_typeof(p_steps) is distinct from 'array' then raise exception 'invalid_steps' using errcode = '22023'; end if;
   if v_id is not null then
-    perform 1 from public.sequences where id = v_id and organization_id = p_org for update;
+    select status into v_status from public.sequences where id = v_id and organization_id = p_org for update;
     if not found then raise exception 'sequence_not_found' using errcode = 'P0002'; end if;
+    if v_status = 'active' and jsonb_array_length(p_steps) = 0 then
+      raise exception 'no_steps' using errcode = '22023';
+    end if;
   end if;
 
   for s in select e from jsonb_array_elements(p_steps) e loop
@@ -472,6 +479,11 @@ begin
   update public.sequence_steps st set removed_at = now(), position = null
     where st.sequence_id = v_id and st.removed_at is null and not (st.id = any (v_ids))
       and exists (select 1 from public.outreach_deliveries d where d.step_id = st.id);
+  -- Entregas ainda pendentes de passos removidos não saem; as em 'sending' terminam.
+  update public.outreach_deliveries d set status = 'cancelled', reason = 'step_removed', claim_token = null,
+      claimed_until = null
+    where d.status = 'pending' and d.step_id in (select st.id from public.sequence_steps st
+      where st.sequence_id = v_id and st.removed_at is not null);
   delete from public.sequence_steps
     where sequence_id = v_id and removed_at is null and not (id = any (v_ids));
 
@@ -495,7 +507,8 @@ begin
   select * into v_seq from public.sequences where id = p_id and public.is_member(organization_id) for update;
   if not found then raise exception 'sequence_not_found' using errcode = 'P0002'; end if;
   if not public.has_role(v_seq.organization_id, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
-  if p_status is null or p_status not in ('active', 'paused') then
+  -- draft → active; active ⇄ paused (rascunho nunca vai direto para pausada).
+  if p_status is null or p_status not in ('active', 'paused') or (p_status = 'paused' and v_seq.status = 'draft') then
     raise exception 'invalid_status' using errcode = '22023';
   end if;
   if p_status = 'active' and not exists (select 1 from public.sequence_steps where sequence_id = p_id and removed_at is null) then
@@ -511,6 +524,8 @@ begin
   select * into v_seq from public.sequences where id = p_id and public.is_member(organization_id) for update;
   if not found then raise exception 'sequence_not_found' using errcode = 'P0002'; end if;
   if not public.has_role(v_seq.organization_id, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
+  -- Só as pendentes são canceladas; as em 'sending' terminam no worker, que tolera inscrição/passo nulos
+  -- (FKs on delete set null) depois que a sequência sai em cascata.
   update public.outreach_deliveries d set status = 'cancelled', reason = 'sequence_deleted', claim_token = null,
       claimed_until = null
     where d.status = 'pending' and d.enrollment_id in (select e.id from public.sequence_enrollments e where e.sequence_id = p_id);

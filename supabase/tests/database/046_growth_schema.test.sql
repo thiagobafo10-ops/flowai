@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(115);
+select plan(123);
 select tests.create_user('owner46@t.test','Owner46') as ua \gset
 select tests.create_user('admin46@t.test','Admin46') as uadm \gset
 select tests.create_user('agent46@t.test','Agent46') as uag \gset
@@ -16,7 +16,8 @@ select tests.add_member(:'oa',:'uv','viewer');
 insert into public.channels(id,organization_id,type,name,status) values
   ('00000000-0000-0000-0000-000000004601',:'oa','instagram','IG46','active'),
   ('00000000-0000-0000-0000-000000004602',:'oa','simulator','Sim46','active'),
-  ('00000000-0000-0000-0000-000000004603',:'ob','instagram','IG46B','active');
+  ('00000000-0000-0000-0000-000000004603',:'ob','instagram','IG46B','active'),
+  ('00000000-0000-0000-0000-000000004604',:'oa','whatsapp','WA46','active');
 insert into public.tags(id,organization_id,name) values
   ('00000000-0000-0000-0000-000000004611',:'oa','VIP'),
   ('00000000-0000-0000-0000-000000004612',:'ob','VIP B');
@@ -70,6 +71,8 @@ select is((select campaign_rate_per_minute from private.outreach_settings),30,'r
 select ok(not has_table_privilege('authenticated','private.outreach_settings','select'),'authenticated não lê outreach_settings');
 select ok(has_column_privilege('authenticated','public.channels','instagram_username','select'),'membro lê instagram_username');
 select ok(not has_column_privilege('authenticated','public.channels','instagram_username','update'),'membro não grava instagram_username');
+select ok(not has_column_privilege('authenticated','public.outreach_deliveries','claim_token','select'),'membro não lê claim_token');
+select ok(not has_column_privilege('authenticated','public.outreach_deliveries','claimed_until','select'),'membro não lê claimed_until');
 select ok(not has_function_privilege('anon','public.save_entry_link(uuid,uuid,jsonb)','execute'),'anon não executa save_entry_link');
 select ok(not has_function_privilege('authenticated','public.record_instagram_username(uuid,text)','execute'),'authenticated não executa record_instagram_username');
 select ok(has_function_privilege('service_role','public.record_instagram_username(uuid,text)','execute'),'service_role executa record_instagram_username');
@@ -133,6 +136,7 @@ select throws_ok(format($$select public.save_sequence(%L,null,'S',%L,%L)$$, :'oa
   jsonb_build_array(jsonb_set(pg_temp.step(5), '{message}', pg_temp.msg(4)))),'22023',null,'4 botões rejeitados');
 select throws_ok(format($$select public.save_sequence(%L,null,'S',%L,'[]')$$, :'oa', '{"channelIds":[]}'),'22023',null,'sem canais rejeitado');
 select throws_ok(format($$select public.save_sequence(%L,null,'S',%L,'[]')$$, :'oa', pg_temp.settings('00000000-0000-0000-0000-000000004603')),'22023',null,'canal de outra org rejeitado');
+select throws_ok(format($$select public.save_sequence(%L,null,'S',%L,'[]')$$, :'oa', pg_temp.settings('00000000-0000-0000-0000-000000004604')),'22023',null,'canal WhatsApp rejeitado nas sequências');
 select throws_ok(format($$select public.save_sequence(%L,null,'',%L,'[]')$$, :'oa', pg_temp.settings()),'22023',null,'nome vazio rejeitado');
 -- reordenar: st2 vira 1º, novo passo 2º; st1 (sem entregas) é apagado
 select lives_ok(format($$select public.save_sequence(%L,%L,'Boas-vindas',%L,%L)$$, :'oa', :'s1', pg_temp.settings(),
@@ -146,12 +150,17 @@ insert into public.sequence_enrollments(id,organization_id,sequence_id,contact_i
   ('00000000-0000-0000-0000-000000004641',:'oa',:'s1','00000000-0000-0000-0000-000000004621','00000000-0000-0000-0000-000000004601',2);
 insert into public.outreach_deliveries(organization_id,source,enrollment_id,step_id,contact_id,channel_id,status) values
   (:'oa','sequence','00000000-0000-0000-0000-000000004641',:'st2','00000000-0000-0000-0000-000000004621','00000000-0000-0000-0000-000000004601','sent');
+insert into public.sequence_enrollments(id,organization_id,sequence_id,contact_id,channel_id,current_position) values
+  ('00000000-0000-0000-0000-000000004643',:'oa',:'s1','00000000-0000-0000-0000-000000004622','00000000-0000-0000-0000-000000004601',1);
+insert into public.outreach_deliveries(id,organization_id,source,enrollment_id,step_id,contact_id,channel_id,status) values
+  ('00000000-0000-0000-0000-000000004652',:'oa','sequence','00000000-0000-0000-0000-000000004643',:'st2','00000000-0000-0000-0000-000000004622','00000000-0000-0000-0000-000000004601','pending');
 select throws_ok(format($$insert into public.outreach_deliveries(organization_id,source,enrollment_id,step_id,contact_id,channel_id) values (%L,'sequence','00000000-0000-0000-0000-000000004641',%L,'00000000-0000-0000-0000-000000004621','00000000-0000-0000-0000-000000004601')$$, :'oa', :'st2'),'23505',null,'uma entrega por (inscrição, passo)');
 select tests.authenticate_as(:'uadm');
 select lives_ok(format($$select public.save_sequence(%L,%L,'Boas-vindas',%L,%L)$$, :'oa', :'s1', pg_temp.settings(),
   jsonb_build_array(pg_temp.step(15))),'remover passo enviado');
 select tests.clear_authentication();
 select is((select (position is null, removed_at is not null)::text from public.sequence_steps where id=:'st2'),'(t,t)','passo enviado fica como removido');
+select is((select (status, reason)::text from public.outreach_deliveries where id='00000000-0000-0000-0000-000000004652'),'(cancelled,step_removed)','entrega pendente do passo removido é cancelada');
 select is((select array_agg(delay_minutes order by position)::text from public.sequence_steps where sequence_id=:'s1' and removed_at is null),'{15}','passos ativos 1..n');
 select lives_ok($$set constraints all immediate$$,'posições únicas por sequência');
 set constraints all deferred;
@@ -168,7 +177,9 @@ select tests.authenticate_as(:'uadm');
 select lives_ok(format($$select public.set_sequence_status(%L,'active')$$, :'s1'),'admin ativa sequência');
 select is((select status from public.sequences where id=:'s1'),'active','sequência ativa');
 select throws_ok(format($$select public.set_sequence_status(%L,'draft')$$, :'s1'),'22023',null,'status inválido');
+select throws_ok(format($$select public.save_sequence(%L,%L,'Boas-vindas',%L,'[]')$$, :'oa', :'s1', pg_temp.settings()),'22023','no_steps','sequência ativa sem passos: no_steps');
 select public.save_sequence(:'oa', null, 'Vazia', pg_temp.settings(), '[]') as s3 \gset
+select throws_ok(format($$select public.set_sequence_status(%L,'paused')$$, :'s3'),'22023',null,'rascunho não vai para pausada');
 select throws_ok(format($$select public.set_sequence_status(%L,'active')$$, :'s3'),'22023',null,'sequência sem passos não ativa');
 -- um ativo por (sequência, contato)
 select tests.clear_authentication();
@@ -223,7 +234,7 @@ select throws_ok($$select public.delete_campaign('00000000-0000-0000-0000-000000
 select tests.authenticate_as(:'uv');
 select is((select count(*)::int from public.entry_links),3,'viewer lê só os links da própria org');
 select is((select count(*)::int from public.campaigns),1,'viewer lê só as campanhas da própria org');
-select is((select count(*)::int from public.outreach_deliveries),3,'viewer lê entregas da própria org');
+select is((select count(*)::int from public.outreach_deliveries),4,'viewer lê entregas da própria org');
 select tests.authenticate_as(:'ub');
 select is((select count(*)::int from public.entry_links),1,'membro de B não vê links de A');
 select is((select count(*)::int from public.sequences),0,'membro de B não vê sequências de A');
@@ -245,6 +256,8 @@ select throws_ok($$select public.set_instagram_username('00000000-0000-0000-0000
 select tests.clear_authentication();
 set local role service_role;
 select lives_ok($$select public.record_instagram_username('00000000-0000-0000-0000-000000004603','empresa_b')$$,'serviço grava o usuário verificado');
+select throws_ok($$select public.record_instagram_username('00000000-0000-0000-0000-000000004603','não válido')$$,'22023',null,'serviço: usuário inválido');
+select throws_ok($$select public.record_instagram_username('00000000-0000-0000-0000-000000004602','empresa')$$,'P0002',null,'serviço: canal que não é Instagram');
 reset role;
 select is((select instagram_username from public.channels where id='00000000-0000-0000-0000-000000004603'),'empresa_b','usuário verificado gravado');
 select * from finish();

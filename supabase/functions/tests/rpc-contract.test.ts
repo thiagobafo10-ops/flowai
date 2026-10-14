@@ -78,7 +78,9 @@ Deno.test("rpc argument names match the latest SQL signatures", async () => {
   const problems: string[] = [];
   let checked = 0;
   for (const file of FILES) {
-    for (const call of await rpcCalls(file)) {
+    const calls = await rpcCalls(file);
+    if (calls.length === 0) problems.push(`${file}: no rpc calls found (parser or file list out of date)`);
+    for (const call of calls) {
       checked++;
       const overloads = signatures.get(call.name);
       if (!overloads) { problems.push(`${call.file}: public.${call.name} not found`); continue; }

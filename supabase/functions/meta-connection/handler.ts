@@ -2,7 +2,11 @@ import type { Authorize } from "../_shared/auth.ts";
 import { RepositoryError, type MetaConnectionRepository } from "../_shared/meta-repository.ts";
 import { BodyTooLarge, readLimitedBody } from "../_shared/http.ts";
 
-export type MetaConnectionDeps = { authorize: Authorize; repository: MetaConnectionRepository; fetch: typeof fetch };
+export type MetaConnectionDeps = {
+  authorize: Authorize; repository: MetaConnectionRepository; fetch: typeof fetch;
+  /** Receives fixed tokens and codes only (no PII); defaults to console.warn. */
+  log?: (...args: string[]) => void;
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const instagramUsername = /^[A-Za-z0-9._]{1,30}$/;
 function json(data: unknown, status = 200): Response { return Response.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
@@ -67,7 +71,11 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
     await deps.repository.verifyConnection(secrets.connectionId, "token", errorCode === null, errorCode, secrets.generation);
     // Usuário da conta (link ig.me): melhor esforço; se faltar, o admin informa em Canais.
     if (errorCode === null && username !== null && instagramUsername.test(username)) {
-      try { await deps.repository.recordInstagramUsername(channel.channelId, username); } catch { /* opcional */ }
+      try { await deps.repository.recordInstagramUsername(channel.channelId, username); }
+      catch (error) {
+        const code = error instanceof RepositoryError ? error.code : "unknown";
+        (deps.log ?? console.warn)("meta-connection", "instagram_username_record_failed", code);
+      }
     }
     return errorCode ? json({ error: errorCode }, 422) : json({ verified: true, accountId: channel.accountId, username });
   } catch (error) {
