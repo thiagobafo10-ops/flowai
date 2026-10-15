@@ -51,7 +51,7 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
       if (!secrets || !channel || secrets.disconnected || secrets.organizationId !== prepared.organizationId) { state = "ignored"; errorCode = "channel_inactive"; }
       else {
         const headers = { Authorization: `Bearer ${channel.accessToken}` };
-        const commentResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.commentId)}?fields=id%2Ctimestamp%2Cfrom%2Cmedia`, { headers, signal: AbortSignal.timeout(15000) });
+        const commentResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.commentId)}?fields=id%2Ctimestamp%2Cfrom%2Cmedia%7Bid%2Cmedia_product_type%7D`, { headers, signal: AbortSignal.timeout(15000) });
         const comment = await commentResponse.json();
         if (!commentResponse.ok || comment.error) {
           errorCode = comment.error?.code === 190 ? "invalid_token" : "comment_unavailable";
@@ -60,9 +60,10 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
         } else {
           const createdAt = Date.parse(comment.timestamp);
           const now = deps.now().getTime();
+          const productType = comment.media?.media_product_type;
           const eligible = Number.isFinite(createdAt) && createdAt <= now && now - createdAt < 7 * 86400000
             && String(comment.id) === prepared.commentId && String(comment.from?.id) === prepared.senderExternalId
-            && String(comment.media?.id) === prepared.mediaId && ["FEED", "REELS"].includes(comment.media?.media_product_type);
+            && String(comment.media?.id ?? "") === prepared.mediaId && (!productType || ["FEED", "REELS"].includes(productType));
           // The first rule may have been (re)activated after the comment was posted:
           // fall back to the next rule that was already effective at that time.
           let target: PreparedComment | null = prepared;
@@ -73,10 +74,14 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
           if (!eligible || !target) {
             state = "ignored"; errorCode = "comment_not_eligible";
           } else {
-            const mediaResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.mediaId)}?fields=id%2Cowner`, { headers, signal: AbortSignal.timeout(15000) });
+            const mediaResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.mediaId)}?fields=id%2Cowner%7Bid%2Cusername%7D`, { headers, signal: AbortSignal.timeout(15000) });
             const media = await mediaResponse.json();
+            const ownerId = String(media.owner?.id ?? media.owner ?? "");
+            const ownerUsername = String(media.owner?.username ?? "").toLowerCase();
+            const channelUsername = String(channel.username ?? "").toLowerCase();
+            const owned = ownerId === channel.accountId || (channelUsername.length > 0 && ownerUsername === channelUsername);
             if (mediaResponse.status >= 500 || mediaResponse.status === 429) { state = "retry"; errorCode = "provider_unavailable"; }
-            else if (!mediaResponse.ok || String(media.id) !== prepared.mediaId || String(media.owner?.id ?? media.owner ?? "") !== channel.accountId) { state = "ignored"; errorCode = "media_not_owned"; }
+            else if (!mediaResponse.ok || String(media.id) !== prepared.mediaId || !owned) { state = "ignored"; errorCode = "media_not_owned"; }
             else {
               const claim = await deps.claim(target.intentId);
               if (!claim) state = "retry";

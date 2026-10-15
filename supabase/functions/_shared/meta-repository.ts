@@ -1,7 +1,7 @@
 export type MetaSecrets = {
   connectionId: string; organizationId: string; appId: string; apiVersion: string;
   generation: number; disconnected: boolean; appSecret: string; verifyToken: string;
-  channels: { channelId: string; accountId: string; accessToken: string; status: string }[];
+  channels: { channelId: string; accountId: string; username?: string | null; accessToken: string; status: string }[];
 };
 export interface MetaConnectionRepository {
   saveConnection(actorId: string, organizationId: string, input: Record<string, unknown>): Promise<{ connectionId: string; channelId: string }>;

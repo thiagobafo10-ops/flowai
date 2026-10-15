@@ -44,9 +44,13 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       if (typeof input.mediaId !== "string" || !/^\d{1,100}$/.test(input.mediaId)) return json({ error: "invalid_input" }, 400);
       const channel = secrets.channels.find((item) => item.channelId === input.channelId);
       if (!channel) return json({ error: "forbidden" }, 403);
-      const response = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${input.mediaId}?fields=id%2Cowner`, { headers: { Authorization: `Bearer ${channel.accessToken}` }, signal: AbortSignal.timeout(15000) });
+      const response = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${input.mediaId}?fields=id%2Cowner%7Bid%2Cusername%7D`, { headers: { Authorization: `Bearer ${channel.accessToken}` }, signal: AbortSignal.timeout(15000) });
       const media = await response.json();
-      if (!response.ok || String(media.id) !== input.mediaId || String(media.owner?.id ?? media.owner ?? "") !== channel.accountId) return json({ error: "media_not_owned" }, 422);
+      const ownerId = String(media.owner?.id ?? media.owner ?? "");
+      const ownerUsername = String(media.owner?.username ?? "").toLowerCase();
+      const channelUsername = String(channel.username ?? "").toLowerCase();
+      const owned = ownerId === channel.accountId || (channelUsername.length > 0 && ownerUsername === channelUsername);
+      if (!response.ok || String(media.id) !== input.mediaId || !owned) return json({ error: "media_not_owned" }, 422);
       await deps.repository.verifyMedia(secrets.connectionId, channel.channelId, input.mediaId, secrets.generation);
       return json({ verified: true, mediaId: input.mediaId });
     }
