@@ -78,10 +78,20 @@ describe("triggers", () => {
     expect(triggerConfigSchemas.keyword_detected.safeParse({ keywords: ["a"], mode: "equals" }).success).toBe(true);
     expect(triggerConfigSchemas.keyword_detected.safeParse({ keywords: ["a".repeat(101)], mode: "equals" }).success).toBe(false);
   });
+  it("keyword_detected aceita anyKeyword ou mode any sem palavras", () => {
+    expect(triggerConfigSchemas.keyword_detected.safeParse({ anyKeyword: true, keywords: [], mode: "contains" }).success).toBe(true);
+    expect(triggerConfigSchemas.keyword_detected.safeParse({ keywords: [], mode: "any" }).success).toBe(true);
+  });
   it("instagram_comment", () => {
     expect(
       triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, keywords: ["a"], mode: "contains" }).success,
     ).toBe(true);
+    expect(
+      triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, anyKeyword: true, keywords: [], mode: "any" }).success,
+    ).toBe(true);
+    expect(
+      triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, keywords: [], mode: "contains" }).success,
+    ).toBe(false);
   });
   it("tag_added aceita null", () => {
     expect(triggerConfigSchemas.tag_added.safeParse({ tagId: null }).success).toBe(true);

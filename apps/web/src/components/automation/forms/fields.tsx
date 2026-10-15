@@ -107,10 +107,11 @@ export function KeywordsField<V extends FieldValues>({ id, control, name, error 
 }
 
 
-export function KeywordModeOptions() {
+export function KeywordModeOptions({ includeAny = false }: { includeAny?: boolean } = {}) {
+  const entries = Object.entries(KEYWORD_MODE_LABEL).filter(([k]) => includeAny || k !== "any");
   return (
     <>
-      {Object.entries(KEYWORD_MODE_LABEL).map(([value, label]) => (
+      {entries.map(([value, label]) => (
         <option key={value} value={value}>{label}</option>
       ))}
     </>

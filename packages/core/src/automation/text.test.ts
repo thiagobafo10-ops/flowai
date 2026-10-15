@@ -31,6 +31,11 @@ describe("matchKeyword", () => {
     expect(matchKeyword("Cupom 10", ["cupom"], "starts_with")).toBe(true);
     expect(matchKeyword("Tenho cupom", ["cupom"], "starts_with")).toBe(false);
   });
+  it("any aceita qualquer comentário ou texto", () => {
+    expect(matchKeyword("Qualquer coisa aqui!", [], "any")).toBe(true);
+    expect(matchKeyword("😀", [], "any")).toBe(true);
+    expect(matchKeyword("", [], "any")).toBe(true);
+  });
   it("texto vazio é falso", () => {
     expect(matchKeyword("", ["a"], "contains")).toBe(false);
     expect(matchKeyword("   ", ["a"], "contains")).toBe(false);

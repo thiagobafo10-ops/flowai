@@ -31,10 +31,15 @@ export const NODE_TYPES = [
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
-export const keywordModeSchema = z.enum(["contains", "equals", "starts_with"]);
+export const keywordModeSchema = z.enum(["contains", "equals", "starts_with", "any"]);
 export type KeywordMode = z.infer<typeof keywordModeSchema>;
+const keywordItemSchema = z
+  .string()
+  .trim()
+  .min(1, "Informe a palavra-chave.")
+  .max(100, "Máximo de 100 caracteres por palavra-chave.");
 const keywordsSchema = z
-  .array(z.string().trim().min(1, "Informe a palavra-chave.").max(100, "Máximo de 100 caracteres por palavra-chave."))
+  .array(keywordItemSchema)
   .min(1, "Informe ao menos uma palavra-chave.")
   .max(20, "Máximo de 20 palavras-chave.");
 const uuid = z.string().uuid("Identificador inválido.");
@@ -52,13 +57,30 @@ export const httpsUrl = z
 
 export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
   message_received: z.object({ firstMessageOnly: z.boolean() }),
-  keyword_detected: z.object({ keywords: keywordsSchema, mode: keywordModeSchema }),
-  instagram_comment: z.object({
-    channelId: uuid,
-    mediaId: z.string().min(1).nullable(),
-    keywords: keywordsSchema,
-    mode: keywordModeSchema,
-  }),
+  keyword_detected: z
+    .object({
+      anyKeyword: z.boolean().optional(),
+      keywords: z.array(keywordItemSchema).max(20, "Máximo de 20 palavras-chave."),
+      mode: keywordModeSchema,
+    })
+    .superRefine((data, ctx) => {
+      if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["keywords"], message: "Informe ao menos uma palavra-chave." });
+      }
+    }),
+  instagram_comment: z
+    .object({
+      channelId: uuid,
+      mediaId: z.string().min(1).nullable(),
+      anyKeyword: z.boolean().optional(),
+      keywords: z.array(keywordItemSchema).max(20, "Máximo de 20 palavras-chave."),
+      mode: keywordModeSchema,
+    })
+    .superRefine((data, ctx) => {
+      if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["keywords"], message: "Informe ao menos uma palavra-chave." });
+      }
+    }),
   instagram_story: z.object({ channelId: uuid }),
   contact_created: z.object({}),
   tag_added: z.object({ tagId: uuid.nullable() }),

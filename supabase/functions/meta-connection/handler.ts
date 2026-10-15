@@ -78,6 +78,35 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       await deps.repository.verifyMedia(secrets.connectionId, channel.channelId, input.mediaId, secrets.generation);
       return json({ verified: true, mediaId: input.mediaId });
     }
+    if (input.action === "list_media") {
+      const channel = secrets.channels.find((item) => item.channelId === input.channelId);
+      if (!channel) return json({ error: "forbidden" }, 403);
+      try {
+        const response = await deps.fetch(
+          `https://graph.instagram.com/${secrets.apiVersion}/me/media?fields=id%2Ccaption%2Cmedia_type%2Cmedia_url%2Cpermalink%2Cthumbnail_url%2Ctimestamp&limit=50`,
+          { headers: { Authorization: `Bearer ${channel.accessToken}` }, signal: AbortSignal.timeout(15000) }
+        );
+        const data = await response.json();
+        if (!response.ok || data.error) {
+          const errCode = data.error?.code === 190 ? "invalid_token" : "provider_unavailable";
+          return json({ error: errCode }, 422);
+        }
+        const mediaList = Array.isArray(data.data)
+          ? data.data.map((item: Record<string, unknown>) => ({
+              id: String(item.id ?? ""),
+              caption: typeof item.caption === "string" ? item.caption : "",
+              mediaType: typeof item.media_type === "string" ? item.media_type : "IMAGE",
+              mediaUrl: typeof item.media_url === "string" ? item.media_url : null,
+              thumbnailUrl: typeof item.thumbnail_url === "string" ? item.thumbnail_url : null,
+              permalink: typeof item.permalink === "string" ? item.permalink : null,
+              timestamp: typeof item.timestamp === "string" ? item.timestamp : null,
+            }))
+          : [];
+        return json({ media: mediaList });
+      } catch {
+        return json({ error: "provider_unavailable" }, 503);
+      }
+    }
     if (input.action !== "test") return json({ error: "invalid_action" }, 400);
     const channel = secrets.channels[0];
     if (!channel) return json({ error: "invalid_account" }, 422);

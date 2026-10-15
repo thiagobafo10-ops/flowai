@@ -40,6 +40,7 @@ export const KEYWORD_MODE_LABEL: Record<string, string> = {
   contains: "Contém",
   equals: "É igual a",
   starts_with: "Começa com",
+  any: "Qualquer palavra ou comentário",
 };
 
 export const WEEKDAY_LABEL: Record<number, string> = { 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom" };

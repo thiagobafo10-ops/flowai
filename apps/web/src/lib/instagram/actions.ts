@@ -90,3 +90,26 @@ export async function verifyInstagramVipPermission(channelId: string): Promise<A
   const result = await invoke(c, { action: "verify_vip", channelId, connectionId: channel.meta_connection_id });
   return result.ok && result.data.verified === true ? { ok: true, data: undefined } : result.ok ? { ok: false, error: vipErrorMessage("comments_permission_required") } : result;
 }
+
+export type InstagramMediaItem = {
+  id: string;
+  caption: string;
+  mediaType: string;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  permalink: string | null;
+  timestamp: string | null;
+};
+
+export async function listInstagramMedia(channelId: string): Promise<ActionResult<{ media: InstagramMediaItem[] }>> {
+  const c = await admin();
+  if (!c) return { ok: false, error: FORBIDDEN };
+  if (!z.uuid().safeParse(channelId).success) return { ok: false, error: "Canal inválido." };
+  const channel = await ownedInstagramChannel(c, channelId);
+  if (!channel) return { ok: false, error: FORBIDDEN };
+  if (channel.status !== "active" || !channel.meta_connection_id) return { ok: true, data: { media: [] } };
+  const result = await invoke(c, { action: "list_media", channelId, connectionId: channel.meta_connection_id });
+  if (!result.ok) return result as ActionResult<{ media: InstagramMediaItem[] }>;
+  const media = Array.isArray(result.data.media) ? (result.data.media as InstagramMediaItem[]) : [];
+  return { ok: true, data: { media } };
+}

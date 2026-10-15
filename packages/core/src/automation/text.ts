@@ -22,8 +22,9 @@ function containsWhole(t: string, k: string): boolean {
   return false;
 }
 
-/** contains = palavra ou frase inteira; equals = texto inteiro; starts_with = prefixo. Sem maiúsculas/acentos. */
+/** contains = palavra ou frase inteira; equals = texto inteiro; starts_with = prefixo; any = qualquer texto. Sem maiúsculas/acentos. */
 export function matchKeyword(text: string, keywords: string[], mode: KeywordMode): boolean {
+  if (mode === "any") return true;
   const t = normalizeText(text);
   if (!t) return false;
   for (const raw of keywords) {

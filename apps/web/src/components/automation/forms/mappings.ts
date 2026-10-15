@@ -123,14 +123,26 @@ export function delayToConfig(v: DelayValues): unknown {
 }
 
 // ── Gatilho ────────────────────────────────────────────────────────────
-export type TriggerValues = { firstMessageOnly: boolean; keywords: string[]; mode: string; channelId: string; mediaId: string; tagId: string; stageId: string; linkIds: string[] };
+export type TriggerValues = {
+  firstMessageOnly: boolean;
+  anyKeyword: boolean;
+  keywords: string[];
+  mode: string;
+  channelId: string;
+  mediaId: string;
+  tagId: string;
+  stageId: string;
+  linkIds: string[];
+};
 
 export function triggerToValues(config: unknown): TriggerValues {
   const c = rec(config);
+  const isAny = c.anyKeyword === true || c.mode === "any";
   return {
     firstMessageOnly: c.firstMessageOnly === true,
+    anyKeyword: isAny,
     keywords: Array.isArray(c.keywords) ? (c.keywords as string[]) : [],
-    mode: str(c.mode, "contains"),
+    mode: isAny ? "any" : str(c.mode, "contains"),
     channelId: str(c.channelId),
     mediaId: str(c.mediaId),
     tagId: str(c.tagId),
@@ -144,9 +156,19 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
     case "message_received":
       return { firstMessageOnly: !!v.firstMessageOnly };
     case "keyword_detected":
-      return { keywords: cleanKeywords(v.keywords), mode: v.mode };
+      return {
+        ...(v.anyKeyword ? { anyKeyword: true } : {}),
+        keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
+        mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
+      };
     case "instagram_comment":
-      return { channelId: v.channelId, mediaId: v.mediaId?.trim() || null, keywords: cleanKeywords(v.keywords), mode: v.mode };
+      return {
+        channelId: v.channelId,
+        mediaId: v.mediaId?.trim() || null,
+        ...(v.anyKeyword ? { anyKeyword: true } : {}),
+        keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
+        mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
+      };
     case "instagram_story":
       return { channelId: v.channelId };
     case "contact_created":

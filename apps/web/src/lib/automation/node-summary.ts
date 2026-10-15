@@ -13,6 +13,7 @@ function clip(text: string, max = 90): string {
 }
 
 function keywords(c: Record<string, unknown>): string {
+  if (c.anyKeyword === true || c.mode === "any") return "Qualquer comentário / palavra";
   const list = Array.isArray(c.keywords) ? c.keywords.filter((k): k is string => typeof k === "string" && k.trim() !== "") : [];
   if (!list.length) return "Sem palavras-chave";
   return `${KEYWORD_MODE_LABEL[str(c.mode)] ?? "Contém"}: ${clip(list.join(", "), 60)}`;
