@@ -24,8 +24,8 @@ test("lists connections with their channel and no longer loads legacy comment ru
   expect(settings).toEqual({
     connections: [{
       id: "c1", channelId: "ch1", name: "IG", status: "active", accountId: "9", appId: "1", apiVersion: "v26.0", tokenVerified: false,
-      webhookVerified: false, disconnected: false, lastError: null, callbackUrl: "http://127.0.0.1:54321/functions/v1/meta-webhook/c1",
+      webhookVerified: false, disconnected: false, lastError: null, callbackUrl: "http://127.0.0.1:54321/functions/v1/meta-webhook/c1", vip: undefined,
     }],
   });
-  expect(touched.sort()).toEqual(["channels", "meta_connections"]);
+  expect(touched.sort()).toEqual(["channels", "instagram_vip_settings", "meta_connections"]);
 });

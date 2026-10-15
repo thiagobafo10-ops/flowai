@@ -1,5 +1,10 @@
+import { vipErrorMessage } from "./vip";
 // Textos fixos por código: respostas do servidor nunca chegam cruas à interface.
 const ACTION: Record<string, string> = {
+  connection_disconnected: vipErrorMessage("connection_disconnected"),
+  comments_permission_required: vipErrorMessage("comments_permission_required"),
+  rate_limited: vipErrorMessage("rate_limited"),
+  uncertain: vipErrorMessage("uncertain"),
   invalid_token: "O token do Instagram é inválido ou expirou.",
   permission_denied: "Confira as permissões de mensagens e comentários no app Meta.",
   invalid_account: "O token pertence a outra conta do Instagram.",

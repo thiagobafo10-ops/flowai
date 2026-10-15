@@ -1,5 +1,6 @@
 "use server";
 import { z } from "zod";
+import { vipSettingsSchema, vipErrorMessage } from "./vip";
 import { instagramVersionSchema, instagramIdSchema } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org/active-org";
@@ -64,4 +65,28 @@ export async function saveCommentRule(input: unknown): Promise<ActionResult> {
 export async function setCommentRuleActive(id: string, active: boolean): Promise<ActionResult> {
   void id; void active;
   return { ok: false, error: RULES_MOVED };
+}
+
+async function ownedInstagramChannel(c: NonNullable<Awaited<ReturnType<typeof admin>>>, id: string) {
+  const result = await c.db.from("channels").select("id,status,meta_connection_id").eq("id", id).eq("organization_id", c.orgId).eq("type", "instagram").maybeSingle();
+  return result.error ? null : result.data;
+}
+export async function saveInstagramVipSettings(input: unknown): Promise<ActionResult> {
+  const c = await admin(); if (!c) return { ok: false, error: FORBIDDEN };
+  const parsed = vipSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Informe uma resposta curta e um link de convite válido do WhatsApp." };
+  const channel = await ownedInstagramChannel(c, parsed.data.channelId);
+  if (!channel) return { ok: false, error: FORBIDDEN };
+  if (parsed.data.enabled && channel.status !== "active") return { ok: false, error: vipErrorMessage("connection_disconnected") };
+  const { error } = await c.db.rpc("save_instagram_vip_settings", { p_channel_id: channel.id, p_enabled: parsed.data.enabled, p_public_reply_text: parsed.data.publicReplyText, p_group_url: parsed.data.groupUrl });
+  return error ? { ok: false, error: vipErrorMessage(parsed.data.enabled && error.code === "22023" ? "comments_permission_required" : error.message) } : { ok: true, data: undefined };
+}
+export async function verifyInstagramVipPermission(channelId: string): Promise<ActionResult> {
+  const c = await admin(); if (!c) return { ok: false, error: FORBIDDEN };
+  if (!z.uuid().safeParse(channelId).success) return { ok: false, error: "Canal inválido." };
+  const channel = await ownedInstagramChannel(c, channelId);
+  if (!channel) return { ok: false, error: FORBIDDEN };
+  if (channel.status !== "active" || !channel.meta_connection_id) return { ok: false, error: vipErrorMessage("connection_disconnected") };
+  const result = await invoke(c, { action: "verify_vip", channelId, connectionId: channel.meta_connection_id });
+  return result.ok && result.data.verified === true ? { ok: true, data: undefined } : result.ok ? { ok: false, error: vipErrorMessage("comments_permission_required") } : result;
 }

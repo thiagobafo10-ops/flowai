@@ -32,11 +32,13 @@
 
 **Interfaces:** A UI usa tabela `instagram_vip_settings` com `channel_id`, `organization_id`, `enabled`, `public_reply_text`, `group_url`, `activated_at`, `last_error`; RPC autenticada `save_instagram_vip_settings(p_channel_id uuid,p_enabled boolean,p_public_reply_text text,p_group_url text)` retorna jsonb. Configuração padrão ausente significa desativada. RPC verifica admin/owner, canal Instagram ativo/conexão e permissão de comentários antes de ativar. Builder define fila e RPCs internas com tipos explícitos no handler. Operações privada e pública possuem reserva independente e idempotência. Consultar documentação primária Meta antes de fixar endpoint/permissão.
 
-- [ ] Escrever e executar testes que falham para configuração, isolamento, ativação temporal, duplicação, reserva concorrente, pausa, desconexão, prazo privado e resultado incerto.
-- [ ] Implementar migration adicional e testes; aplicar somente em banco local se disponível, sem reset.
-- [ ] Escrever e observar falha de testes de transporte público/privado e worker com fetch simulado: propriedade, autoria própria, VIP palavra inteira, permissão, 429, timeout, falhas independentes.
-- [ ] Implementar provedor e worker com APIs oficiais, sem envio real. Falhas incertas nunca repetidas; respeitar sete dias para resposta privada. Tornar erro de permissão visível e impedir ativação sem verificação.
-- [ ] Executar pgTAP, testes core/Edge e tipos relevantes, revisar diff. Esperado: todos passam. Registrar comandos e limitações concretas.
+- [x] Escrever e executar testes que falham para configuração, isolamento, ativação temporal, duplicação, reserva concorrente, pausa, desconexão, prazo privado e resultado incerto.
+- [x] Implementar migration adicional e testes; aplicar somente em banco local se disponível, sem reset.
+- [x] Escrever e observar falha de testes de transporte público/privado e worker com fetch simulado: propriedade, autoria própria, VIP palavra inteira, permissão, 429, timeout, falhas independentes.
+- [x] Implementar provedor e worker com APIs oficiais, sem envio real. Falhas incertas nunca repetidas; respeitar sete dias para resposta privada. Tornar erro de permissão visível e impedir ativação sem verificação.
+- [x] Executar pgTAP, testes core/Edge e tipos relevantes, revisar diff. Esperado: todos passam. Registrar comandos e limitações concretas.
+
+Evidência Task 1: 2.217 pgTAP/52 arquivos e 215 Edge passaram após as correções de revisão. Reservas foram testadas em duas sessões concorrentes, incluindo desconexão. Revisão independente aprovada. O endpoint de resposta pública foi confirmado no SDK oficial; o endpoint de consulta de permissões ainda requer confirmação na conta real. Testes simulados não comprovam suporte real da Meta.
 
 ### Task 2: Configuração e prévia administrativa
 

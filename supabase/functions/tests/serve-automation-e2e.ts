@@ -1,3 +1,4 @@
+import type { VipClaim, VipPrepared } from "../instagram-worker/vip.ts";
 /** Test-only local proxy. Real Auth/REST/RLS; Graph boundary is injected here. */
 import { createOpenAIProvider } from "../_shared/openai.ts";
 import { createFakeOpenAIFetch } from "./fake-openai.ts";
@@ -34,6 +35,11 @@ const graphFetch: typeof fetch = async (input, init) => {
   if (!/^\d+$/.test(token)) return Response.json({ error: { code: 190 } }, { status: 401 });
   const resource = endpoint.pathname.split("/").at(-1)!;
   if (resource === "me") return Response.json({ user_id: token, username: "empresa_teste" });
+  if (resource === "permissions") return Response.json({ data: [{ permission: "instagram_business_manage_comments", status: "granted" }, { permission: "instagram_business_manage_messages", status: "granted" }] });
+  if (resource === "replies") {
+    graphCalls.push({ accountId: token, body: { recipient: {}, publicCommentId: endpoint.pathname.split("/").at(-2), ...JSON.parse(String(init?.body)) } });
+    return Response.json({ id: `e2e-public-${crypto.randomUUID()}` });
+  }
   if (resource === "subscribed_apps") return Response.json({ success: true });
   if (resource === "messages") {
     const body = JSON.parse(String(init?.body)); graphCalls.push({ accountId: token, body });
@@ -45,10 +51,10 @@ const graphFetch: typeof fetch = async (input, init) => {
     return Response.json({ message_id: `e2e-out-${crypto.randomUUID()}`, recipient_id: recipientId });
   }
   if (endpoint.searchParams.get("fields") === "name,username") return Response.json({ name: "Cliente Instagram", username: "cliente_ig" });
-  if (endpoint.searchParams.get("fields") === "id,owner") return Response.json({ id: resource, owner: { id: resource === "80099" ? "foreign-account" : token } });
+  if (endpoint.searchParams.get("fields")?.startsWith("id,owner")) return Response.json({ id: resource, owner: { id: resource === "80099" ? "foreign-account" : token, username: resource === "80099" ? "foreign_user" : "empresa_teste" } });
   const response = await fetch(`${url}/rest/v1/instagram_events?kind=eq.comment&external_id=eq.${encodeURIComponent(resource)}&select=payload,created_at`, { headers });
   const [event] = await response.json();
-  return event ? Response.json({ id: resource, timestamp: event.created_at, from: { id: event.payload.senderExternalId }, media: { id: event.payload.mediaId, media_product_type: "REELS" } }) : Response.json({ error: { code: 100 } }, { status: 404 });
+  return event ? Response.json({ id: resource, timestamp: event.created_at, text: event.payload.text, from: { id: event.payload.senderExternalId, username: event.payload.senderName ?? "cliente_comentario" }, media: { id: event.payload.mediaId, media_product_type: "REELS" } }) : Response.json({ error: { code: 100 } }, { status: 404 });
 };
 const sendDeps = {
   readConnectionSecrets: repo.readConnectionSecrets, verifyConnection: repo.verifyConnection,
@@ -58,6 +64,10 @@ const sendDeps = {
 };
 const workerDeps = {
   ...sendDeps,
+  prepareVip: (id: string) => rpc<VipPrepared | null>("prepare_instagram_vip_send", { p_event_id: id }),
+  claimVip: (id: string, at: string, text: string, connectionId: string, generation: number) => rpc<VipClaim | null>("claim_instagram_vip_send", { p_intent_id: id, p_comment_at: at, p_comment_text: text, p_expected_connection_id: connectionId, p_expected_generation: generation }),
+  completeVip: (id: string, token: string, state: string, externalId: string | null, errorCode: string | null) => rpc<void>("complete_instagram_vip_send", { p_intent_id: id, p_claim_token: token, p_state: state, p_external_id: externalId, p_error_code: errorCode }),
+  finishVipWork: (id: number, state: string, errorCode: string | null, connectionId: string | null, generation: number | null) => rpc<void>("finish_instagram_vip_work", { p_queue_id: id, p_state: state, p_error_code: errorCode, p_expected_connection_id: connectionId, p_expected_generation: generation }),
   readWorkerSecret: async () => (await rpc<{ workerSecret: string } | null>("read_instagram_worker_config", {}))?.workerSecret ?? null,
   readWork: (limit: number) => rpc<InstagramWork[]>("read_instagram_work", { p_limit: limit }),
   prepare: (id: string) => rpc<PreparedComment | null>("prepare_instagram_comment_send", { p_event_id: id }),
