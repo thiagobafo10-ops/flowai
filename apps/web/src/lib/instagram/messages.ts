@@ -12,6 +12,7 @@ const ACTION: Record<string, string> = {
   already_connected: "Esta conta do Instagram já está conectada a outra organização.",
   app_already_connected: "Esse app Meta já possui uma conexão nesta organização.",
   credentials_changed: "As credenciais mudaram. Teste novamente.",
+  provider_unavailable: "O Instagram não respondeu ou as permissões de leitura de mídia estão pendentes no Meta.",
 };
 
 export function instagramActionMessage(code: unknown): string {

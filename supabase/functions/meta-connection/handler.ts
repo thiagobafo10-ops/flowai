@@ -82,11 +82,27 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       const channel = secrets.channels.find((item) => item.channelId === input.channelId);
       if (!channel) return json({ error: "forbidden" }, 403);
       try {
-        const response = await deps.fetch(
-          `https://graph.instagram.com/${secrets.apiVersion}/me/media?fields=id%2Ccaption%2Cmedia_type%2Cmedia_url%2Cpermalink%2Cthumbnail_url%2Ctimestamp&limit=50`,
-          { headers: { Authorization: `Bearer ${channel.accessToken}` }, signal: AbortSignal.timeout(15000) }
+        const headers = { Authorization: `Bearer ${channel.accessToken}` };
+        const fields = "id%2Ccaption%2Cmedia_type%2Cmedia_url%2Cpermalink%2Cthumbnail_url%2Ctimestamp";
+        let response = await deps.fetch(
+          `https://graph.instagram.com/${secrets.apiVersion}/me/media?fields=${fields}&limit=50`,
+          { headers, signal: AbortSignal.timeout(15000) }
         );
-        const data = await response.json();
+        let data = await response.json();
+        if ((!response.ok || data.error) && channel.accountId) {
+          response = await deps.fetch(
+            `https://graph.instagram.com/${secrets.apiVersion}/${channel.accountId}/media?fields=${fields}&limit=50`,
+            { headers, signal: AbortSignal.timeout(15000) }
+          );
+          data = await response.json();
+        }
+        if ((!response.ok || data.error) && channel.accountId) {
+          response = await deps.fetch(
+            `https://graph.facebook.com/${secrets.apiVersion}/${channel.accountId}/media?fields=${fields}&limit=50`,
+            { headers, signal: AbortSignal.timeout(15000) }
+          );
+          data = await response.json();
+        }
         if (!response.ok || data.error) {
           const errCode = data.error?.code === 190 ? "invalid_token" : "provider_unavailable";
           return json({ error: errCode }, 422);
