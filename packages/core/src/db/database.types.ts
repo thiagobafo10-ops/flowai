@@ -799,6 +799,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"instagram_vip_intents": {
+                  Row: {
+                    "channel_id": string,"claim_token": string | null,"claimed_at": string | null,"claimed_connection_id": string | null,"claimed_generation": number | null,"comment_id": string,"error_code": string | null,"event_id": string | null,"external_id": string | null,"id": string,"kind": string,"organization_id": string,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"claimed_connection_id"?: string | null,"claimed_generation"?: number | null,"comment_id": string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind": string,"organization_id": string,"state"?: string
+                  }
+                  Update: {
+                    "channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"claimed_connection_id"?: string | null,"claimed_generation"?: number | null,"comment_id"?: string,"error_code"?: string | null,"event_id"?: string | null,"external_id"?: string | null,"id"?: string,"kind"?: string,"organization_id"?: string,"state"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_vip_intents_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: false
+      referencedRelation: "instagram_events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "instagram_vip_intents_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_vip_intents_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"instagram_vip_settings": {
+                  Row: {
+                    "activated_at": string | null,"channel_id": string,"comments_error": string | null,"comments_generation": number | null,"comments_verified_at": string | null,"enabled": boolean,"group_url": string,"last_error": string | null,"organization_id": string,"public_reply_text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "activated_at"?: string | null,"channel_id": string,"comments_error"?: string | null,"comments_generation"?: number | null,"comments_verified_at"?: string | null,"enabled"?: boolean,"group_url": string,"last_error"?: string | null,"organization_id": string,"public_reply_text": string
+                  }
+                  Update: {
+                    "activated_at"?: string | null,"channel_id"?: string,"comments_error"?: string | null,"comments_generation"?: number | null,"comments_verified_at"?: string | null,"enabled"?: boolean,"group_url"?: string,"last_error"?: string | null,"organization_id"?: string,"public_reply_text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_vip_settings_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_vip_settings_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"knowledge_chunks": {
                   Row: {
                     "chunk_index": number,"content": string,"created_at": string,"document_id": string,"embedding": string,"id": string,"organization_id": string,"token_count": number
@@ -1239,6 +1297,11 @@ isOneToOne: false
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
                            },
+"claim_instagram_vip_send":
+{ Args: { "p_comment_at": string,"p_comment_text": string,"p_intent_id": string }; Returns: Json
+                           } |
+{ Args: { "p_comment_at": string,"p_comment_text": string,"p_expected_connection_id": string,"p_expected_generation": number,"p_intent_id": string }; Returns: Json
+                           },
 "claim_outreach_deliveries":
 { Args: { "p_limit": number }; Returns: Json
                            },
@@ -1256,6 +1319,9 @@ isOneToOne: false
                            },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
+                           },
+"complete_instagram_vip_send":
+{ Args: { "p_claim_token": string,"p_error_code": string,"p_external_id": string,"p_intent_id": string,"p_state": string }; Returns: undefined
                            },
 "complete_outreach_delivery":
 { Args: { "p_id": string,"p_result": Json,"p_token": string }; Returns: Json
@@ -1325,6 +1391,11 @@ isOneToOne: false
                            },
 "fail_outreach_delivery":
 { Args: { "p_code": string,"p_id": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
+                           },
+"finish_instagram_vip_work":
+{ Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
+                           } |
+{ Args: { "p_error_code": string,"p_expected_connection_id"?: string,"p_expected_generation"?: number,"p_queue_id": number,"p_state": string }; Returns: undefined
                            },
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
@@ -1398,6 +1469,9 @@ isOneToOne: false
 "prepare_instagram_profile":
 { Args: { "p_event_id": string }; Returns: Json
                            },
+"prepare_instagram_vip_send":
+{ Args: { "p_event_id": string }; Returns: Json
+                           },
 "prepare_outreach_delivery":
 { Args: { "p_id": string,"p_token": string }; Returns: Json
                            },
@@ -1421,6 +1495,9 @@ isOneToOne: false
                            },
 "record_instagram_username":
 { Args: { "p_channel_id": string,"p_username": string }; Returns: undefined
+                           },
+"record_instagram_vip_capability":
+{ Args: { "p_channel_id": string,"p_error_code": string,"p_generation": number,"p_success": boolean }; Returns: undefined
                            },
 "remove_contact_from_sequence":
 { Args: { "p_contact": string,"p_sequence": string }; Returns: undefined
@@ -1470,6 +1547,9 @@ isOneToOne: false
 "save_instagram_contact_name":
 { Args: { "p_event_id": string,"p_name": string }; Returns: undefined
                            },
+"save_instagram_vip_settings":
+{ Args: { "p_channel_id": string,"p_enabled": boolean,"p_group_url": string,"p_public_reply_text": string }; Returns: Json
+                           },
 "save_knowledge_document":
 { Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
                            },
@@ -1516,6 +1596,9 @@ isOneToOne: false
                            },
 "sweep_instagram_send_intents":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"sweep_instagram_vip_leases":
+{ Args: Record<PropertyKey, never>; Returns: number
                            },
 "sweep_outreach_deliveries":
 { Args: Record<PropertyKey, never>; Returns: undefined

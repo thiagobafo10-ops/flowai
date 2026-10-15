@@ -40,6 +40,30 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
     }
     if (secrets.disconnected) return json({ error: "connection_disconnected" }, 409);
     if (input.action === "reveal_verify_token") return json({ verifyToken: secrets.verifyToken });
+    if (input.action === "verify_vip") {
+      const channel=secrets.channels.find(item=>item.channelId===input.channelId);
+      if (!channel) return json({error:"forbidden"},403);
+      if (!deps.repository.recordVipCapability) return json({error:"operation_failed"},503);
+      let errorCode: string | null="comments_permission_required";
+      try {
+        const headers={Authorization:`Bearer ${channel.accessToken}`};
+        const identityResponse=await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/me?fields=user_id%2Cusername`,{headers,signal:AbortSignal.timeout(15000)});
+        const identity=await identityResponse.json();
+        if (!identityResponse.ok || identity.error) errorCode=identity.error?.code===190 ? "invalid_token" : "comments_permission_required";
+        else if (String(identity.user_id ?? "")!==channel.accountId || typeof identity.username!=="string" || !instagramUsername.test(identity.username)) errorCode="invalid_account";
+        else {
+          const response=await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/me/permissions`,{headers,signal:AbortSignal.timeout(15000)});
+          const permissions=await response.json();
+          const scopes=new Set(Array.isArray(permissions.data) ? permissions.data.filter((entry: {status?: string})=>entry.status==="granted").map((entry: {permission?: string})=>entry.permission) : []);
+          if (response.ok && !permissions.error && scopes.has("instagram_business_manage_comments") && scopes.has("instagram_business_manage_messages")) {
+            await deps.repository.recordInstagramUsername(channel.channelId,identity.username);
+            errorCode=null;
+          } else if (permissions.error?.code===190) errorCode="invalid_token";
+        }
+      } catch { errorCode="provider_unavailable"; }
+      await deps.repository.recordVipCapability(channel.channelId,secrets.generation,errorCode===null,errorCode);
+      return errorCode ? json({error:errorCode},422) : json({verified:true});
+    }
     if (input.action === "validate_media") {
       if (typeof input.mediaId !== "string" || !/^\d{1,100}$/.test(input.mediaId)) return json({ error: "invalid_input" }, 400);
       const channel = secrets.channels.find((item) => item.channelId === input.channelId);

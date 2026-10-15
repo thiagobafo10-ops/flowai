@@ -52,6 +52,14 @@ export class InstagramProvider implements ChannelProvider {
     return { externalId: result.message_id as string, recipientId: result.recipient_id };
   }
 
+  /** Meta IGComment.create_reply: POST /{comment-id}/replies, message parameter. */
+  async sendPublicReply(commentId: string, text: string): Promise<{ externalId: string }> {
+    if (!instagramIdSchema.safeParse(commentId).success || !instagramTextSchema.safeParse(text).success) throw new InstagramError("invalid_content", "rejected");
+    const result = await this.request(`${encodeURIComponent(commentId)}/replies`, { message: text });
+    if (typeof result.id !== "string" || !result.id) throw new InstagramError("invalid_response", "uncertain");
+    return { externalId: result.id };
+  }
+
   async markAsRead(_externalMessageId: string): Promise<void> {
     // Official Instagram Login sender-actions examples currently use the Facebook
     // host and even show typing_on for mark_seen. Do not guess a cross-API call.

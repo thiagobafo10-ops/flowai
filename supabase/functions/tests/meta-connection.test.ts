@@ -25,6 +25,21 @@ function fixture() {
   return { deps, writes, secrets, request };
 }
 
+Deno.test("VIP permission is verified remotely and recorded by service, never user asserted", async () => {
+ const f=fixture(); const verified: unknown[]=[];
+ f.deps.repository.recordVipCapability=async(...args)=>{verified.push(args);};
+ f.deps.fetch=async(url)=>String(url).includes("/me/permissions") ? Response.json({data:[{permission:"instagram_business_manage_comments",status:"granted"},{permission:"instagram_business_manage_messages",status:"granted"}]}) : Response.json({user_id:"789",username:"empresa"});
+ const response=await handleMetaConnection(f.request("verify_vip",{channelId:"channel"}),f.deps);
+ assert(response.status===200); assert(JSON.stringify(verified)==='[["channel",1,true,null]]');
+});
+Deno.test("missing comments scope prevents VIP capability despite messaging access", async () => {
+ const f=fixture(); const verified: unknown[]=[];
+ f.deps.repository.recordVipCapability=async(...args)=>{verified.push(args);};
+ f.deps.fetch=async(url)=>String(url).includes("/me/permissions") ? Response.json({data:[{permission:"instagram_business_manage_messages",status:"granted"}]}) : Response.json({user_id:"789",username:"empresa"});
+ const response=await handleMetaConnection(f.request("verify_vip",{channelId:"channel",commentsGranted:true}),f.deps);
+ assert(response.status===422); assert(JSON.stringify(verified).includes('false,"comments_permission_required"'));
+});
+
 Deno.test("invalid JWT causes no privileged reads or writes", async () => {
   const f = fixture(); f.deps.authorize = async () => null;
   let reads = 0; f.deps.repository.readConnectionSecrets = async () => { reads++; return f.secrets; };

@@ -116,12 +116,12 @@ select throws_ok(format($$insert into public.contact_tags(organization_id, conta
 select tests.authenticate_as(:'uview');
 delete from public.contact_tags;
 select tests.clear_authentication();
-select is((select count(*)::int from public.contact_tags), 1, 'viewer não remove contact_tags');
+select is((select count(*)::int from public.contact_tags where organization_id=:'org_a'), 1, 'viewer não remove contact_tags');
 select tests.authenticate_as(:'uagent');
 delete from public.contact_tags;
 delete from public.contact_custom_fields;
 select tests.clear_authentication();
-select is((select count(*)::int from public.contact_tags) + (select count(*)::int from public.contact_custom_fields), 0, 'agent remove contact_tags e custom fields');
+select is((select count(*)::int from public.contact_tags where organization_id=:'org_a') + (select count(*)::int from public.contact_custom_fields where organization_id=:'org_a'), 0, 'agent remove contact_tags e custom fields');
 
 -- delete contato: agent não, admin sim (cascade para deals)
 select tests.authenticate_as(:'uagent');

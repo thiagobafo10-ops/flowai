@@ -1,11 +1,12 @@
 import { sendClaimedInstagram, type SendClaim, type SendDeps } from "../send-message/handler.ts";
 import { constantTimeTextEqual } from "../_shared/http.ts";
 import { InstagramProvider } from "../../../packages/core/src/channels/instagram/provider.ts";
+import { processInstagramVipWork, type VipDeps } from "./vip.ts";
 export type WorkResult = "done" | "ignored" | "retry" | "failed" | "uncertain";
-export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" };
+export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" | "vip" };
 export type PreparedProfile = { eventId: string; organizationId: string; channelId: string; connectionId: string; contactId: string; senderExternalId: string };
 export type PreparedComment = { eventId: string; organizationId: string; channelId: string; connectionId: string; intentId: string; commentId: string; mediaId: string; senderExternalId: string; ruleEffectiveAt: string; state: string };
-export type InstagramWorkerDeps = SendDeps & {
+export type InstagramWorkerDeps = SendDeps & Partial<Pick<VipDeps, "prepareVip" | "claimVip" | "completeVip" | "finishVipWork">> & {
   readWorkerSecret(): Promise<string | null>;
   readWork(limit: number): Promise<InstagramWork[]>;
   prepare(eventId: string): Promise<PreparedComment | null>;
@@ -36,6 +37,10 @@ async function processInstagramProfile(item: InstagramWork, deps: InstagramWorke
   return state;
 }
 export async function processInstagramWork(item: InstagramWork, deps: InstagramWorkerDeps): Promise<WorkResult> {
+  if (item.task === "vip") {
+    if (!deps.prepareVip || !deps.claimVip || !deps.completeVip || !deps.finishVipWork) throw new Error("VIP worker not configured");
+    return await processInstagramVipWork(item, { ...deps, prepareVip: deps.prepareVip, claimVip: deps.claimVip, completeVip: deps.completeVip, finishVipWork: deps.finishVipWork });
+  }
   if (item.task === "profile") return await processInstagramProfile(item, deps);
   let state: WorkResult = "ignored"; let errorCode: string | null = null;
   let claimed = false;
@@ -61,8 +66,11 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
           const createdAt = Date.parse(comment.timestamp);
           const now = deps.now().getTime();
           const productType = comment.media?.media_product_type;
+          const officialAuthorName = String(comment.from?.username ?? comment.username ?? "").toLowerCase();
+          const connectedUsername = String(channel.username ?? "").toLowerCase();
           const eligible = Number.isFinite(createdAt) && createdAt <= now && now - createdAt < 7 * 86400000
             && String(comment.id) === prepared.commentId && String(comment.from?.id) === prepared.senderExternalId
+            && String(comment.from?.id) !== channel.accountId && !(connectedUsername && officialAuthorName === connectedUsername)
             && String(comment.media?.id ?? "") === prepared.mediaId && (!productType || ["FEED", "REELS"].includes(productType));
           // The first rule may have been (re)activated after the comment was posted:
           // fall back to the next rule that was already effective at that time.

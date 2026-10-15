@@ -27,6 +27,11 @@ function fixture() {
 Deno.test("keyword work sends one private reply and acknowledges completion", async () => {
   const f = fixture(); assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1); assert(JSON.stringify(f.finished) === '[[1,"done",null]]');
 });
+Deno.test("legacy private automation also ignores its own verified username with an app scoped ID", async () => {
+ const f=fixture();const read=f.deps.readConnectionSecrets;f.deps.readConnectionSecrets=async(id)=>{const secrets=await read(id);if(secrets)secrets.channels[0].username="empresa";return secrets;};
+ const fetcher=f.deps.fetch;f.deps.fetch=async(url,init)=>String(url).includes("/123?")?Response.json({id:"123",timestamp:"2026-10-11T12:00:00Z",from:{id:"900",username:"EMPRESA"},media:{id:"456"}}):fetcher(url,init);
+ assert(await processInstagramWork(f.work,f.deps)==="ignored");assert(f.sends()===0);
+});
 Deno.test("changed rule is discarded before Graph API", async () => {
   const f = fixture(); f.deps.prepare = async () => null;
   assert(await processInstagramWork(f.work, f.deps) === "ignored"); assert(f.sends() === 0);

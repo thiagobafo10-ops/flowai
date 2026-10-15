@@ -67,6 +67,8 @@ insert into public.ai_jobs(id,organization_id,kind,conversation_id,run_after) va
   ('00000000-0000-0000-0000-000000003631',:'oa','reply','00000000-0000-0000-0000-000000003621',now()+interval '1 hour'),
   ('00000000-0000-0000-0000-000000003632',:'oa','reply','00000000-0000-0000-0000-000000003622',now()-interval '1 minute'),
   ('00000000-0000-0000-0000-000000003633',:'oa','reply','00000000-0000-0000-0000-000000003623',now()-interval '1 minute');
+-- Isolar a fila global dos dados locais já existentes; o ROLLBACK restaura os horários.
+update public.ai_jobs set run_after=now()+interval '1 day' where organization_id not in (:'oa',:'ob') and state='pending';
 select public.claim_ai_jobs(1) as c1 \gset
 select is(jsonb_array_length(:'c1'::jsonb),1,'primeira reserva pega 1');
 select public.claim_ai_jobs(5) as c2 \gset
