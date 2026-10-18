@@ -14,25 +14,20 @@ async function DashboardContent({ searchParams }: Props) {
   if (!org) return null;
   const data = await getDashboardMetrics(org.id, period);
   return (
-    <>
-      <p className="text-muted-foreground">{org.name}</p>
-      <div className="pt-4">
-        <DashboardView
-          key={org.id}
-          orgId={org.id}
-          initialPeriod={period}
-          initialData={data}
-          initialDataUpdatedAt={nowMs()}
-        />
-      </div>
-    </>
+    <DashboardView
+      key={org.id}
+      orgId={org.id}
+      orgName={org.name}
+      initialPeriod={period}
+      initialData={data}
+      initialDataUpdatedAt={nowMs()}
+    />
   );
 }
 
 export default function DashboardPage(props: Props) {
   return (
-    <main className="space-y-2 p-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <main className="p-6">
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent {...props} />
       </Suspense>

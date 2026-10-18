@@ -27,7 +27,7 @@ export function PeriodSelector({ value, onChange }: Props) {
       role="radiogroup"
       aria-label="Período"
       onKeyDown={onKeyDown}
-      className="inline-flex rounded-lg bg-muted p-1"
+      className="inline-flex h-11 items-center gap-1 rounded-full bg-card p-1 shadow-soft"
     >
       {PERIOD_OPTIONS.map((o) => {
         const checked = o.value === value;
@@ -40,9 +40,9 @@ export function PeriodSelector({ value, onChange }: Props) {
             tabIndex={checked ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={cn(
-              "rounded-md px-3 py-1 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              "h-9 rounded-full px-4 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
               checked
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

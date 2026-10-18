@@ -20,11 +20,13 @@ export function AppHeader({
 }) {
   const title = findNavItem(usePathname())?.label ?? "";
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-4">
-      <MobileNav orgName={orgName} role={role} />
-      <p className="flex-1 truncate text-base font-semibold">{title}</p>
-      <ThemeToggle />
-      <UserMenu userName={userName} userEmail={userEmail} />
+    <header className="sticky top-0 z-30 bg-background/80 px-3 pt-3 pb-2 backdrop-blur">
+      <div className="flex h-12 items-center gap-1 rounded-full bg-card px-2 text-card-foreground shadow-float">
+        <MobileNav orgName={orgName} role={role} />
+        <p className="flex-1 truncate px-2 text-sm font-medium">{title}</p>
+        <ThemeToggle />
+        <UserMenu userName={userName} userEmail={userEmail} />
+      </div>
     </header>
   );
 }

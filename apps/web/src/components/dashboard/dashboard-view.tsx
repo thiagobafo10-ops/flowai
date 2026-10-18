@@ -2,12 +2,20 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { dashboardMetricsSchema, parsePeriod, type DashboardMetrics, type DashboardPeriod } from "@flowai/core";
+import { SparklesIcon } from "lucide-react";
+import {
+  dashboardMetricsSchema,
+  parsePeriod,
+  type DashboardMetrics,
+  type DashboardPeriod,
+} from "@flowai/core";
+import { ActionLink } from "@/components/ui/action-link";
 import { Button } from "@/components/ui/button";
-import { DashboardCharts } from "./charts";
+import { IconOrb } from "@/components/ui/icon-orb";
+import { AiVsHandoffChart, ConversationsChart, FunnelChart } from "./charts";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 import { GettingStartedBanner } from "./getting-started-banner";
-import { KpiGrid } from "./kpi-grid";
+import { PipelineCard, PulseCard, ServiceCard } from "./kpi-cards";
 import { PeriodSelector } from "./period-selector";
 
 const ERROR_MESSAGE = "Não foi possível carregar o dashboard.";
@@ -20,12 +28,19 @@ async function fetchDashboard(period: DashboardPeriod): Promise<DashboardMetrics
 
 type Props = {
   orgId: string;
+  orgName: string;
   initialPeriod: DashboardPeriod;
   initialData: DashboardMetrics;
   initialDataUpdatedAt: number;
 };
 
-export function DashboardView({ orgId, initialPeriod, initialData, initialDataUpdatedAt }: Props) {
+export function DashboardView({
+  orgId,
+  orgName,
+  initialPeriod,
+  initialData,
+  initialDataUpdatedAt,
+}: Props) {
   const searchParams = useSearchParams();
   const period = parsePeriod(searchParams.get("periodo"));
 
@@ -48,15 +63,33 @@ export function DashboardView({ orgId, initialPeriod, initialData, initialDataUp
 
   return (
     <div className="space-y-6">
-      <PeriodSelector value={period} onChange={changePeriod} />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl leading-tight tracking-tight sm:text-4xl">
+            <span className="block font-normal text-muted-foreground">{orgName}</span>
+            <span className="block font-semibold">Resumo do seu negócio</span>
+          </h1>
+          <IconOrb size="lg" aria-hidden="true">
+            <SparklesIcon className="size-5" />
+          </IconOrb>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <PeriodSelector value={period} onChange={changePeriod} />
+          <ActionLink href="/inbox">Abrir Inbox</ActionLink>
+        </div>
+      </div>
       {data ? (
-        <>
+        <div className="grid grid-cols-12 grid-flow-row-dense gap-4">
           {!data.has_activity && <GettingStartedBanner />}
-          <KpiGrid data={data} period={period} />
-          <DashboardCharts data={data} />
-        </>
+          <PulseCard data={data} period={period} />
+          <ConversationsChart data={data} />
+          <PipelineCard data={data} period={period} />
+          <ServiceCard data={data} period={period} />
+          <FunnelChart data={data} />
+          <AiVsHandoffChart data={data} />
+        </div>
       ) : isError ? (
-        <div className="flex flex-col items-start gap-3 rounded-xl p-4 ring-1 ring-foreground/10">
+        <div className="flex flex-col items-start gap-3 rounded-xl bg-card p-5 shadow-soft">
           <p role="alert" className="text-sm">
             {ERROR_MESSAGE}
           </p>

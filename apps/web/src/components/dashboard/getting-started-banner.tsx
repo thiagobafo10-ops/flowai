@@ -1,15 +1,22 @@
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ActionLink } from "@/components/ui/action-link";
+import { IconOrb } from "@/components/ui/icon-orb";
+import { SparklesIcon } from "lucide-react";
 
 export function GettingStartedBanner() {
   return (
-    <div className="flex flex-col gap-3 rounded-xl bg-primary/10 p-4 ring-1 ring-primary/20 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm">
-        Ainda não há dados. Conecte um canal para começar a receber conversas.
-      </p>
-      <Link href="/configuracoes" className={buttonVariants()}>
-        Conectar canal
-      </Link>
-    </div>
+    <Card className="col-span-12">
+      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <IconOrb size="lg" aria-hidden="true">
+            <SparklesIcon className="size-5" />
+          </IconOrb>
+          <p className="text-sm">
+            Ainda não há dados. Conecte um canal para começar a receber conversas.
+          </p>
+        </div>
+        <ActionLink href="/configuracoes">Conectar canal</ActionLink>
+      </CardContent>
+    </Card>
   );
 }

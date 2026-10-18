@@ -27,15 +27,22 @@ export function NavLinks({
               aria-current={item.href === activeHref ? "page" : undefined}
               onClick={onNavigate}
               className={cn(
-                "flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
-                "aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary",
-                collapsed && "justify-center px-0",
+                "flex h-10 items-center gap-3 rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                // Ativo é o único lugar onde o lima aparece na navegação (como no rail de referência).
+                "aria-[current=page]:bg-lime aria-[current=page]:font-semibold aria-[current=page]:text-lime-foreground aria-[current=page]:hover:bg-lime",
+                collapsed && "mx-auto size-10 justify-center px-0",
               )}
             >
               <Icon className="size-4 shrink-0" aria-hidden="true" />
               <span className={cn(collapsed && "sr-only")}>{item.label}</span>
               {item.href === "/inbox" && unread > 0 && (
-                <span aria-label={`${unread} conversas não lidas`} className={cn("ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground", collapsed && "sr-only")}>
+                <span
+                  aria-label={`${unread} conversas não lidas`}
+                  className={cn(
+                    "ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground",
+                    collapsed && "sr-only",
+                  )}
+                >
                   {unread}
                 </span>
               )}
