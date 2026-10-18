@@ -48,6 +48,26 @@ Deno.test("comment posted before rule activation is not answered retroactively",
   const f = fixture(); f.deps.fetch = async () => Response.json({ id: "123", timestamp: "2026-10-09T12:00:00+0000", from: { id: "900" }, media: { id: "456", media_product_type: "FEED" } });
   assert(await processInstagramWork(f.work, f.deps) === "ignored"); assert(f.sends() === 0);
 });
+Deno.test("comment on a boosted ad post (media_product_type AD) receives the private reply", async () => {
+  const f = fixture(); const fetcher = f.deps.fetch;
+  f.deps.fetch = async (input, init) => String(input).includes("/123?")
+    ? Response.json({ id: "123", timestamp: "2026-10-11T12:00:00+0000", from: { id: "900" }, media: { id: "456", media_product_type: "AD" } })
+    : fetcher(input, init);
+  assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1);
+});
+Deno.test("ad comment verifies ownership against the original media id", async () => {
+  const f = fixture(); const prepare = f.deps.prepare; const ownership: string[] = [];
+  f.deps.prepare = async (id) => { const p = await prepare(id); return p ? { ...p, mediaId: "ad1", originalMediaId: "456" } : null; };
+  const fetcher = f.deps.fetch;
+  f.deps.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("/123?")) return Response.json({ id: "123", timestamp: "2026-10-11T12:00:00+0000", from: { id: "900" }, media: { id: "ad1", media_product_type: "AD" } });
+    if (url.includes("/456?")) { ownership.push(url); return Response.json({ id: "456", owner: { id: "789" } }); }
+    return fetcher(input, init);
+  };
+  assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1);
+  assert(ownership.length === 1 && ownership[0].includes("/456?"), "ownership is checked on the original media id");
+});
 Deno.test("reactivating an old rule does not answer comments from its inactive period", async () => {
   const f = fixture(); const prepare = f.deps.prepare;
   f.deps.prepare = async (id) => { const original = await prepare(id); return original ? { ...original, ruleEffectiveAt: "2026-10-12T00:00:00Z" } : null; };

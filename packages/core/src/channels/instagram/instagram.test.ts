@@ -19,10 +19,18 @@ describe("Instagram webhook events", () => {
   });
   it("normalizes a comment independently of Direct", () => {
     const payload = { object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, changes: [{ field: "comments", value: { id: "c1", from: { id: "9001", username: "cliente" }, text: "GUIA", media: { id: "p1", media_product_type: "REELS" } } }] }] };
-    expect(parseInstagramEvents(payload)[0]).toEqual({ kind: "comment", accountId: "178414000000001", externalId: "c1", commentId: "c1", mediaId: "p1", mediaProductType: "REELS", senderExternalId: "9001", senderName: "cliente", text: "GUIA", occurredAt: "2026-10-12T12:00:00.000Z" });
+    expect(parseInstagramEvents(payload)[0]).toEqual({ kind: "comment", accountId: "178414000000001", externalId: "c1", commentId: "c1", mediaId: "p1", mediaProductType: "REELS", originalMediaId: null, adId: null, senderExternalId: "9001", senderName: "cliente", text: "GUIA", occurredAt: "2026-10-12T12:00:00.000Z" });
+  });
+  it("keeps the ad fields of a comment on a boosted post", () => {
+    const payload = { object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, changes: [{ field: "comments", value: { id: "c9", from: { id: "9001", username: "cliente" }, text: "GUIA", media: { id: "ad1", media_product_type: "AD", ad_id: "ad1", original_media_id: "p1" } } }] }] };
+    expect(parseInstagramEvents(payload)[0]).toMatchObject({ kind: "comment", commentId: "c9", mediaId: "ad1", mediaProductType: "AD", originalMediaId: "p1", adId: "ad1" });
   });
   it("accepts the documented entry-level comment shape", () => {
     expect(parseInstagramEvents({ object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, field: "comments", value: { id: "c2", from: { id: "9001" }, text: "guia", media: { id: "p1" } } }] })[0]).toMatchObject({ kind: "comment", commentId: "c2" });
+  });
+  it("accepts media ids sent as numbers instead of numeric strings", () => {
+    const payload = { object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, changes: [{ field: "comments", value: { id: "c3", from: { id: "9001" }, text: "GUIA", media: { id: 17923847291823, media_product_type: "AD", original_media_id: 17923847291824 } } }] }] };
+    expect(parseInstagramEvents(payload)[0]).toMatchObject({ kind: "comment", commentId: "c3", mediaId: "17923847291823", originalMediaId: "17923847291824" });
   });
   it("normalizes the messaging_seen receipt using the exact message ID", () => {
     expect(parseInstagramEvents({ object: "instagram", entry: [{ id: "178414000000001", messaging: [{ sender: { id: "9001" }, recipient: { id: "178414000000001" }, timestamp: 1791806400000, read: { mid: "out1" } }] }] })[0]).toMatchObject({ kind: "status", messageExternalId: "out1", state: "read" });

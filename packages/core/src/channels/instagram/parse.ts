@@ -9,7 +9,9 @@ const postbackSchema = z.object({ mid: z.string().min(1).max(1024).optional(), t
 const quickReplySchema = z.object({ payload: z.string().min(1).max(2000) }).passthrough();
 const messageSchema = z.object({ mid: z.string().min(1).max(1024), text: z.string().max(4096).optional(), is_echo: z.boolean().optional(), is_self: z.boolean().optional(), is_deleted: z.boolean().optional(), is_unsupported: z.boolean().optional(), quick_reply: quickReplySchema.optional(), referral: referralSchema.optional(), attachments: z.array(z.object({ type: z.string().max(100) }).passthrough()).optional(), reply_to: z.object({ story: z.object({ id: z.string().optional() }).passthrough().optional() }).passthrough().optional() }).passthrough();
 const changeSchema = z.object({ field: z.string(), value: z.unknown() });
-const commentSchema = z.object({ id: z.string().min(1).max(1024), from: z.object({ id: z.string().min(1).max(100), username: z.string().max(255).optional() }), text: z.string().max(4096).optional(), media: z.object({ id: z.string().min(1).max(100), media_product_type: z.string().optional() }) });
+/** IDs da Meta chegam como "numeric string"; aceitamos número para não invalidar o lote inteiro. */
+const mediaIdSchema = z.union([z.string().min(1).max(100), z.number().int().transform((n) => String(n))]);
+const commentSchema = z.object({ id: z.string().min(1).max(1024), from: z.object({ id: z.string().min(1).max(100), username: z.string().max(255).optional() }), text: z.string().max(4096).optional(), media: z.object({ id: mediaIdSchema, media_product_type: z.string().optional(), original_media_id: mediaIdSchema.optional(), ad_id: mediaIdSchema.optional() }) });
 
 function timestamp(value: number, milliseconds: boolean): string {
   const date = new Date(milliseconds ? value : value * 1000);
@@ -70,7 +72,7 @@ export function parseInstagramEvents(raw: unknown): InstagramEvent[] {
       const base = { accountId: entry.id, occurredAt: timestamp(entry.time, entry.time > 1e12) };
       if (change.field === "comments") {
         const comment = commentSchema.parse(change.value);
-        events.push({ ...base, kind: "comment", externalId: comment.id, commentId: comment.id, mediaId: comment.media.id, mediaProductType: comment.media.media_product_type ?? null, senderExternalId: comment.from.id, senderName: comment.from.username ?? null, text: comment.text ?? "" });
+        events.push({ ...base, kind: "comment", externalId: comment.id, commentId: comment.id, mediaId: comment.media.id, mediaProductType: comment.media.media_product_type ?? null, originalMediaId: comment.media.original_media_id ?? null, adId: comment.media.ad_id ?? null, senderExternalId: comment.from.id, senderName: comment.from.username ?? null, text: comment.text ?? "" });
       } else events.push({ ...base, kind: "ignored", externalId: `${change.field}:${entry.time}`, reason: "unsupported_change" });
     }
   }

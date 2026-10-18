@@ -5,7 +5,7 @@ import { processInstagramVipWork, type VipDeps } from "./vip.ts";
 export type WorkResult = "done" | "ignored" | "retry" | "failed" | "uncertain";
 export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" | "vip" };
 export type PreparedProfile = { eventId: string; organizationId: string; channelId: string; connectionId: string; contactId: string; senderExternalId: string };
-export type PreparedComment = { eventId: string; organizationId: string; channelId: string; connectionId: string; intentId: string; commentId: string; mediaId: string; senderExternalId: string; ruleEffectiveAt: string; state: string };
+export type PreparedComment = { eventId: string; organizationId: string; channelId: string; connectionId: string; intentId: string; commentId: string; mediaId: string; originalMediaId?: string | null; senderExternalId: string; ruleEffectiveAt: string; state: string };
 export type InstagramWorkerDeps = SendDeps & Partial<Pick<VipDeps, "prepareVip" | "claimVip" | "completeVip" | "finishVipWork">> & {
   readWorkerSecret(): Promise<string | null>;
   readWork(limit: number): Promise<InstagramWork[]>;
@@ -68,10 +68,12 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
           const productType = comment.media?.media_product_type;
           const officialAuthorName = String(comment.from?.username ?? comment.username ?? "").toLowerCase();
           const connectedUsername = String(channel.username ?? "").toLowerCase();
+          // Ad/boosted comments report the ad-scoped media id; the original (organic) media id comes alongside it.
+          const expectedMediaIds = [prepared.mediaId, prepared.originalMediaId].filter((id): id is string => typeof id === "string" && id.length > 0);
           const eligible = Number.isFinite(createdAt) && createdAt <= now && now - createdAt < 7 * 86400000
             && String(comment.id) === prepared.commentId && String(comment.from?.id) === prepared.senderExternalId
             && String(comment.from?.id) !== channel.accountId && !(connectedUsername && officialAuthorName === connectedUsername)
-            && String(comment.media?.id ?? "") === prepared.mediaId && (!productType || ["FEED", "REELS"].includes(productType));
+            && expectedMediaIds.includes(String(comment.media?.id ?? "")) && (!productType || ["FEED", "REELS", "AD"].includes(productType));
           // The first rule may have been (re)activated after the comment was posted:
           // fall back to the next rule that was already effective at that time.
           let target: PreparedComment | null = prepared;
@@ -82,14 +84,15 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
           if (!eligible || !target) {
             state = "ignored"; errorCode = "comment_not_eligible";
           } else {
-            const mediaResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(prepared.mediaId)}?fields=id%2Cowner%7Bid%2Cusername%7D`, { headers, signal: AbortSignal.timeout(15000) });
+            const ownershipMediaId = prepared.originalMediaId && prepared.originalMediaId.length > 0 ? prepared.originalMediaId : prepared.mediaId;
+            const mediaResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${encodeURIComponent(ownershipMediaId)}?fields=id%2Cowner%7Bid%2Cusername%7D`, { headers, signal: AbortSignal.timeout(15000) });
             const media = await mediaResponse.json();
             const ownerId = String(media.owner?.id ?? media.owner ?? "");
             const ownerUsername = String(media.owner?.username ?? "").toLowerCase();
             const channelUsername = String(channel.username ?? "").toLowerCase();
             const owned = ownerId === channel.accountId || (channelUsername.length > 0 && ownerUsername === channelUsername);
             if (mediaResponse.status >= 500 || mediaResponse.status === 429) { state = "retry"; errorCode = "provider_unavailable"; }
-            else if (!mediaResponse.ok || String(media.id) !== prepared.mediaId || !owned) { state = "ignored"; errorCode = "media_not_owned"; }
+            else if (!mediaResponse.ok || String(media.id) !== ownershipMediaId || !owned) { state = "ignored"; errorCode = "media_not_owned"; }
             else {
               const claim = await deps.claim(target.intentId);
               if (!claim) state = "retry";

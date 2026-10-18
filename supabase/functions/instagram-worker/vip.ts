@@ -2,7 +2,7 @@ import type { MetaSecrets } from "../_shared/meta-repository.ts";
 import type { InstagramWork, WorkResult } from "./handler.ts";
 import { InstagramProvider } from "../../../packages/core/src/channels/instagram/provider.ts";
 import { InstagramError } from "../../../packages/core/src/channels/instagram/errors.ts";
-export type VipPrepared = { eventId: string; organizationId: string; channelId: string; connectionId: string; commentId: string; mediaId: string; senderExternalId: string; activatedAt: string; operations: { id: string; kind: "public" | "private"; state: string }[] };
+export type VipPrepared = { eventId: string; organizationId: string; channelId: string; connectionId: string; commentId: string; mediaId: string; originalMediaId?: string | null; senderExternalId: string; activatedAt: string; operations: { id: string; kind: "public" | "private"; state: string }[] };
 export type VipClaim = { id: string; claimToken: string; kind: "public" | "private"; text: string };
 export type VipDeps = {
  prepareVip(id: string): Promise<VipPrepared | null>;
@@ -42,14 +42,17 @@ export async function processInstagramVipWork(item: Pick<InstagramWork, "queueId
   const authorId = String(comment.from?.id ?? "");
   const authorName = String(comment.from?.username ?? comment.username ?? "").toLowerCase();
   const createdAt = Date.parse(comment.timestamp); const now = deps.now().getTime();
-  const eligible = String(comment.id) === prepared.commentId && String(comment.media?.id ?? "") === prepared.mediaId
+  // Ad/boosted comments report the ad-scoped media id; the original (organic) media id comes alongside it.
+  const expectedMediaIds = [prepared.mediaId, prepared.originalMediaId].filter((id): id is string => typeof id === "string" && id.length > 0);
+  const eligible = String(comment.id) === prepared.commentId && expectedMediaIds.includes(String(comment.media?.id ?? ""))
    && authorId === prepared.senderExternalId && !!authorName && authorId !== channel.accountId && authorName !== ownUsername
    && Number.isFinite(createdAt) && createdAt <= now && createdAt >= Date.parse(prepared.activatedAt)
-   && (!comment.media?.media_product_type || ["FEED","REELS"].includes(comment.media.media_product_type));
+   && (!comment.media?.media_product_type || ["FEED","REELS","AD"].includes(comment.media.media_product_type));
   if (!eligible) { await finish(state,"comment_not_eligible"); return state; }
-  const media = await get(`${encodeURIComponent(prepared.mediaId)}?fields=id%2Cowner%7Bid%2Cusername%7D`);
+  const ownershipMediaId = prepared.originalMediaId && prepared.originalMediaId.length > 0 ? prepared.originalMediaId : prepared.mediaId;
+  const media = await get(`${encodeURIComponent(ownershipMediaId)}?fields=id%2Cowner%7Bid%2Cusername%7D`);
   const owned = String(media.owner?.id ?? media.owner ?? "") === channel.accountId || String(media.owner?.username ?? "").toLowerCase() === ownUsername;
-  if (String(media.id) !== prepared.mediaId || !owned) { await finish(state,"media_not_owned"); return state; }
+  if (String(media.id) !== ownershipMediaId || !owned) { await finish(state,"media_not_owned"); return state; }
   const provider = new InstagramProvider({ accountId: channel.accountId, accessToken: channel.accessToken, apiVersion: secrets.apiVersion, fetch: deps.fetch, now: deps.now });
   let retry=false; let uncertain=false; let failed=false; let sent=false;
   for (const operation of prepared.operations) {
