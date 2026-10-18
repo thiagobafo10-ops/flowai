@@ -38,6 +38,7 @@ export function triggerSummary(type: TriggerType, config: unknown, refs: EditorR
       break;
     case "instagram_comment":
       lines.push(nameOf(refs.channels, c.channelId, "Escolha o canal"), keywords(c));
+      if (c.oncePerUser !== false) lines.push("Uma vez por pessoa");
       break;
     case "instagram_story":
       lines.push(nameOf(refs.channels, c.channelId, "Escolha o canal"));

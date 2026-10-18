@@ -78,7 +78,7 @@ export function defaultTriggerConfig(type: TriggerType, firstChannelId: string |
     case "keyword_detected":
       return { keywords: [], mode: "contains" };
     case "instagram_comment":
-      return { channelId: firstChannelId ?? "", mediaId: null, keywords: [], mode: "contains" };
+      return { channelId: firstChannelId ?? "", mediaId: null, oncePerUser: true, keywords: [], mode: "contains" };
     case "instagram_story":
       return { channelId: firstChannelId ?? "" };
     case "contact_created":

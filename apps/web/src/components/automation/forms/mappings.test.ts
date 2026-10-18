@@ -79,7 +79,7 @@ describe("espera", () => {
 describe("gatilho", () => {
   test("mediaId aparado e vazio vira null", () => {
     const v = triggerToValues({ channelId: "c", mediaId: null, keywords: ["quero"], mode: "contains" });
-    expect(triggerToConfig("instagram_comment", { ...v, mediaId: "  123 " })).toEqual({ channelId: "c", mediaId: "123", keywords: ["quero"], mode: "contains" });
+    expect(triggerToConfig("instagram_comment", { ...v, mediaId: "  123 " })).toEqual({ channelId: "c", mediaId: "123", oncePerUser: true, keywords: ["quero"], mode: "contains" });
     expect(triggerToConfig("instagram_comment", { ...v, mediaId: "   " })).toMatchObject({ mediaId: null });
   });
 
@@ -87,7 +87,7 @@ describe("gatilho", () => {
     const v = triggerToValues({ channelId: "c", anyKeyword: true, keywords: ["teste"], mode: "any" });
     expect(v.anyKeyword).toBe(true);
     expect(v.mode).toBe("any");
-    expect(triggerToConfig("instagram_comment", v)).toEqual({ channelId: "c", mediaId: null, anyKeyword: true, keywords: [], mode: "any" });
+    expect(triggerToConfig("instagram_comment", v)).toEqual({ channelId: "c", mediaId: null, oncePerUser: true, anyKeyword: true, keywords: [], mode: "any" });
     expect(triggerToConfig("keyword_detected", v)).toEqual({ anyKeyword: true, keywords: [], mode: "any" });
   });
 

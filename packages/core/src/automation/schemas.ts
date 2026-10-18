@@ -75,6 +75,7 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
       anyKeyword: z.boolean().optional(),
       keywords: z.array(keywordItemSchema).max(20, "Máximo de 20 palavras-chave."),
       mode: keywordModeSchema,
+      oncePerUser: z.boolean().optional(),
     })
     .superRefine((data, ctx) => {
       if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {

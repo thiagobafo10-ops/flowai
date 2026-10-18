@@ -125,6 +125,7 @@ export function delayToConfig(v: DelayValues): unknown {
 // ── Gatilho ────────────────────────────────────────────────────────────
 export type TriggerValues = {
   firstMessageOnly: boolean;
+  oncePerUser: boolean;
   anyKeyword: boolean;
   keywords: string[];
   mode: string;
@@ -140,6 +141,7 @@ export function triggerToValues(config: unknown): TriggerValues {
   const isAny = c.anyKeyword === true || c.mode === "any";
   return {
     firstMessageOnly: c.firstMessageOnly === true,
+    oncePerUser: c.oncePerUser !== false,
     anyKeyword: isAny,
     keywords: Array.isArray(c.keywords) ? (c.keywords as string[]) : [],
     mode: isAny ? "any" : str(c.mode, "contains"),
@@ -165,6 +167,7 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
       return {
         channelId: v.channelId,
         mediaId: v.mediaId?.trim() || null,
+        oncePerUser: v.oncePerUser !== false,
         ...(v.anyKeyword ? { anyKeyword: true } : {}),
         keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,

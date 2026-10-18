@@ -21,7 +21,7 @@ const commentLink: AutomationTemplate = {
   key: "comment_link",
   name: "Responder comentário com link",
   triggerType: "instagram_comment",
-  triggerConfig: { channelId: TEMPLATE_PLACEHOLDER.channelId, mediaId: null, keywords: ["quero"], mode: "contains" },
+  triggerConfig: { channelId: TEMPLATE_PLACEHOLDER.channelId, mediaId: null, oncePerUser: true, keywords: ["quero"], mode: "contains" },
   graph: {
     nodes: [
       { id: "trigger", type: "trigger", config: {}, position: pos(0, 0) },

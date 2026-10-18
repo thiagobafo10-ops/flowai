@@ -159,6 +159,15 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
             onChange={(mediaId) => setValue("mediaId", mediaId, { shouldValidate: true })}
             error={err("mediaId")}
           />
+          <div className="pt-1">
+            <label htmlFor="trigger-once-per-user" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input id="trigger-once-per-user" type="checkbox" role="switch" className="size-4" {...register("oncePerUser")} />
+              <span>Responder apenas uma vez por pessoa</span>
+            </label>
+            <p className="text-xs text-muted-foreground mt-1 ml-6">
+              Evita enviar mensagens repetidas caso a mesma pessoa comente mais de uma vez na publicação.
+            </p>
+          </div>
           {keywordSection}
         </div>
       );
