@@ -109,7 +109,7 @@ jobs:
           done || true
           {
             echo "Falhas TAP: $(grep -cE 'not ok' pgtap.log)"
-            grep -nE 'ERROR|not ok|Dubious|Looks like|^Files=|^Result:' pgtap.log | head -n 30
+            grep -nE 'ERROR|TEMP|not ok|Dubious|Looks like|^Files=|^Result:' pgtap.log | head -n 30
             echo '--- contexto do primeiro ERROR ---'
             n=$(awk '/ERROR:/{print NR; exit}' pgtap.log)
             if [ -n "$n" ]; then

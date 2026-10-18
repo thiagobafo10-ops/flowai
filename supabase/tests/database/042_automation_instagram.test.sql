@@ -159,6 +159,10 @@ select tests.authenticate_as(:'ua');
 select public.stop_automation(:'scopeconv');
 select tests.clear_authentication();
 select pg_temp.comment_intent(:'conn','scopeB42','952') as bi \gset
+select diag('TEMP-1 cfg='||coalesce((select v.trigger_config::text from public.automation_versions v join public.automations a on a.id=v.automation_id and a.current_version=v.version where a.id=:'auto'),'nulo'));
+select diag('TEMP-2 ev='||coalesce((select e.state||'/'||coalesce(e.automation_id::text,'-')||'/'||coalesce(e.automation_version::text,'-') from public.instagram_events e where e.channel_id=:'chan' and e.kind='comment' and e.external_id='scopeB42'),'ausente'));
+select diag('TEMP-3 probe='||coalesce((public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78942','externalId','diag42b','senderExternalId','988','text','guia','mediaId','80042','commentId','diag42b','occurredAt',now())))::text,'nulo'));
+select diag('TEMP-4 chan='||:'chan'||' auto='||:'auto');
 select public.claim_instagram_send(:'bi') as bc \gset
 select public.complete_instagram_send(:'bi',jsonb_build_object('claimToken',:'bc'::jsonb->>'claimToken','state','sent','externalId','privateScopeB42','recipientId','952'));
 select (select automation_run_id from public.instagram_send_intents where id=:'bi') as brun \gset
