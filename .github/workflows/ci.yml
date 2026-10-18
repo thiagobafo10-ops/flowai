@@ -104,10 +104,10 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          grep -nE 'not ok|# Looks like|Failed [0-9]+/[0-9]+|tests/database/[^ ]+\.sql' pgtap.log | head -n 30 | while IFS= read -r line; do
-            echo "::error title=pgTAP::$line"
+          grep -nE -B1 -A4 'not ok' pgtap.log | head -n 40 | while IFS= read -r line; do
+            echo "::error title=pgTAP falhou::$line"
           done || true
-          tail -n 12 pgtap.log | while IFS= read -r line; do
+          tail -n 45 pgtap.log | while IFS= read -r line; do
             echo "::error title=pgTAP (fim do log)::$line"
           done || true
 
