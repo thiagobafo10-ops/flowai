@@ -35,11 +35,14 @@ export function InstagramMediaPicker({ channelId, value, onChange, error }: Prop
   // Modo: "all" se valor vazio, "specific" se tiver ID selecionado ou se o usuário escolheu selecionar post
   const [mode, setMode] = useState<"all" | "specific">(() => (value?.trim() ? "specific" : "all"));
 
-  useEffect(() => {
-    if (value?.trim() && mode !== "specific") {
-      setMode("specific");
-    }
-  }, [value, mode]);
+  // Ajusta o modo durante a renderização quando o valor vem de fora (reset do
+  // formulário, troca de post): padrão do React para estado derivado de prop,
+  // sem disparar renderização em cascata a partir de um efeito.
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    if (value?.trim() && mode === "all") setMode("specific");
+  }
 
   useEffect(() => {
     if (!channelId || mode !== "specific") return;

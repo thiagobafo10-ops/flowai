@@ -42,6 +42,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | `npm run test:automation:e2e` | Seis fluxos de automação no navegador (3103), Supabase local e Graph/OpenAI falsos (54328); restaura os três crons/configurações de workers; após um kill forçado, a próxima execução recupera o estado salvo |
 | `npm run test:growth:e2e` | Fluxos de crescimento (Fase 7B): links de entrada, sequências, campanhas e referral do Instagram no navegador (3103) e proxy local (54328) |
 | `npm run typecheck` | Checagem de tipos em todos os workspaces |
+| `npm run lint -w apps/web` | ESLint do app web |
 | `npm run db:reset` | Recria o banco local aplicando migrations + `supabase/seed.sql` |
 | `npm run db:test` | Testes pgTAP (`supabase/tests/database`) — rode após `db:reset` |
 | `npm run db:types` | Regenera `packages/core/src/db/database.types.ts` a partir do banco local |
@@ -56,6 +57,18 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Convenções dos testes: navegue com `gotoReady`/`reloadReady` (`e2e/support/nav.ts`), que esperam o marcador de hidratação `html[data-hydrated="1"]`; antes de recarregar ou navegar após uma ação otimista, espere o contêiner ficar com `aria-busy="false"` (`settled`). Cadastro e organização vêm de `e2e/support/auth.ts`.
 - Em host local com pouca memória, `FLOWAI_E2E_SLOW_HOST=1` aumenta o prazo global para 60 s e o de expectativas para 15 s, mantendo as verificações. Os prazos normais (30 s / 5 s) e de CI continuam iguais. Isso não corrige timeouts SQL causados por falta de recursos; libere memória antes de repetir a suíte. Rode as suítes sequencialmente.
 - A jornada MVP fica fora da configuração geral: rode `npm run test:mvp:e2e` para isolar os workers e usar a OpenAI falsa. [Mapa de contratos e estado de verificação](docs/superpowers/fase-10-mvp-conclusao.md). Teste listado/escrito não equivale a execução aprovada, nem a homologação dos fornecedores ou da produção.
+
+## Integração contínua
+
+`.github/workflows/ci.yml` roda em push na `main`, em pull requests e sob demanda. Três jobs independentes:
+
+| Job | O que verifica |
+|---|---|
+| **Tipos, testes e lint** | `npm run typecheck`, `npm test` (Vitest web + core), `npm run test:scripts`, `npm run lint -w apps/web` e `npm run build` (com variáveis de ambiente fictícias) |
+| **Edge Functions (Deno)** | `npm run test:edge` com Deno 2 |
+| **Banco (pgTAP)** | sobe o Supabase local (`supabase start`), aplica migrations + seed (`supabase db reset`) e roda `npm run db:test` |
+
+O e2e de navegador (Playwright) fica fora do CI por enquanto, por exigir build, Supabase com seed, navegadores e variáveis de integração; rode-o localmente.
 
 ## Arquitetura
 
@@ -73,6 +86,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 - Fase 8 (criador de automações com IA): [design](docs/superpowers/specs/2026-10-15-fase-8-criador-ia-design.md), [plano](docs/superpowers/plans/2026-10-15-fase-8-criador-ia.md), [decisões, pendências e evidências](docs/superpowers/fase-8-pendencias.md). Criação e refinamento iterativo de fluxos via linguagem natural com pré-visualização em mini-canvas e auto-layout determinístico de nós.
 - Fase 9 (Analytics): [design](docs/superpowers/specs/2026-10-16-fase-9-analytics-design.md), [plano](docs/superpowers/plans/2026-10-16-fase-9-analytics.md), [decisões, pendências e evidências](docs/superpowers/fase-9-pendencias.md). Painel analítico aprofundado com filtros de período (1d a 90d), comparativos de tendência, abas especializadas (Atendimento, IA e CRM/Funil) e exportação em CSV.
 - Fase 10 (Verificação do MVP e controles de segurança): [design](docs/superpowers/specs/2026-10-17-fase-10-mvp-final-design.md), [plano](docs/superpowers/plans/2026-10-17-fase-10-mvp-final.md), [checklist de segurança](docs/superpowers/security-checklist.md), [estado de verificação e contratos](docs/superpowers/fase-10-mvp-conclusao.md). A jornada smoke e os casos comportamentais têm escopos explícitos. Execução dos contratos revisados no navegador, integrações reais e homologação de produção continuam pendentes.
+- Painel de Saúde/Ops (Configurações → Saúde, somente admin/owner): [documentação](docs/ops-health.md). A RPC `public.ops_health` agrega filas, envios, automações, IA e a verificação da conexão Meta por organização, sem expor segredos.
 - Banco: `supabase/migrations` (nunca edite uma migration já aplicada; crie uma nova), testes em `supabase/tests/database`.
 
 ## Notas de segurança

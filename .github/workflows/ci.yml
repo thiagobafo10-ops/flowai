@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancela execuções antigas da mesma branch/PR quando chega um commit novo.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Valores de CI: o build e o typegen do Next só precisam de variáveis
+# preenchidas para gerar as páginas; nenhum serviço real é acessado.
+env:
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+
+jobs:
+  checks:
+    name: Tipos, testes e lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Tipos (web + core)
+        run: npm run typecheck
+
+      - name: Testes unitários (web + core)
+        run: npm test
+
+      - name: Testes dos scripts de harness
+        run: npm run test:scripts
+
+      - name: Lint
+        run: npm run lint -w apps/web
+
+      - name: Build da web
+        run: npm run build
+
+  edge:
+    name: Edge Functions (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Testes das Edge Functions
+        run: npm run test:edge
+
+  database:
+    name: Banco (pgTAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Subir o Supabase local
+        run: npx supabase start
+
+      - name: Aplicar migrations e seed
+        run: npx supabase db reset
+
+      - name: Testes do banco (pgTAP)
+        run: npm run db:test
+
+      - name: Logs dos containers (em caso de falha)
+        if: failure()
+        run: npx supabase status || docker ps -a
+
+  # A jornada e2e (Playwright) fica fora do CI por enquanto: exige build,
+  # Supabase com seed, navegadores e variáveis de integração. Rode localmente
+  # com `npm run db:start` + `npm run e2e -w apps/web`.
