@@ -109,9 +109,13 @@ jobs:
           done || true
           {
             echo "Falhas TAP: $(grep -cE 'not ok' pgtap.log)"
-            grep -E 'not ok|Dubious|Looks like|^Files=' pgtap.log | head -n 25
-            echo '--- fim do log ---'
-            tail -n 25 pgtap.log
+            grep -nE 'ERROR|not ok|Dubious|Looks like|^Files=|^Result:' pgtap.log | head -n 30
+            echo '--- contexto do primeiro ERROR ---'
+            n=$(awk '/ERROR:/{print NR; exit}' pgtap.log)
+            if [ -n "$n" ]; then
+              s=$((n>6 ? n-6 : 1))
+              sed -n "${s},$((n+14))p" pgtap.log
+            fi
           } > pgtap-resumo.txt
           awk '{gsub(/%/,"%25"); sub(/\r$/,""); printf "%s%%0A", $0}' pgtap-resumo.txt > pgtap-resumo.txt.esc
           echo "::error title=pgTAP resumo::$(cat pgtap-resumo.txt.esc)" || true
