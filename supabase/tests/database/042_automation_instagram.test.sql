@@ -24,6 +24,9 @@ select is((select count(*)::int from public.automation_nodes where automation_id
 select (select id from public.automation_nodes where automation_id=:'auto' and type='message') as node \gset
 update public.automation_nodes set config=config||'{"buttons":[{"id":"yes","title":"Sim","kind":"path"},{"id":"site","title":"Site","kind":"url","url":"https://example.com"}]}' where id=:'node';
 update public.automation_versions set graph=private.automation_graph(:'oa',:'auto') where automation_id=:'auto';
+-- The A -> stop -> B scenario below needs the same person to start a second run on the same post,
+-- which only exists when the trigger opts out of the default "reply once per person" (covered by 053).
+update public.automation_versions set trigger_config=trigger_config||'{"oncePerUser":false}' where automation_id=:'auto';
 select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78942','externalId','comment42','commentId','comment42','mediaId','80042','senderExternalId','944','text','Quero o GUIÁ','occurredAt',now())) as ce \gset
 select (:'ce'::jsonb->>'eventId') as cev \gset
 select is((select automation_id from public.instagram_events where id=:'cev'),:'auto'::uuid,'comment matches normalized automation keywords');
