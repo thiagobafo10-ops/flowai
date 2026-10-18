@@ -60,7 +60,7 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 
 ## Integração contínua
 
-`.github/workflows/ci.yml` roda em push na `main`, em pull requests e sob demanda. Três jobs independentes:
+`.github/workflows/ci.yml` roda em push na `master`, em pull requests e sob demanda. Três jobs independentes:
 
 | Job | O que verifica |
 |---|---|
@@ -69,6 +69,19 @@ Localmente a confirmação de e-mail está **desligada** (`[auth.email] enable_c
 | **Banco (pgTAP)** | sobe o Supabase local (`supabase start`), aplica migrations + seed (`supabase db reset`) e roda `npm run db:test` |
 
 O e2e de navegador (Playwright) fica fora do CI por enquanto, por exigir build, Supabase com seed, navegadores e variáveis de integração; rode-o localmente.
+
+Quando o job **Banco (pgTAP)** falha, o CI publica as linhas `not ok`, o primeiro `ERROR` do psql e o trecho ao redor como **anotações do job** — visíveis na página da execução sem baixar o log (que exige permissão de administrador no repositório).
+
+## Deploy
+
+**Web (automático).** O projeto `flowai-web` no Vercel está ligado a este repositório e publica **Produção a cada push na `master`**, sem passo manual. O build usa `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas no Vercel, apontando para o Supabase de produção; as URLs de deployment ficam atrás do *Deployment Protection* (SSO do Vercel).
+
+**Backend (manual).** Migrations e Edge Functions **não** acompanham o push. Sempre que o commit tocar `supabase/`, rode:
+
+    npx supabase db push
+    npx supabase functions deploy meta-webhook instagram-worker
+
+Sem Docker local, acrescente `--use-api` ao deploy das functions. Essa assimetria é a origem do incidente de 2026-10-17: o tratamento de comentários em anúncios existia no repositório, mas não na versão publicada das functions nem no banco remoto — ver [pendências](docs/superpowers/fase-5-pendencias.md).
 
 ## Arquitetura
 
