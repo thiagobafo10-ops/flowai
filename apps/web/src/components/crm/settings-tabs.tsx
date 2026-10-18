@@ -12,6 +12,7 @@ export function SettingsTabs({ showPipeline }: { showPipeline: boolean }) {
       ? [
           { href: "/configuracoes/pipeline", label: "Pipeline" },
           { href: "/configuracoes/canais", label: "Canais" },
+          { href: "/configuracoes/saude", label: "Saúde" },
         ]
       : []),
   ];
