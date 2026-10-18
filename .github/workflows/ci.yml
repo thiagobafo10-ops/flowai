@@ -107,9 +107,14 @@ jobs:
           grep -nE -B1 -A4 'not ok' pgtap.log | head -n 40 | while IFS= read -r line; do
             echo "::error title=pgTAP falhou::$line"
           done || true
-          tail -n 45 pgtap.log | while IFS= read -r line; do
-            echo "::error title=pgTAP (fim do log)::$line"
-          done || true
+          {
+            echo "Falhas TAP: $(grep -cE 'not ok' pgtap.log)"
+            grep -E 'not ok|Dubious|Looks like|^Files=' pgtap.log | head -n 25
+            echo '--- fim do log ---'
+            tail -n 25 pgtap.log
+          } > pgtap-resumo.txt
+          awk '{gsub(/%/,"%25"); sub(/\r$/,""); printf "%s%%0A", $0}' pgtap-resumo.txt > pgtap-resumo.txt.esc
+          echo "::error title=pgTAP resumo::$(cat pgtap-resumo.txt.esc)" || true
 
       - name: Logs dos containers (em caso de falha)
         if: failure()
