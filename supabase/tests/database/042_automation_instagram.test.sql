@@ -26,7 +26,9 @@ update public.automation_nodes set config=config||'{"buttons":[{"id":"yes","titl
 update public.automation_versions set graph=private.automation_graph(:'oa',:'auto') where automation_id=:'auto';
 -- The A -> stop -> B scenario below needs the same person to start a second run on the same post,
 -- which only exists when the trigger opts out of the default "reply once per person" (covered by 053).
-update public.automation_versions set trigger_config=trigger_config||'{"oncePerUser":false}' where automation_id=:'auto';
+-- The automation row is patched because the fixture pauses and reactivates the flow below, and the
+-- reactivation snapshot (private.snapshot_automation) copies trigger_config from this row into the new version.
+update public.automations set trigger_config=trigger_config||'{"oncePerUser":false}' where id=:'auto';
 select public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78942','externalId','comment42','commentId','comment42','mediaId','80042','senderExternalId','944','text','Quero o GUIÁ','occurredAt',now())) as ce \gset
 select (:'ce'::jsonb->>'eventId') as cev \gset
 select is((select automation_id from public.instagram_events where id=:'cev'),:'auto'::uuid,'comment matches normalized automation keywords');
@@ -159,10 +161,6 @@ select tests.authenticate_as(:'ua');
 select public.stop_automation(:'scopeconv');
 select tests.clear_authentication();
 select pg_temp.comment_intent(:'conn','scopeB42','952') as bi \gset
-select diag('TEMP-1 cfg='||coalesce((select v.trigger_config::text from public.automation_versions v join public.automations a on a.id=v.automation_id and a.current_version=v.version where a.id=:'auto'),'nulo'));
-select diag('TEMP-2 ev='||coalesce((select e.state||'/'||coalesce(e.automation_id::text,'-')||'/'||coalesce(e.automation_version::text,'-') from public.instagram_events e where e.channel_id=:'chan' and e.kind='comment' and e.external_id='scopeB42'),'ausente'));
-select diag('TEMP-3 probe='||coalesce((public.ingest_instagram_event(:'conn',jsonb_build_object('kind','comment','accountId','78942','externalId','diag42b','senderExternalId','988','text','guia','mediaId','80042','commentId','diag42b','occurredAt',now())))::text,'nulo'));
-select diag('TEMP-4 chan='||:'chan'||' auto='||:'auto');
 select public.claim_instagram_send(:'bi') as bc \gset
 select public.complete_instagram_send(:'bi',jsonb_build_object('claimToken',:'bc'::jsonb->>'claimToken','state','sent','externalId','privateScopeB42','recipientId','952'));
 select (select automation_run_id from public.instagram_send_intents where id=:'bi') as brun \gset
