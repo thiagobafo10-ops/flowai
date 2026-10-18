@@ -93,7 +93,23 @@ jobs:
         run: npx supabase db reset
 
       - name: Testes do banco (pgTAP)
-        run: npm run db:test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run db:test 2>&1 | tee pgtap.log
+
+      # As anotações do job são públicas: publicá-las permite ler a falha
+      # sem acesso ao log completo (que exige login).
+      - name: Anotar falhas do pgTAP
+        if: failure()
+        shell: bash
+        run: |
+          grep -nE 'not ok|# Looks like|Failed [0-9]+/[0-9]+|tests/database/[^ ]+\.sql' pgtap.log | head -n 30 | while IFS= read -r line; do
+            echo "::error title=pgTAP::$line"
+          done || true
+          tail -n 12 pgtap.log | while IFS= read -r line; do
+            echo "::error title=pgTAP (fim do log)::$line"
+          done || true
 
       - name: Logs dos containers (em caso de falha)
         if: failure()
