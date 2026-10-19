@@ -74,7 +74,9 @@ Quando o job **Banco (pgTAP)** falha, o CI publica as linhas `not ok`, o primeir
 
 ## Deploy
 
-**Web (automático).** O projeto `flowai-web` no Vercel está ligado a este repositório e publica **Produção a cada push na `master`**, sem passo manual. O build usa `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas no Vercel, apontando para o Supabase de produção; as URLs de deployment ficam atrás do *Deployment Protection* (SSO do Vercel).
+**Web (automático).** O projeto `flowai-web` no Vercel está ligado a este repositório e publica **Produção a cada push na `master`**, sem passo manual, em <https://flowai-web-rust.vercel.app>. O build usa `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas no Vercel, apontando para o Supabase de produção; as URLs de deployment (por commit ou por branch) ficam atrás do *Deployment Protection* (SSO do Vercel).
+
+**Branch = preview, `master` = produção.** Push em qualquer outra branch gera um deployment de *Preview* (endereço próprio, atrás do SSO) que **não** aparece no domínio de produção: para valer no ar, o commit precisa entrar na `master`.
 
 **Backend (manual).** Migrations e Edge Functions **não** acompanham o push. Sempre que o commit tocar `supabase/`, rode:
 
