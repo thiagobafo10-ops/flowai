@@ -8,13 +8,14 @@ import {
   automationTemplates,
   validateGraph,
   type AutomationGraph,
+  type AutomationTemplate,
   type GraphIssue,
   type TriggerType,
 } from "@flowai/core";
 import type { ActionResult } from "@/lib/action-result";
 import { getActiveOrg } from "@/lib/org/active-org";
 import { createServerClient } from "@/lib/supabase/server";
-import { instantiateTemplate } from "./instantiate";
+import { instantiateTemplate, type TemplateDefaults } from "./instantiate";
 import { placeholderIssues } from "./placeholders";
 import { loadAutomation, loadGraphRefs } from "./queries";
 import {
@@ -70,6 +71,49 @@ const triggerSchema = z.enum(TRIGGER_TYPES);
 type TemplateKey = (typeof automationTemplates)[number]["key"];
 const BLANK_NAME = "Nova automação";
 
+/** Etiqueta do modelo já existente (comparação sem diferenciar maiúsculas, como o índice único do banco). */
+async function findTag(supabase: Supabase, orgId: string, name: string): Promise<string | null> {
+  const key = name.trim().toLowerCase();
+  const { data, error } = await supabase.from("tags").select("id, name").eq("organization_id", orgId);
+  if (error) throw error;
+  const found = (data ?? []).find((t) => (t.name ?? "").trim().toLowerCase() === key);
+  return found?.id ?? null;
+}
+
+/** Cria a etiqueta do modelo quando ela ainda não existe e devolve o id real. */
+async function ensureTag(supabase: Supabase, orgId: string, name: string, color: string): Promise<string | null> {
+  const existing = await findTag(supabase, orgId, name);
+  if (existing) return existing;
+  const { data, error } = await supabase
+    .from("tags")
+    .insert({ organization_id: orgId, name: name.trim(), color })
+    .select("id")
+    .single();
+  if (!error) return data.id;
+  // 23505: outra tela criou a mesma etiqueta entre a leitura e a inserção.
+  if (error.code === "23505") return findTag(supabase, orgId, name);
+  throw error;
+}
+
+/**
+ * Resolve as etiquetas declaradas pelo modelo: cria as que faltarem e devolve o id
+ * real de cada marcador, para que o grafo instanciado não carregue espaços reservados.
+ */
+async function resolveTemplateTags(
+  supabase: Supabase,
+  orgId: string,
+  template: AutomationTemplate,
+): Promise<Partial<TemplateDefaults>> {
+  const wanted = template.tagNames ?? [];
+  if (wanted.length === 0) return {};
+  const resolved: Partial<TemplateDefaults> = {};
+  for (const tag of wanted) {
+    const id = await ensureTag(supabase, orgId, tag.name, tag.color ?? "slate");
+    if (id) resolved[tag.placeholder] = id;
+  }
+  return resolved;
+}
+
 export async function createAutomation(input: { templateKey?: TemplateKey; name?: string }): Promise<ActionResult<{ id: string }>> {
   const c = await context(WRITE_ROLES);
   if (!("supabase" in c)) return c;
@@ -84,7 +128,8 @@ export async function createAutomation(input: { templateKey?: TemplateKey; name?
   try {
     if (template) {
       const { defaults } = await loadGraphRefs(c.supabase, c.orgId);
-      ({ triggerConfig, graph } = instantiateTemplate(template, defaults));
+      const tags = await resolveTemplateTags(c.supabase, c.orgId, template);
+      ({ triggerConfig, graph } = instantiateTemplate(template, { ...defaults, ...tags }));
       triggerType = template.triggerType;
     } else {
       triggerType = "message_received";

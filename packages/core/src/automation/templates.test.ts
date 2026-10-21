@@ -4,7 +4,7 @@ import { automationGraphSchema } from "./schemas.ts";
 import { validateGraph } from "./validate.ts";
 
 const refs = {
-  tagIds: [TEMPLATE_PLACEHOLDER.tagId],
+  tagIds: [TEMPLATE_PLACEHOLDER.tagId, TEMPLATE_PLACEHOLDER.tagId2],
   stageIds: [TEMPLATE_PLACEHOLDER.stageId],
   userIds: [],
   channelIds: [TEMPLATE_PLACEHOLDER.channelId],
@@ -13,11 +13,12 @@ const refs = {
 };
 
 describe("automationTemplates", () => {
-  it("exposes the three named templates", () => {
+  it("exposes the four named templates", () => {
     expect(automationTemplates.map((t) => [t.key, t.name])).toEqual([
       ["comment_link", "Responder comentário com link"],
       ["welcome_direct", "Boas-vindas no Direct"],
       ["qualify_buttons", "Qualificar lead com botões"],
+      ["group_invite", "Convite ao grupo"],
     ]);
   });
 
@@ -49,5 +50,31 @@ describe("automationTemplates", () => {
 
   it("uses fixed v4-shaped placeholder UUIDs", () => {
     for (const id of Object.values(TEMPLATE_PLACEHOLDER)) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("group_invite usa botão de caminho, para que o clique seja rastreável", () => {
+    const t = automationTemplates.find((x) => x.key === "group_invite")!;
+    const ask = t.graph.nodes.find((n) => n.id === "ask")!.config as { buttons: { id: string; title: string; kind: string }[] };
+    expect(ask.buttons).toEqual([{ id: "entrar", title: "Entrar no grupo", kind: "path" }]);
+  });
+
+  it("group_invite etiqueta quem não respondeu no prazo e quem clicou", () => {
+    const t = automationTemplates.find((x) => x.key === "group_invite")!;
+    const target = (handle: string) => t.graph.nodes.find((n) => n.id === t.graph.edges.find((e) => e.source === "ask" && e.sourceHandle === handle)!.target)!;
+    expect(target("opt:entrar").type).toBe("tag");
+    expect(target("opt:entrar").config).toEqual({ tagId: TEMPLATE_PLACEHOLDER.tagId });
+    expect(target("no_reply").type).toBe("tag");
+    expect(target("no_reply").config).toEqual({ tagId: TEMPLATE_PLACEHOLDER.tagId2 });
+    // Depois do clique, o convite do grupo é enviado.
+    const link = t.graph.edges.find((e) => e.source === target("opt:entrar").id)!;
+    expect(t.graph.nodes.find((n) => n.id === link.target)!.type).toBe("message");
+  });
+
+  it("group_invite declara as etiquetas que a camada web cria", () => {
+    const t = automationTemplates.find((x) => x.key === "group_invite")!;
+    expect(t.tagNames).toEqual([
+      { placeholder: "tagId", name: "Entrou no grupo", color: "green" },
+      { placeholder: "tagId2", name: "Não clicou no grupo", color: "amber" },
+    ]);
   });
 });

@@ -42,7 +42,7 @@ export async function listAutomations(orgId: string, now: Date = new Date()): Pr
 
 export type RefsBundle = {
   refs: GraphRefs;
-  defaults: { channelId: string | null; tagId: string | null; stageId: string | null };
+  defaults: { channelId: string | null; tagId: string | null; tagId2: string | null; stageId: string | null };
 };
 
 /** Referências da organização ativa usadas por `validateGraph` e pelos modelos. */
@@ -81,6 +81,7 @@ export async function loadGraphRefs(supabase: Supabase, orgId: string): Promise<
     defaults: {
       channelId: channelIds[0] ?? null,
       tagId: tagIds[0] ?? null,
+      tagId2: tagIds[1] ?? null,
       stageId: stages.find((s) => !s.is_won && !s.is_lost)?.id ?? null,
     },
   };

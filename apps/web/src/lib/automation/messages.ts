@@ -34,6 +34,7 @@ export const TEMPLATE_DESCRIPTIONS: Record<string, string> = {
   comment_link: "Quando alguém comenta uma palavra-chave, envia o link no Direct.",
   welcome_direct: "Envia uma mensagem de boas-vindas na primeira conversa.",
   qualify_buttons: "Pergunta com respostas rápidas e transfere quem tem interesse.",
+  group_invite: "Convida ao grupo por botão e etiqueta quem não clicou, para reengajar.",
 };
 export const AUTOMATION_CREATE_FAILED = "Não foi possível criar a automação.";
 export const automationActivateBlocked = (count: number) =>

@@ -12,8 +12,16 @@ vi.mock("@/lib/supabase/server", () => {
   function builder(table: string) {
     const rows = () => state.tables[table] ?? [];
     const b: Record<string, unknown> = {};
+    let inserted: Record<string, unknown> | null = null;
     for (const m of ["select", "eq", "gte", "order"]) b[m] = () => b;
+    b.insert = (values: Record<string, unknown>) => {
+      const next = (state.tables[table]?.length ?? 0) + 1;
+      inserted = { id: `00000000-0000-4000-8000-0000000000${String(next).padStart(2, "0")}`, ...values };
+      state.tables[table] = [...rows(), inserted];
+      return b;
+    };
     b.maybeSingle = async () => ({ data: rows()[0] ?? null, error: null });
+    b.single = async () => ({ data: inserted ?? rows()[0] ?? null, error: null });
     b.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows(), error: null });
     return b;
   }
@@ -123,6 +131,28 @@ test("modelo do Instagram usa o primeiro canal e mantém o espaço reservado sem
   await createAutomation({ templateKey: "comment_link" });
   const [, b] = state.rpcs[1] as [string, Args];
   expect(b.p_trigger_config.channelId).toBe(TEMPLATE_PLACEHOLDER.channelId);
+});
+
+test("convite ao grupo cria as etiquetas e liga o clique e a falta de clique", async () => {
+  await createAutomation({ templateKey: "group_invite" });
+  const [, args] = state.rpcs[0] as [string, Args];
+  const json = JSON.stringify(args.p_graph);
+  expect(json).not.toContain(TEMPLATE_PLACEHOLDER.tagId);
+  expect(json).not.toContain(TEMPLATE_PLACEHOLDER.tagId2);
+  const created = (state.tables.tags as { id: string; name?: string }[]).filter((t) => t.name);
+  expect(created.map((t) => t.name)).toEqual(["Entrou no grupo", "Não clicou no grupo"]);
+  expect(json).toContain(created[0]!.id);
+  expect(json).toContain(created[1]!.id);
+});
+
+test("convite ao grupo reaproveita a etiqueta que já existe", async () => {
+  state.tables.tags = [{ id: "00000000-0000-4000-8000-0000000000f1", name: "Não clicou no grupo" }];
+  await createAutomation({ templateKey: "group_invite" });
+  const [, args] = state.rpcs[0] as [string, Args];
+  const json = JSON.stringify(args.p_graph);
+  expect(json).toContain("00000000-0000-4000-8000-0000000000f1");
+  const created = (state.tables.tags as { id: string; name?: string }[]).filter((t) => t.name);
+  expect(created.map((t) => t.name)).toEqual(["Não clicou no grupo", "Entrou no grupo"]);
 });
 
 test("ativar com problemas devolve-os e não chama a RPC", async () => {

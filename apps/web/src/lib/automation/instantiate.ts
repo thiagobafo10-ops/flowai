@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { TEMPLATE_PLACEHOLDER, type AutomationGraph, type AutomationTemplate } from "@flowai/core";
 
-export type TemplateDefaults = { channelId: string | null; tagId: string | null; stageId: string | null };
+export type TemplateDefaults = { channelId: string | null; tagId: string | null; tagId2: string | null; stageId: string | null };
 
 /**
  * Cria cópia do modelo com ids de nós/arestas novos (v4) e as referências reais da organização.
@@ -15,6 +15,7 @@ export function instantiateTemplate(
   const swaps: [string, string | null][] = [
     [TEMPLATE_PLACEHOLDER.channelId, defaults.channelId],
     [TEMPLATE_PLACEHOLDER.tagId, defaults.tagId],
+    [TEMPLATE_PLACEHOLDER.tagId2, defaults.tagId2],
     [TEMPLATE_PLACEHOLDER.stageId, defaults.stageId],
   ];
   const nodeIds = new Map(template.graph.nodes.map((n) => [n.id, newId()]));

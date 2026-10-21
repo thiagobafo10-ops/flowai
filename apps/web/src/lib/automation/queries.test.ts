@@ -64,7 +64,7 @@ test("loadGraphRefs escopa pela organização e escolhe os padrões dos modelos"
   };
   const { refs, defaults } = await loadGraphRefs(fakeClient() as never, "org-1");
   expect(refs).toEqual({ tagIds: ["t1", "t2"], stageIds: ["s-won", "s-lost", "s-open"], userIds: ["u1", "u2"], channelIds: ["c1", "c2"], sequenceIds: ["seq1"], entryLinkIds: ["link1"] });
-  expect(defaults).toEqual({ channelId: "c1", tagId: "t1", stageId: "s-open" });
+  expect(defaults).toEqual({ channelId: "c1", tagId: "t1", tagId2: "t2", stageId: "s-open" });
   for (const call of state.calls) expect(call.filters).toContainEqual(["organization_id", "org-1"]);
   expect(state.calls.find((c) => c.table === "channels")!.filters).toContainEqual(["type", "instagram"]);
   expect(state.calls.find((c) => c.table === "pipelines")!.filters).toContainEqual(["is_default", true]);
@@ -74,7 +74,7 @@ test("loadGraphRefs escopa pela organização e escolhe os padrões dos modelos"
 test("loadGraphRefs sem pipeline ou canal devolve padrões nulos", async () => {
   const { refs, defaults } = await loadGraphRefs(fakeClient() as never, "org-1");
   expect(refs).toEqual({ tagIds: [], stageIds: [], userIds: [], channelIds: [], sequenceIds: [], entryLinkIds: [] });
-  expect(defaults).toEqual({ channelId: null, tagId: null, stageId: null });
+  expect(defaults).toEqual({ channelId: null, tagId: null, tagId2: null, stageId: null });
 });
 
 test("loadEditorRefs devolve nomes para os seletores do editor, escopados pela organização", async () => {
