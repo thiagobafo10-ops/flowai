@@ -208,5 +208,95 @@ update public.automations set trigger_config=trigger_config||'{"publicReplies":[
 select pg_temp.comment(:'conn','c13','913','quero o guia') as ev13 \gset
 select ok((select text in ('Te mandei no Direct!','Confere o Direct','Enviado!') from public.instagram_comment_public_replies where event_id=:'ev13'),'text comes from the frozen version, not the live draft');
 
+-- Espaços Unicode (NBSP, ideográfico, BOM) contam como em branco, como no Zod.
+select tests.authenticate_as(:'ua');
+select throws_ok(format('select pg_temp.save_comment_automation(%L)',jsonb_build_object('channelId',:'chan','keyword','x','mediaId','80056',
+  'publicReplies',jsonb_build_array(chr(160)||chr(12288)||chr(65279)))),'22023',null,'Unicode-space-only variation rejected on save');
+select tests.clear_authentication();
+select throws_ok(format('insert into public.instagram_comment_public_replies(organization_id,channel_id,event_id,automation_id,automation_version,comment_id,text) values(%L,%L,%L,%L,1,''x'',%L)',
+  :'oa',:'chan',:'ev13',:'rule',chr(160)||chr(65279)),'23514',null,'table rejects Unicode-space-only text');
+
+-- Guarda da própria conta no gatilho de enfileiramento (inserção direta, sem passar pelo ingest).
+select current_version as rv, activated_at as ract from public.automations where id=:'rule' \gset
+insert into public.instagram_events(organization_id,channel_id,kind,external_id,payload,occurred_at,automation_id,automation_version,automation_activated_at,state)
+values(:'oa',:'chan','comment','own-direct',jsonb_build_object('commentId','own-direct','mediaId','80056','senderExternalId','78956','text','quero o guia'),now(),:'rule',:'rv',:'ract','pending') returning id as ev_own_direct \gset
+insert into public.instagram_events(organization_id,channel_id,kind,external_id,payload,occurred_at,automation_id,automation_version,automation_activated_at,state)
+values(:'oa',:'chan','comment','other-direct',jsonb_build_object('commentId','other-direct','mediaId','80056','senderExternalId','999','text','quero o guia'),now(),:'rule',:'rv',:'ract','pending') returning id as ev_other_direct \gset
+select is((select count(*)::int from public.instagram_comment_public_replies where event_id=:'ev_own_direct'),0,'enqueue trigger itself skips the account''s own comment');
+select is((select count(*)::int from public.instagram_comment_public_replies where event_id=:'ev_other_direct'),1,'enqueue trigger accepts another author (control)');
+
+-- VIP pelo caminho real (prepare_instagram_vip_send): a resposta pública da automação é pulada.
+select public.record_instagram_vip_capability(:'chan',:'gen'::integer,true,null);
+update public.instagram_vip_settings set enabled=true,activated_at=now()-interval '1 hour' where channel_id=:'chan';
+select pg_temp.comment(:'conn','c20','920','quero o guia') as ev20 \gset
+select isnt(public.prepare_instagram_vip_send(:'ev20'),'null'::jsonb,'VIP prepares its operations for the same comment');
+select (public.prepare_instagram_comment_public_reply(:'ev20')->>'replyId') as r20 \gset
+select is(public.claim_instagram_comment_public_reply(:'r20',now(),:'conn',:'gen'::integer),'null'::jsonb,'VIP prepared through its real path blocks the automation reply');
+select is((select state||':'||error_code from public.instagram_comment_public_replies where id=:'r20'),'skipped:vip_replied','skipped as vip_replied');
+update public.instagram_vip_settings set enabled=false where channel_id=:'chan';
+
+-- Regra de fallback do Direct (reselect): a resposta pública segue a nova regra.
+select tests.authenticate_as(:'ua');
+select pg_temp.save_comment_automation(jsonb_build_object('channelId',:'chan','keyword','promo','mediaId','80056','publicReplies',jsonb_build_array('A1'))) as rule_a \gset
+select pg_temp.save_comment_automation(jsonb_build_object('channelId',:'chan','keyword','promo','mediaId','80056','publicReplies',jsonb_build_array('B1'))) as rule_b \gset
+select pg_temp.save_comment_automation(jsonb_build_object('channelId',:'chan','keyword','oferta','mediaId','80056','publicReplies',jsonb_build_array('A2'))) as rule_a2 \gset
+select pg_temp.save_comment_automation(jsonb_build_object('channelId',:'chan','keyword','oferta','mediaId','80056')) as rule_c \gset
+select tests.clear_authentication();
+create function pg_temp.backdate(p_a uuid,p_b uuid) returns void language sql as $$
+  update public.automations set activated_at=now()-interval '3 hours' where id=p_a;
+  update public.automations set activated_at=now()-interval '2 hours' where id=p_b;
+$$;
+-- A regra A é reativada depois do comentário: só B já valia no horário real.
+create function pg_temp.reactivate(p_owner uuid,p_a uuid) returns void language plpgsql as $$
+begin
+  perform tests.authenticate_as(p_owner); perform public.pause_automation(p_a); perform public.activate_automation(p_a); perform tests.clear_authentication();
+end $$;
+select pg_temp.backdate(:'rule_a',:'rule_b');
+-- 1) linha pendente: re-vinculada a B, novo sorteio, fila nova; o reconhecimento antigo (A) não a cancela.
+select pg_temp.comment(:'conn','c21','921','quero promo') as ev21 \gset
+select is((select text from public.instagram_comment_public_replies where event_id=:'ev21'),'A1','first rule A drew its text');
+select msg_id as q21a from pgmq.q_instagram_work where message->>'task'='public_reply' and message->>'eventId'=:'ev21' \gset
+select pg_temp.reactivate(:'ua',:'rule_a');
+select isnt(public.reselect_instagram_comment_rule(:'ev21',now()-interval '1 hour'),'null'::jsonb,'DM falls back to rule B');
+select is((select automation_id::text||':'||text||':'||state from public.instagram_comment_public_replies where event_id=:'ev21'),:'rule_b'||':B1:pending','public reply re-bound to B with B''s variation');
+select is((select automation_version from public.instagram_comment_public_replies where event_id=:'ev21'),(select current_version from public.automations where id=:'rule_b'),'bound to B''s frozen version');
+select is((select count(*)::int from pgmq.q_instagram_work where message->>'task'='public_reply' and message->>'eventId'=:'ev21' and message->>'automationId'=:'rule_b'),1,'re-bound reply queued for B');
+select public.finish_instagram_comment_public_reply_work(:'q21a','ignored','comment_not_eligible');
+select is((select state from public.instagram_comment_public_replies where event_id=:'ev21'),'pending','stale acknowledgement for A does not cancel the B reply');
+-- 2) linha já cancelada (sem envio): volta a pendente e é re-enfileirada.
+select pg_temp.backdate(:'rule_a',:'rule_b');
+select pg_temp.comment(:'conn','c22','922','quero promo') as ev22 \gset
+select msg_id as q22a from pgmq.q_instagram_work where message->>'task'='public_reply' and message->>'eventId'=:'ev22' \gset
+select public.finish_instagram_comment_public_reply_work(:'q22a','ignored','comment_not_eligible');
+select is((select state from public.instagram_comment_public_replies where event_id=:'ev22'),'cancelled','A reply cancelled before the fallback');
+select pg_temp.reactivate(:'ua',:'rule_a');
+select public.reselect_instagram_comment_rule(:'ev22',now()-interval '1 hour');
+select is((select automation_id::text||':'||text||':'||state from public.instagram_comment_public_replies where event_id=:'ev22'),:'rule_b'||':B1:pending','cancelled reply revived for B');
+select is((select count(*)::int from pgmq.q_instagram_work where message->>'task'='public_reply' and message->>'eventId'=:'ev22' and message->>'automationId'=:'rule_b'),1,'revived reply re-queued');
+-- 3) fallback sem variações: cancela.
+select pg_temp.backdate(:'rule_a2',:'rule_c');
+select pg_temp.comment(:'conn','c23','923','quero oferta') as ev23 \gset
+select pg_temp.reactivate(:'ua',:'rule_a2');
+select isnt(public.reselect_instagram_comment_rule(:'ev23',now()-interval '1 hour'),'null'::jsonb,'DM falls back to rule C');
+select is((select state||':'||error_code from public.instagram_comment_public_replies where event_id=:'ev23'),'cancelled:rule_changed','fallback rule without variations cancels the public reply');
+
+-- Concessão expirada é varrida na leitura da fila (sem novo POST).
+select (public.claim_instagram_comment_public_reply((select id from public.instagram_comment_public_replies where event_id=:'ev22'),now()-interval '1 hour',:'conn',:'gen'::integer)->>'id') as r22 \gset
+update public.instagram_comment_public_replies set claimed_at=now()-interval '10 minutes' where id=:'r22';
+select public.read_instagram_work(1);
+select is((select state||':'||error_code from public.instagram_comment_public_replies where id=:'r22'),'uncertain:expired_send_lease','queue read sweeps expired public reply leases to uncertain');
+select is(public.claim_instagram_comment_public_reply(:'r22',now()-interval '1 hour',:'conn',:'gen'::integer),'null'::jsonb,'swept reply is never claimed again');
+
+-- Saúde/Ops: contadores coerentes com a lista de erros (incluem as respostas públicas).
+select tests.authenticate_as(:'ua');
+select (public.ops_health(:'oa')->'send_intents') as si \gset
+select tests.clear_authentication();
+select is((:'si'::jsonb->>'uncertain')::int,
+  (select count(*)::int from public.instagram_send_intents where organization_id=:'oa' and state='uncertain')
+  +(select count(*)::int from public.instagram_comment_public_replies where organization_id=:'oa' and state='uncertain'),'uncertain counter includes public replies');
+select is((:'si'::jsonb->>'failed')::int,
+  (select count(*)::int from public.instagram_send_intents where organization_id=:'oa' and state='failed')
+  +(select count(*)::int from public.instagram_comment_public_replies where organization_id=:'oa' and state='failed'),'failed counter includes public replies');
+
 select * from finish();
 rollback;

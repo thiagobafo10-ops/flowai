@@ -57,7 +57,9 @@ export async function processInstagramPublicReplyWork(item: Pick<InstagramWork, 
           if (String(media.id) !== ownershipMediaId || !owned) { state = "ignored"; errorCode = "media_not_owned"; }
           else {
             const claim = await deps.claimPublicReply(prepared.replyId, String(comment.timestamp), secrets.connectionId, secrets.generation);
-            if (!claim) { state = "ignored"; errorCode = "claim_rejected"; }
+            // Like the DM path: a refused reservation retries (bounded by the queue). A reply that became
+            // terminal, or whose automation was removed/changed, is acknowledged by prepare on the next pass.
+            if (!claim) { state = "retry"; errorCode = "claim_rejected"; }
             else {
               claimed = true;
               const provider = new InstagramProvider({ accountId: channel.accountId, accessToken: channel.accessToken, apiVersion: secrets.apiVersion, fetch: deps.fetch, now: deps.now });

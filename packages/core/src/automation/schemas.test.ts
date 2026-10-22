@@ -94,6 +94,9 @@ describe("triggers", () => {
     ).toBe(false);
   });
   describe("instagram_comment publicReplies", () => {
+    const NBSP = String.fromCharCode(0xa0);
+    const IDEOGRAPHIC_SPACE = String.fromCharCode(0x3000);
+    const BOM = String.fromCharCode(0xfeff);
     const base = { channelId: uuid, mediaId: null, keywords: ["a"], mode: "contains" };
     const parse = (publicReplies: unknown) => triggerConfigSchemas.instagram_comment.safeParse({ ...base, publicReplies });
     const messages = (r: { success: boolean; error?: { issues: { message: string }[] } }) => r.error?.issues.map((i) => i.message) ?? [];
@@ -111,6 +114,13 @@ describe("triggers", () => {
     });
     it("rejeita texto em branco", () => {
       expect(messages(parse(["   "]))).toContain("Informe o texto da resposta.");
+    });
+    it("lista só com textos em branco pede ao menos uma variação", () => {
+      expect(messages(parse(["", ` ${NBSP} `]))).toContain("Informe ao menos uma variação.");
+      expect(messages(parse(["ok", " "]))).not.toContain("Informe ao menos uma variação.");
+    });
+    it("espaços Unicode (NBSP, ideográfico, BOM) contam como em branco", () => {
+      expect(messages(parse([NBSP + IDEOGRAPHIC_SPACE + BOM]))).toContain("Informe o texto da resposta.");
     });
     it("rejeita texto com mais de 300 caracteres", () => {
       expect(parse(["a".repeat(300)]).success).toBe(true);

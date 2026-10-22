@@ -1637,6 +1637,9 @@ isOneToOne: false
 "sweep_automation_runs":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"sweep_instagram_comment_public_reply_leases":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "sweep_instagram_send_intents":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },

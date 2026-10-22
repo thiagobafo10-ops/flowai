@@ -63,9 +63,19 @@ Deno.test("missing comment permission fails with the VIP permission code", async
   assert(f.completes[0].state === "failed" && f.completes[0].errorCode === "permission_denied");
   assert(JSON.stringify(f.finishes) === '[[7,"failed","permission_denied"]]', "only codes are acknowledged");
 });
-Deno.test("reservation refused (paused automation or VIP replied) produces no POST", async () => {
+Deno.test("reservation refused produces no POST and is retried (bounded by the queue), like the DM path", async () => {
   const f = fixture(); f.deps.claimPublicReply = async () => null;
-  assert(await processInstagramPublicReplyWork(item, f.deps) === "ignored"); assert(f.posts.length === 0);
+  assert(await processInstagramPublicReplyWork(item, f.deps) === "retry"); assert(f.posts.length === 0);
+  assert(JSON.stringify(f.finishes) === '[[7,"retry","claim_rejected"]]');
+});
+Deno.test("terminal or unbound reply is acknowledged without claiming", async () => {
+  for (const state of ["skipped", "cancelled", "failed"]) {
+    const f = fixture(); const prepare = f.deps.preparePublicReply;
+    f.deps.preparePublicReply = async (id) => { const p = await prepare(id); return p ? { ...p, state } : null; };
+    assert(await processInstagramPublicReplyWork(item, f.deps) === "ignored"); assert(f.claims.length === 0);
+  }
+  const removed = fixture(); removed.deps.preparePublicReply = async () => null;
+  assert(await processInstagramPublicReplyWork(item, removed.deps) === "ignored"); assert(removed.claims.length === 0);
 });
 Deno.test("own account comment is never answered", async () => {
   const f = fixture(); const fetcher = f.deps.fetch;

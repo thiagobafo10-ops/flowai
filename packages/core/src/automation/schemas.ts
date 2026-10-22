@@ -54,7 +54,13 @@ const publicRepliesSchema = z
       .min(1, "Informe o texto da resposta.")
       .max(PUBLIC_REPLY_MAX_LENGTH, "A resposta deve ter no máximo 300 caracteres."),
   )
-  .max(PUBLIC_REPLY_MAX_ITEMS, "Máximo de 10 variações.");
+  .max(PUBLIC_REPLY_MAX_ITEMS, "Máximo de 10 variações.")
+  // Lista vazia = desligado; lista não vazia sem nenhum texto = switch ligado sem variação.
+  .superRefine((list, ctx) => {
+    if (list.length > 0 && list.every((text) => text.trim() === "")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Informe ao menos uma variação." });
+    }
+  });
 export const httpsUrl = z
   .string()
   .trim()

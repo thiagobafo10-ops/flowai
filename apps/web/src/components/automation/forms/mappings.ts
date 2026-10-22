@@ -177,7 +177,8 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
         keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
         // Desligado salva lista vazia; ligado mantém o texto como digitado (o schema apara e valida).
-        publicReplies: v.publicReplyEnabled ? [...(v.publicReplies ?? [])] : [],
+        // Ligado sem nenhuma variação vira [""] para falhar com "Informe ao menos uma variação." em vez de desligar.
+        publicReplies: v.publicReplyEnabled ? (v.publicReplies?.length ? [...v.publicReplies] : [""]) : [],
       };
     case "instagram_story":
       return { channelId: v.channelId };

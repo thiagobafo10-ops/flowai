@@ -139,3 +139,14 @@ test("resposta pública: ausente ou vazia começa desligada; texto em branco fal
   expect(parsed.success).toBe(false);
   if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("Informe o texto da resposta.");
 });
+
+test("resposta pública: switch ligado sem variação não salva como desligado", () => {
+  const off = triggerToValues({ channelId, mediaId: null, anyKeyword: true, mode: "any" });
+  for (const publicReplies of [[], ["", "   "]]) {
+    const config = triggerToConfig("instagram_comment", { ...off, publicReplyEnabled: true, publicReplies });
+    expect((config as { publicReplies: string[] }).publicReplies.length).toBeGreaterThan(0);
+    const parsed = triggerConfigSchemas.instagram_comment.safeParse(config);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) expect(parsed.error.issues.map((i) => i.message)).toContain("Informe ao menos uma variação.");
+  }
+});

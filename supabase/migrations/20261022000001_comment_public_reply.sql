@@ -5,6 +5,14 @@
 -- publicamente duas vezes ao mesmo comentário.
 
 -- ---------------------------------------------------------------- validação (espelha o Zod)
+-- Espaço em branco = o mesmo conjunto que String.prototype.trim do JS (inclui NBSP, espaços
+-- Unicode Zs, separadores de linha/parágrafo e BOM), para SQL e Zod concordarem.
+create function private.public_reply_trim(p_text text) returns text
+language sql immutable set search_path='' as $$
+  select regexp_replace(p_text,
+    '^[[:space:]\xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]+|[[:space:]\xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]+$','','g')
+$$;
+
 create function private.instagram_comment_public_replies_valid(p_config jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select case
@@ -12,8 +20,7 @@ language sql immutable set search_path='' as $$
     when jsonb_typeof(p_config->'publicReplies') is distinct from 'array' then false
     when jsonb_array_length(p_config->'publicReplies')>10 then false
     else not exists(select 1 from jsonb_array_elements(p_config->'publicReplies') e
-      where jsonb_typeof(e)<>'string' or (e#>>'{}') !~ '[^[:space:]]'
-        or char_length(regexp_replace(e#>>'{}','^[[:space:]]+|[[:space:]]+$','','g'))>300)
+      where jsonb_typeof(e)<>'string' or char_length(private.public_reply_trim(e#>>'{}')) not between 1 and 300)
   end
 $$;
 
@@ -21,12 +28,12 @@ $$;
 create function private.instagram_comment_public_reply_texts(p_config jsonb) returns text[]
 language sql immutable set search_path='' as $$
   select coalesce(array_agg(t.v order by t.o),'{}'::text[]) from (
-    select regexp_replace(e#>>'{}','^[[:space:]]+|[[:space:]]+$','','g') v, o
+    select private.public_reply_trim(e#>>'{}') v, o
     from jsonb_array_elements(case when jsonb_typeof(p_config->'publicReplies')='array' then p_config->'publicReplies' else '[]'::jsonb end)
       with ordinality x(e,o)
     where jsonb_typeof(e)='string'
     limit 10
-  ) t where t.v ~ '[^[:space:]]' and char_length(t.v)<=300
+  ) t where char_length(t.v) between 1 and 300
 $$;
 
 -- ---------------------------------------------------------------- tabela
@@ -38,7 +45,8 @@ create table public.instagram_comment_public_replies (
   automation_id uuid not null,
   automation_version integer not null,
   comment_id text not null check(char_length(comment_id) between 1 and 1024),
-  text text not null check(char_length(text) between 1 and 300 and text ~ '[^[:space:]]'),
+  text text not null check(char_length(text) between 1 and 300
+    and text ~ '[^[:space:]\xa0\x1680\x2000-\x200a\x2028\x2029\x202f\x205f\x3000\xfeff]'),
   state text not null default 'pending' check(state in ('pending','sending','sent','failed','uncertain','skipped','cancelled')),
   claim_token uuid, claimed_at timestamptz, claimed_connection_id uuid, claimed_generation integer,
   external_id text,
@@ -51,32 +59,103 @@ create index instagram_comment_public_replies_org_idx on public.instagram_commen
 alter table public.instagram_comment_public_replies enable row level security;
 revoke all on public.instagram_comment_public_replies from public,anon,authenticated;
 
--- ---------------------------------------------------------------- enfileiramento
--- Só quando a automação de fato selecionou o comentário (state pending + automation_id),
--- lendo a versão congelada referida pelo evento. Reentrega não insere evento novo.
-create function private.enqueue_instagram_comment_public_reply() returns trigger
+-- ---------------------------------------------------------------- enfileiramento / re-vínculo
+-- Vincula a resposta pública à regra que selecionou o comentário, lendo a versão congelada referida
+-- pelo evento, e sorteia o texto. Chamado na inserção do evento (trigger) e quando o Direct troca
+-- de regra (reselect_instagram_comment_rule). Uma linha só é re-vinculada antes de qualquer reserva
+-- (pending ou cancelled); sem variações na nova regra, é cancelada. Cada mensagem da fila carrega a
+-- regra, para o reconhecimento de uma mensagem antiga não cancelar a resposta da nova regra.
+create function private.bind_instagram_comment_public_reply(p_event public.instagram_events) returns void
 language plpgsql security definer set search_path='' as $$
-declare cfg jsonb; texts text[]; ch public.channels; inserted integer;
+declare cfg jsonb; texts text[]; ch public.channels; r public.instagram_comment_public_replies; inserted integer;
 begin
   select v.trigger_config into cfg from public.automation_versions v
-    where v.automation_id=new.automation_id and v.version=new.automation_version
-      and v.organization_id=new.organization_id and v.trigger_type='instagram_comment';
+    where v.automation_id=p_event.automation_id and v.version=p_event.automation_version
+      and v.organization_id=p_event.organization_id and v.trigger_type='instagram_comment';
   texts:=private.instagram_comment_public_reply_texts(cfg);
-  if cardinality(texts)=0 or coalesce(new.payload->>'commentId','')='' then return new; end if;
-  select * into ch from public.channels where id=new.channel_id and organization_id=new.organization_id;
-  if ch.status is distinct from 'active' or coalesce(new.payload->>'senderExternalId','')=''
-    or new.payload->>'senderExternalId'=ch.external_account_id then return new; end if;
+  select * into r from public.instagram_comment_public_replies where event_id=p_event.id for update;
+  if found then
+    if r.state not in ('pending','cancelled')
+      or (r.automation_id=p_event.automation_id and r.automation_version=p_event.automation_version) then return; end if;
+    if cardinality(texts)=0 then
+      update public.instagram_comment_public_replies set automation_id=p_event.automation_id,automation_version=p_event.automation_version,
+        state='cancelled',error_code='rule_changed',claim_token=null,claimed_at=null where id=r.id;
+      return;
+    end if;
+    update public.instagram_comment_public_replies set automation_id=p_event.automation_id,automation_version=p_event.automation_version,
+      text=texts[1+floor(random()*cardinality(texts))::integer],state='pending',error_code=null,
+      claim_token=null,claimed_at=null,claimed_connection_id=null,claimed_generation=null where id=r.id;
+    perform pgmq.send('instagram_work',jsonb_build_object('eventId',p_event.id,'task','public_reply','automationId',p_event.automation_id));
+    return;
+  end if;
+  if cardinality(texts)=0 or coalesce(p_event.payload->>'commentId','')='' then return; end if;
+  select * into ch from public.channels where id=p_event.channel_id and organization_id=p_event.organization_id;
+  if ch.status is distinct from 'active' or coalesce(p_event.payload->>'senderExternalId','')=''
+    or p_event.payload->>'senderExternalId'=ch.external_account_id then return; end if;
   insert into public.instagram_comment_public_replies(organization_id,channel_id,event_id,automation_id,automation_version,comment_id,text)
-    values(new.organization_id,ch.id,new.id,new.automation_id,new.automation_version,new.payload->>'commentId',
+    values(p_event.organization_id,ch.id,p_event.id,p_event.automation_id,p_event.automation_version,p_event.payload->>'commentId',
       texts[1+floor(random()*cardinality(texts))::integer])
     on conflict(event_id) do nothing;
   get diagnostics inserted=row_count;
-  if inserted>0 then perform pgmq.send('instagram_work',jsonb_build_object('eventId',new.id,'task','public_reply')); end if;
+  if inserted>0 then
+    perform pgmq.send('instagram_work',jsonb_build_object('eventId',p_event.id,'task','public_reply','automationId',p_event.automation_id));
+  end if;
+end $$;
+
+-- Só quando a automação de fato selecionou o comentário (state pending + automation_id).
+-- Reentrega não insere evento novo.
+create function private.enqueue_instagram_comment_public_reply() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  perform private.bind_instagram_comment_public_reply(new);
   return new;
 end $$;
 create trigger instagram_comment_public_reply_enqueue after insert on public.instagram_events for each row
   when (new.kind='comment' and new.state='pending' and new.automation_id is not null)
   execute function private.enqueue_instagram_comment_public_reply();
+
+-- ---------------------------------------------------------------- regra de fallback do Direct
+-- Igual a 20261017000001, mais: a resposta pública acompanha a troca de regra.
+create or replace function public.reselect_instagram_comment_rule(p_event_id uuid,p_comment_at timestamptz) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare ev public.instagram_events; a public.automations; item public.instagram_send_intents; body jsonb;
+begin
+  if p_comment_at is null then return 'null'::jsonb; end if;
+  select * into ev from public.instagram_events where id=p_event_id and kind='comment' for update;
+  if not found or ev.state not in ('pending','uncertain') then return 'null'::jsonb; end if;
+  select * into item from public.instagram_send_intents where event_id=ev.id for update;
+  if found and (item.state<>'pending' or item.automation_run_id is not null) then return 'null'::jsonb; end if;
+  select x.* into a from public.automations x join public.automation_versions v on v.automation_id=x.id and v.version=x.current_version
+    where x.organization_id=ev.organization_id and x.status='active' and x.activated_at<=p_comment_at
+      and v.trigger_type='instagram_comment' and v.trigger_config->>'channelId'=ev.channel_id::text
+      and (v.trigger_config->>'mediaId' is null
+           or v.trigger_config->>'mediaId' in (ev.payload->>'mediaId',ev.payload->>'originalMediaId'))
+      and private.automation_keyword_matches(ev.payload->>'text',v.trigger_config)
+      and private.instagram_comment_first_node(v.graph) is not null
+      and (
+        coalesce((v.trigger_config->>'oncePerUser')::boolean, true) = false
+        or not exists (
+          select 1 from public.instagram_events prev
+          where prev.channel_id = ev.channel_id
+            and prev.kind = 'comment'
+            and prev.id <> ev.id
+            and prev.automation_id = x.id
+            and prev.payload->>'senderExternalId' = ev.payload->>'senderExternalId'
+            and (v.trigger_config->>'mediaId' is null
+                 or v.trigger_config->>'mediaId' in (prev.payload->>'mediaId',prev.payload->>'originalMediaId'))
+            and prev.state in ('pending', 'done', 'uncertain')
+        )
+      )
+    order by x.activated_at,x.id limit 1;
+  if a.id is null then return 'null'::jsonb; end if;
+  update public.instagram_events set automation_id=a.id,automation_version=a.current_version,automation_activated_at=a.activated_at
+    where id=ev.id returning * into ev;
+  perform private.bind_instagram_comment_public_reply(ev);
+  body:=private.instagram_comment_body(ev.automation_run_id,private.instagram_comment_node(ev));
+  update public.instagram_send_intents set text=coalesce(body->>'text',body#>>'{attachment,payload,text}'),message_payload=body
+    where event_id=ev.id and state='pending';
+  return public.prepare_instagram_comment_send(ev.id);
+end $$;
 
 -- ---------------------------------------------------------------- preparar
 create function public.prepare_instagram_comment_public_reply(p_event_id uuid) returns jsonb
@@ -166,8 +245,33 @@ begin
   update public.instagram_comment_public_replies
     set state=case when p_state in ('retry','failed') then 'failed' else 'cancelled' end,
       error_code=coalesce(p_error_code,'comment_not_eligible'),claim_token=null,claimed_at=null
-    where event_id=ev and state='pending';
+    where event_id=ev and state='pending'
+      and (q.message->>'automationId' is null or automation_id=(q.message->>'automationId')::uuid);
   perform pgmq.archive('instagram_work',p_queue_id);
+end $$;
+
+-- Concessões expiradas viram incertas (nunca reenviadas), mesmo sem nova leitura do evento.
+create function public.sweep_instagram_comment_public_reply_leases() returns integer
+language plpgsql security definer set search_path='' as $$
+declare affected integer;
+begin
+  update public.instagram_comment_public_replies set state='uncertain',error_code='expired_send_lease'
+    where id in (select id from public.instagram_comment_public_replies
+      where state='sending' and claimed_at<now()-interval '1 minute' order by claimed_at limit 100 for update skip locked);
+  get diagnostics affected=row_count;
+  return affected;
+end $$;
+
+-- Igual a 20261016000004, mais a varredura das respostas públicas.
+create or replace function public.read_instagram_work(p_limit integer) returns jsonb language plpgsql security definer set search_path='' as $$
+declare work jsonb;
+begin
+ perform public.sweep_instagram_vip_leases();
+ perform public.sweep_instagram_comment_public_reply_leases();
+ select coalesce(jsonb_agg(jsonb_build_object('queueId',msg_id,'eventId',message->>'eventId',
+   'task',coalesce(message->>'task','comment')) order by msg_id),'[]'::jsonb) into work
+ from pgmq.read('instagram_work',300,least(greatest(p_limit,1),10));
+ return work;
 end $$;
 
 -- ---------------------------------------------------------------- VIP simétrico
@@ -310,8 +414,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- Saúde/Ops
--- Igual a 20261017000002, mais: falhas/incertezas da resposta pública entram nos principais
--- erros de envio (mesma lista já exibida), sem alterar as contagens de instagram_send_intents.
+-- Igual a 20261017000002, mais: as respostas públicas entram nos contadores de envio e na lista
+-- de principais erros de envio (mesmo bloco já exibido), mantendo os dois coerentes.
 create or replace function public.ops_health(p_org uuid) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
 declare
@@ -351,7 +455,8 @@ begin
     group by 1 order by count(*) desc limit 5
   ) t;
 
-  -- Envios (Direct e respostas privadas de comentário).
+  -- Envios (Direct, respostas privadas e respostas públicas a comentários): os contadores
+  -- cobrem as mesmas fontes que a lista de principais erros abaixo.
   select jsonb_build_object(
     'pending', count(*) filter (where state='pending'),
     'sending', count(*) filter (where state='sending'),
@@ -359,7 +464,11 @@ begin
     'uncertain', count(*) filter (where state='uncertain'),
     'sent_24h', count(*) filter (where state='sent' and created_at >= now()-interval '24 hours')
   ) into v_intents
-  from public.instagram_send_intents where organization_id=p_org;
+  from (
+    select state, created_at from public.instagram_send_intents where organization_id=p_org
+    union all
+    select state, created_at from public.instagram_comment_public_replies where organization_id=p_org
+  ) s;
 
   -- Principais erros de envio: Direct/respostas privadas e respostas públicas a comentários.
   select coalesce(jsonb_agg(jsonb_build_object('code',t.code,'count',t.total) order by t.total desc),'[]'::jsonb)
@@ -433,14 +542,18 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- grants
-revoke all on function private.instagram_comment_public_replies_valid(jsonb),
+revoke all on function private.public_reply_trim(text),
+  private.instagram_comment_public_replies_valid(jsonb),
   private.instagram_comment_public_reply_texts(jsonb),
+  private.bind_instagram_comment_public_reply(public.instagram_events),
   private.enqueue_instagram_comment_public_reply(),
+  public.sweep_instagram_comment_public_reply_leases(),
   public.prepare_instagram_comment_public_reply(uuid),
   public.claim_instagram_comment_public_reply(uuid,timestamptz,uuid,integer),
   public.complete_instagram_comment_public_reply(uuid,uuid,text,text,text),
   public.finish_instagram_comment_public_reply_work(bigint,text,text) from public,anon,authenticated;
-grant execute on function public.prepare_instagram_comment_public_reply(uuid),
+grant execute on function public.sweep_instagram_comment_public_reply_leases(),
+  public.prepare_instagram_comment_public_reply(uuid),
   public.claim_instagram_comment_public_reply(uuid,timestamptz,uuid,integer),
   public.complete_instagram_comment_public_reply(uuid,uuid,text,text,text),
   public.finish_instagram_comment_public_reply_work(bigint,text,text) to service_role;
