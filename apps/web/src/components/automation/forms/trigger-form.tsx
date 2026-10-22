@@ -9,6 +9,7 @@ import { Field, KeywordModeOptions, KeywordsField, RefOptions, errorAt, invalidP
 import { triggerToConfig, triggerToValues, type TriggerValues } from "./mappings";
 
 import { InstagramMediaPicker } from "./instagram-media-picker";
+import { PublicRepliesField } from "./public-replies-field";
 import { CircleCheckIcon, FilterIcon, SparklesIcon } from "lucide-react";
 
 type Props = {
@@ -169,6 +170,15 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
             </p>
           </div>
           {keywordSection}
+          <PublicRepliesField
+            control={control}
+            errors={errors}
+            enabled={watch("publicReplyEnabled")}
+            onToggle={(on) => {
+              setValue("publicReplyEnabled", on, { shouldValidate: true });
+              if (on && watch("publicReplies").length === 0) setValue("publicReplies", [""], { shouldValidate: true });
+            }}
+          />
         </div>
       );
     case "instagram_story":

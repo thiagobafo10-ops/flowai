@@ -39,6 +39,7 @@ export function triggerSummary(type: TriggerType, config: unknown, refs: EditorR
     case "instagram_comment":
       lines.push(nameOf(refs.channels, c.channelId, "Escolha o canal"), keywords(c));
       if (c.oncePerUser !== false) lines.push("Uma vez por pessoa");
+      if (Array.isArray(c.publicReplies) && c.publicReplies.length > 0) lines.push("+ resposta pública");
       break;
     case "instagram_story":
       lines.push(nameOf(refs.channels, c.channelId, "Escolha o canal"));

@@ -93,6 +93,30 @@ describe("triggers", () => {
       triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, keywords: [], mode: "contains" }).success,
     ).toBe(false);
   });
+  describe("instagram_comment publicReplies", () => {
+    const base = { channelId: uuid, mediaId: null, keywords: ["a"], mode: "contains" };
+    const parse = (publicReplies: unknown) => triggerConfigSchemas.instagram_comment.safeParse({ ...base, publicReplies });
+    const messages = (r: { success: boolean; error?: { issues: { message: string }[] } }) => r.error?.issues.map((i) => i.message) ?? [];
+    it("é opcional e aceita lista vazia", () => {
+      expect(triggerConfigSchemas.instagram_comment.safeParse(base).success).toBe(true);
+      expect(parse([]).success).toBe(true);
+    });
+    it("aceita de 1 a 10 variações e apara espaços", () => {
+      const r = triggerConfigSchemas.instagram_comment.parse({ ...base, publicReplies: ["  Te mandei no Direct!  "] }) as { publicReplies?: string[] };
+      expect(r.publicReplies).toEqual(["Te mandei no Direct!"]);
+      expect(parse(Array.from({ length: 10 }, (_, i) => `Resposta ${i}`)).success).toBe(true);
+    });
+    it("rejeita mais de 10 variações", () => {
+      expect(messages(parse(Array.from({ length: 11 }, (_, i) => `Resposta ${i}`)))).toContain("Máximo de 10 variações.");
+    });
+    it("rejeita texto em branco", () => {
+      expect(messages(parse(["   "]))).toContain("Informe o texto da resposta.");
+    });
+    it("rejeita texto com mais de 300 caracteres", () => {
+      expect(parse(["a".repeat(300)]).success).toBe(true);
+      expect(messages(parse(["a".repeat(301)]))).toContain("A resposta deve ter no máximo 300 caracteres.");
+    });
+  });
   it("tag_added aceita null", () => {
     expect(triggerConfigSchemas.tag_added.safeParse({ tagId: null }).success).toBe(true);
     expect(triggerConfigSchemas.contact_created.safeParse({}).success).toBe(true);

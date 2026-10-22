@@ -43,6 +43,18 @@ const keywordsSchema = z
   .min(1, "Informe ao menos uma palavra-chave.")
   .max(20, "Máximo de 20 palavras-chave.");
 const uuid = z.string().uuid("Identificador inválido.");
+/** Limites espelhados em SQL (save_automation) e no sorteio da resposta pública ao comentário. */
+export const PUBLIC_REPLY_MAX_ITEMS = 10;
+export const PUBLIC_REPLY_MAX_LENGTH = 300;
+const publicRepliesSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, "Informe o texto da resposta.")
+      .max(PUBLIC_REPLY_MAX_LENGTH, "A resposta deve ter no máximo 300 caracteres."),
+  )
+  .max(PUBLIC_REPLY_MAX_ITEMS, "Máximo de 10 variações.");
 export const httpsUrl = z
   .string()
   .trim()
@@ -76,6 +88,7 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
       keywords: z.array(keywordItemSchema).max(20, "Máximo de 20 palavras-chave."),
       mode: keywordModeSchema,
       oncePerUser: z.boolean().optional(),
+      publicReplies: publicRepliesSchema.optional(),
     })
     .superRefine((data, ctx) => {
       if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {

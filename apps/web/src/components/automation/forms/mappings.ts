@@ -126,6 +126,8 @@ export function delayToConfig(v: DelayValues): unknown {
 export type TriggerValues = {
   firstMessageOnly: boolean;
   oncePerUser: boolean;
+  publicReplyEnabled: boolean;
+  publicReplies: string[];
   anyKeyword: boolean;
   keywords: string[];
   mode: string;
@@ -139,9 +141,12 @@ export type TriggerValues = {
 export function triggerToValues(config: unknown): TriggerValues {
   const c = rec(config);
   const isAny = c.anyKeyword === true || c.mode === "any";
+  const publicReplies = Array.isArray(c.publicReplies) ? c.publicReplies.filter((t): t is string => typeof t === "string") : [];
   return {
     firstMessageOnly: c.firstMessageOnly === true,
     oncePerUser: c.oncePerUser !== false,
+    publicReplyEnabled: publicReplies.length > 0,
+    publicReplies,
     anyKeyword: isAny,
     keywords: Array.isArray(c.keywords) ? (c.keywords as string[]) : [],
     mode: isAny ? "any" : str(c.mode, "contains"),
@@ -171,6 +176,8 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
         ...(v.anyKeyword ? { anyKeyword: true } : {}),
         keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
+        // Desligado salva lista vazia; ligado mantém o texto como digitado (o schema apara e valida).
+        publicReplies: v.publicReplyEnabled ? [...(v.publicReplies ?? [])] : [],
       };
     case "instagram_story":
       return { channelId: v.channelId };

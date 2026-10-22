@@ -665,6 +665,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"instagram_comment_public_replies": {
+                  Row: {
+                    "automation_id": string,"automation_version": number,"channel_id": string,"claim_token": string | null,"claimed_at": string | null,"claimed_connection_id": string | null,"claimed_generation": number | null,"comment_id": string,"created_at": string,"error_code": string | null,"event_id": string,"external_id": string | null,"id": string,"organization_id": string,"state": string,"text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "automation_id": string,"automation_version": number,"channel_id": string,"claim_token"?: string | null,"claimed_at"?: string | null,"claimed_connection_id"?: string | null,"claimed_generation"?: number | null,"comment_id": string,"created_at"?: string,"error_code"?: string | null,"event_id": string,"external_id"?: string | null,"id"?: string,"organization_id": string,"state"?: string,"text": string
+                  }
+                  Update: {
+                    "automation_id"?: string,"automation_version"?: number,"channel_id"?: string,"claim_token"?: string | null,"claimed_at"?: string | null,"claimed_connection_id"?: string | null,"claimed_generation"?: number | null,"comment_id"?: string,"created_at"?: string,"error_code"?: string | null,"event_id"?: string,"external_id"?: string | null,"id"?: string,"organization_id"?: string,"state"?: string,"text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "instagram_comment_public_replie_organization_id_channel_id_fkey"
+      columns: ["organization_id","channel_id"]
+isOneToOne: false
+      referencedRelation: "channels"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "instagram_comment_public_replies_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: true
+      referencedRelation: "instagram_events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "instagram_comment_public_replies_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"instagram_comment_rules": {
                   Row: {
                     "active": boolean,"channel_id": string,"created_at": string,"id": string,"keyword": string,"media_id": string | null,"organization_id": string,"reply_text": string,"updated_at": string,"version": number
@@ -1294,12 +1326,13 @@ isOneToOne: false
 "claim_automation_runs":
 { Args: { "p_limit": number }; Returns: Json
                            },
+"claim_instagram_comment_public_reply":
+{ Args: { "p_comment_at": string,"p_expected_connection_id": string,"p_expected_generation": number,"p_reply_id": string }; Returns: Json
+                           },
 "claim_instagram_send":
 { Args: { "p_intent_id": string }; Returns: Json
                            },
 "claim_instagram_vip_send":
-{ Args: { "p_comment_at": string,"p_comment_text": string,"p_intent_id": string }; Returns: Json
-                           } |
 { Args: { "p_comment_at": string,"p_comment_text": string,"p_expected_connection_id": string,"p_expected_generation": number,"p_intent_id": string }; Returns: Json
                            },
 "claim_outreach_deliveries":
@@ -1316,6 +1349,9 @@ isOneToOne: false
                            },
 "complete_index_document":
 { Args: { "p_chunks": Json,"p_job": string,"p_token": string }; Returns: string
+                           },
+"complete_instagram_comment_public_reply":
+{ Args: { "p_claim_token": string,"p_error_code": string,"p_external_id": string,"p_reply_id": string,"p_state": string }; Returns: undefined
                            },
 "complete_instagram_send":
 { Args: { "p_intent_id": string,"p_result": Json }; Returns: undefined
@@ -1392,9 +1428,10 @@ isOneToOne: false
 "fail_outreach_delivery":
 { Args: { "p_code": string,"p_id": string,"p_retryable": boolean,"p_token": string }; Returns: undefined
                            },
-"finish_instagram_vip_work":
+"finish_instagram_comment_public_reply_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
-                           } |
+                           },
+"finish_instagram_vip_work":
 { Args: { "p_error_code": string,"p_expected_connection_id"?: string,"p_expected_generation"?: number,"p_queue_id": number,"p_state": string }; Returns: undefined
                            },
 "finish_instagram_work":
@@ -1448,6 +1485,9 @@ isOneToOne: false
               "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
             }[]
                            },
+"ops_health":
+{ Args: { "p_org": string }; Returns: Json
+                           },
 "pause_automation":
 { Args: { "p_id": string }; Returns: undefined
                            },
@@ -1462,6 +1502,9 @@ isOneToOne: false
                            },
 "prepare_index_document":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
+                           },
+"prepare_instagram_comment_public_reply":
+{ Args: { "p_event_id": string }; Returns: Json
                            },
 "prepare_instagram_comment_send":
 { Args: { "p_event_id": string }; Returns: Json

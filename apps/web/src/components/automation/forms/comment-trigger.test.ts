@@ -36,6 +36,7 @@ test("modo 'qualquer palavra ou comentário' valida sem exigir palavras-chave", 
     anyKeyword: true,
     keywords: [],
     mode: "any",
+    publicReplies: [],
   });
 
   const parsed = triggerConfigSchemas.instagram_comment.safeParse(config);
@@ -98,4 +99,43 @@ test("permite desativar oncePerUser para responder a todos os comentários", () 
 
   const parsed = triggerConfigSchemas.instagram_comment.safeParse(config);
   expect(parsed.success).toBe(true);
+});
+
+test("resposta pública: variações entram no config quando o switch está ligado", () => {
+  const values = triggerToValues({
+    channelId,
+    mediaId: null,
+    anyKeyword: true,
+    mode: "any",
+    publicReplies: ["Te mandei no Direct!", "Confere o Direct"],
+  });
+  expect(values.publicReplyEnabled).toBe(true);
+  expect(values.publicReplies).toEqual(["Te mandei no Direct!", "Confere o Direct"]);
+
+  const config = triggerToConfig("instagram_comment", values);
+  expect(config).toMatchObject({ publicReplies: ["Te mandei no Direct!", "Confere o Direct"] });
+  expect(triggerConfigSchemas.instagram_comment.safeParse(config).success).toBe(true);
+});
+
+test("resposta pública: desligar o switch salva lista vazia", () => {
+  const values = triggerToValues({
+    channelId,
+    mediaId: null,
+    anyKeyword: true,
+    mode: "any",
+    publicReplies: ["Te mandei no Direct!"],
+  });
+  const config = triggerToConfig("instagram_comment", { ...values, publicReplyEnabled: false });
+  expect(config).toMatchObject({ publicReplies: [] });
+});
+
+test("resposta pública: ausente ou vazia começa desligada; texto em branco falha com mensagem", () => {
+  const off = triggerToValues({ channelId, mediaId: null, anyKeyword: true, mode: "any" });
+  expect(off.publicReplyEnabled).toBe(false);
+  expect(off.publicReplies).toEqual([]);
+
+  const config = triggerToConfig("instagram_comment", { ...off, publicReplyEnabled: true, publicReplies: ["  "] });
+  const parsed = triggerConfigSchemas.instagram_comment.safeParse(config);
+  expect(parsed.success).toBe(false);
+  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("Informe o texto da resposta.");
 });

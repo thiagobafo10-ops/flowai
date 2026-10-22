@@ -101,6 +101,22 @@ Deno.test("contract parser reads overloads, defaults and OUT params", () => {
   ]));
 });
 
+Deno.test("comment public reply RPCs are wired and use latest SQL argument names", async () => {
+  const signatures = await sqlSignatures();
+  const calls = await rpcCalls("instagram-worker/index.ts");
+  const required = {
+    prepare_instagram_comment_public_reply: ["p_event_id"],
+    claim_instagram_comment_public_reply: ["p_reply_id", "p_comment_at", "p_expected_connection_id", "p_expected_generation"],
+    complete_instagram_comment_public_reply: ["p_reply_id", "p_claim_token", "p_state", "p_external_id", "p_error_code"],
+    finish_instagram_comment_public_reply_work: ["p_queue_id", "p_state", "p_error_code"],
+  };
+  for (const [name, keys] of Object.entries(required)) {
+    const call = calls.find((c) => c.name === name);
+    assert(call && JSON.stringify(call.keys) === JSON.stringify(keys), `${name} not wired with ${keys.join(",")}`);
+    assert([...(signatures.get(name)?.values() ?? [])].some((params) => JSON.stringify(params.map((p) => p.name)) === JSON.stringify(keys)), `${name} SQL contract mismatch`);
+  }
+});
+
 Deno.test("outreach worker RPCs are wired and use latest SQL argument names", async () => {
   const signatures = await sqlSignatures();
   const calls = await rpcCalls("automation-worker/index.ts");

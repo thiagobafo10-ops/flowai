@@ -2,11 +2,13 @@ import { sendClaimedInstagram, type SendClaim, type SendDeps } from "../send-mes
 import { constantTimeTextEqual } from "../_shared/http.ts";
 import { InstagramProvider } from "../../../packages/core/src/channels/instagram/provider.ts";
 import { processInstagramVipWork, type VipDeps } from "./vip.ts";
+import { processInstagramPublicReplyWork, type PublicReplyDeps } from "./public-reply.ts";
 export type WorkResult = "done" | "ignored" | "retry" | "failed" | "uncertain";
-export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" | "vip" };
+export type InstagramWork = { queueId: number; eventId: string; task?: "comment" | "profile" | "vip" | "public_reply" };
 export type PreparedProfile = { eventId: string; organizationId: string; channelId: string; connectionId: string; contactId: string; senderExternalId: string };
 export type PreparedComment = { eventId: string; organizationId: string; channelId: string; connectionId: string; intentId: string; commentId: string; mediaId: string; originalMediaId?: string | null; senderExternalId: string; ruleEffectiveAt: string; state: string };
-export type InstagramWorkerDeps = SendDeps & Partial<Pick<VipDeps, "prepareVip" | "claimVip" | "completeVip" | "finishVipWork">> & {
+export type InstagramWorkerDeps = SendDeps & Partial<Pick<VipDeps, "prepareVip" | "claimVip" | "completeVip" | "finishVipWork">>
+  & Partial<Pick<PublicReplyDeps, "preparePublicReply" | "claimPublicReply" | "completePublicReply" | "finishPublicReplyWork">> & {
   readWorkerSecret(): Promise<string | null>;
   readWork(limit: number): Promise<InstagramWork[]>;
   prepare(eventId: string): Promise<PreparedComment | null>;
@@ -40,6 +42,10 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
   if (item.task === "vip") {
     if (!deps.prepareVip || !deps.claimVip || !deps.completeVip || !deps.finishVipWork) throw new Error("VIP worker not configured");
     return await processInstagramVipWork(item, { ...deps, prepareVip: deps.prepareVip, claimVip: deps.claimVip, completeVip: deps.completeVip, finishVipWork: deps.finishVipWork });
+  }
+  if (item.task === "public_reply") {
+    if (!deps.preparePublicReply || !deps.claimPublicReply || !deps.completePublicReply || !deps.finishPublicReplyWork) throw new Error("Public reply worker not configured");
+    return await processInstagramPublicReplyWork(item, { ...deps, preparePublicReply: deps.preparePublicReply, claimPublicReply: deps.claimPublicReply, completePublicReply: deps.completePublicReply, finishPublicReplyWork: deps.finishPublicReplyWork });
   }
   if (item.task === "profile") return await processInstagramProfile(item, deps);
   let state: WorkResult = "ignored"; let errorCode: string | null = null;
