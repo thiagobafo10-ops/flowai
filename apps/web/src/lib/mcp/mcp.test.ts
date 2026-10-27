@@ -66,6 +66,33 @@ function jwt(payload: Record<string, unknown>): string {
 
 const TOKEN = jwt({ sub: "user-1", role: "authenticated", client_id: "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d" });
 const AUTOMATION_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SPEC: Row = {
+  nome: "Ebook",
+  gatilho: "comentario",
+  palavras: ["ebook"],
+  post: "qualquer",
+  respostaPublica: ["Te mandei no direct!"],
+  dm: { texto: "Aqui está o ebook.", botoes: [{ titulo: "Baixar", url: "https://exemplo.com.br/ebook.pdf" }] },
+  umaVezPorContato: true,
+};
+
+function automationRow(overrides: Row = {}): Row {
+  return {
+    id: AUTOMATION_ID,
+    organization_id: "org-1",
+    name: "Ebook",
+    status: "active",
+    trigger_type: "instagram_comment",
+    trigger_config: { channelId: "ch-1", mediaId: null, keywords: ["ebook"], mode: "contains", oncePerUser: true },
+    mcp_spec: SPEC,
+    mcp_spec_stale: false,
+    updated_at: "2026-10-26",
+    ...overrides,
+  };
+}
 const handlers: Record<string, (request: Request) => Promise<Response>> = { POST, GET, DELETE };
 
 let client: Client | null = null;
@@ -144,10 +171,21 @@ describe("/mcp", () => {
     const mcp = await connect();
     const { tools } = await mcp.listTools();
     const names = tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["listar_posts", "listar_automacoes", "ver_resultados", "listar_contatos"]));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "listar_posts",
+        "listar_automacoes",
+        "ver_resultados",
+        "listar_contatos",
+        "criar_automacao",
+        "editar_automacao",
+        "pausar_automacao",
+        "ativar_automacao",
+        "excluir_automacao",
+      ]),
+    );
     for (const tool of tools) expect(tool.description?.length ?? 0).toBeGreaterThan(40);
   });
-  it.todo("lists_tools includes criar_automacao, editar_automacao, pausar_automacao, ativar_automacao, excluir_automacao (Task 7)");
 
   it("listar_posts_maps_media", async () => {
     state.invokeResult = {
@@ -304,6 +342,215 @@ describe("/mcp", () => {
     const tooMany = await mcp.callTool({ name: "listar_contatos", arguments: { limite: 101 } });
     expect(tooMany.isError).toBe(true);
     expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("creates_and_activates", async () => {
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    state.rpcResults.activate_automation = { data: 1, error: null };
+    const mcp = await connect();
+    const result = await mcp.callTool({ name: "criar_automacao", arguments: SPEC });
+    expect(result.isError).toBeFalsy();
+    const summary = text(result);
+    for (const expected of ['"Ebook"', "criada e ativa", "comentário no Instagram", "ebook", "qualquer post"]) {
+      expect(summary).toContain(expected);
+    }
+
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    expect(save?.[1]).toMatchObject({
+      p_org: "org-1",
+      p_id: null,
+      p_name: "Ebook",
+      p_trigger_type: "instagram_comment",
+      p_confirm_overwrite: false,
+    });
+    expect(save?.[1].p_spec).toMatchObject({
+      nome: "Ebook",
+      gatilho: "comentario",
+      palavras: ["ebook"],
+      post: "qualquer",
+      dm: SPEC.dm,
+      respostaPublica: SPEC.respostaPublica,
+      umaVezPorContato: true,
+    });
+    expect(save?.[1].p_trigger_config).toMatchObject({ channelId: "ch-1", mediaId: null, keywords: ["ebook"], oncePerUser: true });
+
+    // O banco guarda ids uuid; os ids determinísticos do formato simples são só do compilador.
+    const graph = save?.[1].p_graph as { nodes: { id: string }[]; edges: { id: string; source: string; target: string }[] };
+    const nodeIds = graph.nodes.map((n) => n.id);
+    for (const id of nodeIds) expect(id).toMatch(UUID);
+    for (const edge of graph.edges) {
+      expect(edge.id).toMatch(UUID);
+      expect(nodeIds).toContain(edge.source);
+      expect(nodeIds).toContain(edge.target);
+    }
+
+    expect(state.rpcs).toContainEqual(["activate_automation", { p_id: AUTOMATION_ID }]);
+    expect((result.structuredContent as { automacao: Row }).automacao).toMatchObject({
+      id: AUTOMATION_ID,
+      nome: "Ebook",
+      status: "ativa",
+      gatilho: "comentario",
+      criadaPeloClaude: true,
+      alteradaNoPainel: false,
+    });
+
+    state.rpcs = [];
+    const draft = await mcp.callTool({ name: "criar_automacao", arguments: { ...SPEC, ativar: false } });
+    expect(draft.isError).toBeFalsy();
+    expect(text(draft)).toContain("criada como rascunho");
+    expect(state.rpcs.map(([name]) => name)).toEqual(["save_mcp_automation"]);
+  });
+
+  it("create_validation_error_in_portuguese", async () => {
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "criar_automacao",
+      arguments: { ...SPEC, palavras: Array.from({ length: 21 }, (_, i) => `palavra${i}`) },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("Máximo de 20 palavras");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("create_requires_admin", async () => {
+    state.memberships = [{ organization_id: "org-1", role: "agent", created_at: "2026-01-01" }];
+    const mcp = await connect();
+    const result = await mcp.callTool({ name: "criar_automacao", arguments: SPEC });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("administradores");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("post_must_belong_to_account", async () => {
+    state.invokeResult = {
+      data: { media: [{ id: "1790", caption: "outro", mediaType: "IMAGE", permalink: null, timestamp: null }] },
+      error: null,
+    };
+    const mcp = await connect();
+    const result = await mcp.callTool({ name: "criar_automacao", arguments: { ...SPEC, post: "1799" } });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("não está na conta");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("edit_partial_merges", async () => {
+    state.automations = [automationRow()];
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toContain("guia");
+    expect(text(result)).toContain("atualizada");
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    expect(save?.[1]).toMatchObject({ p_id: AUTOMATION_ID, p_name: "Ebook", p_confirm_overwrite: false });
+    expect(save?.[1].p_spec).toMatchObject({
+      palavras: ["guia"],
+      respostaPublica: SPEC.respostaPublica,
+      dm: SPEC.dm,
+    });
+  });
+
+  it("edit_invalid_patch_changes_nothing", async () => {
+    state.automations = [automationRow()];
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: Array.from({ length: 21 }, (_, i) => `palavra${i}`) } },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("Máximo de 20 palavras");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("edit_panel_modified_requires_confirmation", async () => {
+    state.automations = [automationRow({ mcp_spec_stale: true })];
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    const mcp = await connect();
+    const blocked = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(blocked.isError).toBe(true);
+    expect(text(blocked)).toContain("alterada no painel");
+    expect(state.rpcs).toHaveLength(0);
+
+    const confirmed = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] }, confirmarSobrescrever: true },
+    });
+    expect(confirmed.isError).toBeFalsy();
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    expect(save?.[1]).toMatchObject({ p_id: AUTOMATION_ID, p_confirm_overwrite: true });
+  });
+
+  it("edit_panel_created_refused", async () => {
+    state.automations = [automationRow({ mcp_spec: null })];
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("criada no painel");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("pause_activate_summaries", async () => {
+    state.automations = [automationRow()];
+    state.rpcResults.pause_automation = { data: null, error: null };
+    state.rpcResults.activate_automation = { data: 1, error: null };
+    const mcp = await connect();
+
+    const paused = await mcp.callTool({ name: "pausar_automacao", arguments: { id: AUTOMATION_ID } });
+    expect(paused.isError).toBeFalsy();
+    expect(text(paused)).toContain("pausada");
+    expect(state.rpcs).toContainEqual(["pause_automation", { p_id: AUTOMATION_ID }]);
+    expect((paused.structuredContent as { automacao: Row }).automacao).toMatchObject({ id: AUTOMATION_ID, status: "pausada" });
+
+    state.automations = [automationRow({ status: "paused" })];
+    state.rpcs = [];
+    const activated = await mcp.callTool({ name: "ativar_automacao", arguments: { id: AUTOMATION_ID } });
+    expect(activated.isError).toBeFalsy();
+    expect(text(activated)).toContain("ativada");
+    expect(state.rpcs).toContainEqual(["activate_automation", { p_id: AUTOMATION_ID }]);
+    expect((activated.structuredContent as { automacao: Row }).automacao).toMatchObject({ id: AUTOMATION_ID, status: "ativa" });
+  });
+
+  it("delete_requires_confirm", async () => {
+    state.automations = [automationRow()];
+    state.rpcResults.delete_automation = { data: null, error: null };
+    const mcp = await connect();
+    const blocked = await mcp.callTool({ name: "excluir_automacao", arguments: { id: AUTOMATION_ID } });
+    expect(blocked.isError).toBe(true);
+    expect(text(blocked)).toContain("confirmar");
+    expect(state.rpcs).toHaveLength(0);
+
+    const deleted = await mcp.callTool({ name: "excluir_automacao", arguments: { id: AUTOMATION_ID, confirmar: true } });
+    expect(deleted.isError).toBeFalsy();
+    expect(text(deleted)).toContain("excluída");
+    expect(state.rpcs).toContainEqual(["delete_automation", { p_id: AUTOMATION_ID }]);
+  });
+
+  it("warns_overlap", async () => {
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    state.rpcResults.activate_automation = { data: 1, error: null };
+    state.automations = [automationRow({ id: OTHER_ID, name: "Promo" })];
+    const mcp = await connect();
+    const created = await mcp.callTool({ name: "criar_automacao", arguments: SPEC });
+    expect(created.isError).toBeFalsy();
+    expect(text(created)).toContain("Promo");
+
+    state.automations = [
+      automationRow({ id: AUTOMATION_ID, name: "Novo", status: "paused" }),
+      automationRow({ id: OTHER_ID, name: "Promo" }),
+    ];
+    state.rpcs = [];
+    const activated = await mcp.callTool({ name: "ativar_automacao", arguments: { id: AUTOMATION_ID } });
+    expect(activated.isError).toBeFalsy();
+    expect(text(activated)).toContain("Promo");
   });
 
   it("rpc_failures_are_short_tool_errors", async () => {
