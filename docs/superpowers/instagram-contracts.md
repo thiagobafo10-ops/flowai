@@ -17,7 +17,7 @@ Configuração: Instagram API com Instagram Login. Versão é fornecida pela con
 | Assinatura | X-Hub-Signature-256; HMAC SHA256 do corpo bruto | Web Crypto verify, antes de JSON |
 | Confirmação de leitura enviada | Documentação sender-actions inconsistente entre host Facebook e Instagram Login | Capability pendente, leitura local continua funcional; não emitir chamada presumida |
 
-Permissões mínimas: instagram_business_basic e instagram_business_manage_messages; comentários exigem instagram_business_manage_comments. Subscrições desta fase: messages, comments e messaging_seen. Live não faz parte do escopo.
+Permissões mínimas: instagram_business_basic e instagram_business_manage_messages; comentários exigem instagram_business_manage_comments. Subscrições desta fase: messages, comments, messaging_seen e messaging_postbacks. Live não faz parte do escopo.
 
 Instalar callback no app e habilitar notificações na conta profissional são passos distintos. O teste da conexão deve verificar identidade, permissões e subscrições da conta, além da confirmação GET do callback. Um GET de challenge sozinho não comprova entrega de mensagens.
 

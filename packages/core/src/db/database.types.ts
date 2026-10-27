@@ -315,14 +315,14 @@ isOneToOne: false
                   ]
                 },"automations": {
                   Row: {
-                    "activated_at": string | null,"created_at": string,"created_by": string | null,"created_by_ai": boolean,"current_version": number,"description": string | null,"id": string,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
+                    "activated_at": string | null,"created_at": string,"created_by": string | null,"created_by_ai": boolean,"current_version": number,"description": string | null,"id": string,"mcp_spec": Json | null,"mcp_spec_stale": boolean,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"mcp_spec"?: Json | null,"mcp_spec_stale"?: boolean,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
                   }
                   Update: {
-                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"mcp_spec"?: Json | null,"mcp_spec_stale"?: boolean,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -361,14 +361,14 @@ isOneToOne: false
                   ]
                 },"channels": {
                   Row: {
-                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                    "access_token_expires_at": string | null,"access_token_refreshed_at": string | null,"access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_expires_at"?: string | null,"access_token_refreshed_at"?: string | null,"access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Update: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_expires_at"?: string | null,"access_token_refreshed_at"?: string | null,"access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -1279,6 +1279,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"tracked_link_clicks": {
+                  Row: {
+                    "clicked_at": string,"id": string,"link_id": string,"organization_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "clicked_at"?: string,"id"?: string,"link_id": string,"organization_id": string
+                  }
+                  Update: {
+                    "clicked_at"?: string,"id"?: string,"link_id"?: string,"organization_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tracked_link_clicks_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "tracked_link_clicks_organization_id_link_id_fkey"
+      columns: ["organization_id","link_id"]
+isOneToOne: false
+      referencedRelation: "tracked_links"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"tracked_links": {
+                  Row: {
+                    "automation_id": string,"button_title": string,"code": string,"contact_id": string | null,"created_at": string,"id": string,"organization_id": string,"run_id": string,"url": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "automation_id": string,"button_title": string,"code": string,"contact_id"?: string | null,"created_at"?: string,"id"?: string,"organization_id": string,"run_id": string,"url": string
+                  }
+                  Update: {
+                    "automation_id"?: string,"button_title"?: string,"code"?: string,"contact_id"?: string | null,"created_at"?: string,"id"?: string,"organization_id"?: string,"run_id"?: string,"url"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tracked_links_organization_id_automation_id_fkey"
+      columns: ["organization_id","automation_id"]
+isOneToOne: false
+      referencedRelation: "automations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "tracked_links_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "tracked_links_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -1302,6 +1360,9 @@ isOneToOne: false
                            },
 "automation_button_payloads":
 { Args: { "p_node_id": string,"p_run": string,"p_token": string }; Returns: Json
+                           },
+"automation_results":
+{ Args: { "p_automation"?: string,"p_from": string,"p_org": string,"p_to": string }; Returns: Json
                            },
 "automation_run_counts":
 { Args: { "p_org": string,"p_since": string }; Returns: {
@@ -1410,6 +1471,9 @@ isOneToOne: false
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"dispatch_meta_token_refresh":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "duplicate_automation":
 { Args: { "p_id": string }; Returns: string
                            },
@@ -1485,6 +1549,15 @@ isOneToOne: false
               "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
             }[]
                            },
+"mcp_contacts":
+{ Args: { "p_automation": string,"p_limit": number,"p_org": string,"p_search": string }; Returns: Json
+                           },
+"meta_token_refresh_candidates":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"open_tracked_link":
+{ Args: { "p_code": string }; Returns: string
+                           },
 "ops_health":
 { Args: { "p_org": string }; Returns: Json
                            },
@@ -1542,6 +1615,9 @@ isOneToOne: false
 "record_instagram_vip_capability":
 { Args: { "p_channel_id": string,"p_error_code": string,"p_generation": number,"p_success": boolean }; Returns: undefined
                            },
+"record_meta_token_refresh":
+{ Args: { "p_channel": string,"p_error": string,"p_expires_in": number,"p_generation": number,"p_token": string }; Returns: undefined
+                           },
 "remove_contact_from_sequence":
 { Args: { "p_contact": string,"p_sequence": string }; Returns: undefined
                            },
@@ -1595,6 +1671,9 @@ isOneToOne: false
                            },
 "save_knowledge_document":
 { Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
+                           },
+"save_mcp_automation":
+{ Args: { "p_confirm_overwrite"?: boolean,"p_graph": Json,"p_id": string,"p_name": string,"p_org": string,"p_spec": Json,"p_trigger_config": Json,"p_trigger_type": Database["public"]['Enums']["automation_trigger_type"] }; Returns: string
                            },
 "save_sequence":
 { Args: { "p_id": string,"p_name": string,"p_org": string,"p_settings": Json,"p_steps": Json }; Returns: string

@@ -124,7 +124,10 @@ test("Automação: comentário assinado envia private reply com postback e segue
   expect(response.status).toBe(200); await drainAutomationRuns(email, true);
   const after = await (await fetch(`${AUTOMATION_TEST_URL}/__test__/graph-calls`)).json();
   expect(after.filter((call: { accountId: string }) => call.accountId === c.accountId)).toHaveLength(2);
-  expect(after.at(-1).body).toMatchObject({ recipient: { id: "90002" }, message: { attachment: { payload: { text: expect.stringContaining("Aqui está"), buttons: [{ type: "web_url", url: "https://flowai.example/guia", title: "Abrir link" }] } } } });
+  // URL buttons go out as tracked links (/r/<code>) that store the original destination.
+  expect(after.at(-1).body).toMatchObject({ recipient: { id: "90002" }, message: { attachment: { payload: { text: expect.stringContaining("Aqui está"), buttons: [{ type: "web_url", url: expect.stringMatching(/^https:\/\/flowai-web-rust\.vercel\.app\/r\/[a-z0-9]{12}$/), title: "Abrir link" }] } } } });
+  const code = after.at(-1).body.message.attachment.payload.buttons[0].url.slice(-12);
+  expect(psql(`select url from public.tracked_links where code='${code}' and organization_id='${org}'`)).toBe("https://flowai.example/guia");
   expect(psql(`select status from public.automation_runs where organization_id='${org}'`)).toBe("completed");
 });
 

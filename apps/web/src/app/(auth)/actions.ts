@@ -8,6 +8,7 @@ import type { SignInInput, SignUpInput } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { getRequestIp } from "@/lib/request-ip";
 import { ACTIVE_ORG_COOKIE } from "@/lib/org/active-org";
+import { safeNextPath } from "@/lib/security/safe-next";
 import type { ActionResult } from "@/lib/action-result";
 
 const MSG_DUPLICATE = "Este e-mail já está cadastrado.";
@@ -82,7 +83,7 @@ export async function signUp(
   redirect("/onboarding");
 }
 
-export async function signIn(input: SignInInput): Promise<ActionResult> {
+export async function signIn(input: SignInInput, next?: string): Promise<ActionResult> {
   const parsed = signInSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -118,7 +119,8 @@ export async function signIn(input: SignInInput): Promise<ActionResult> {
   });
   if (auditError) console.error("log_auth_event failed", auditError);
 
-  redirect("/dashboard");
+  // Retorno pós-login (ex.: consentimento OAuth do conector MCP); só caminhos do app.
+  redirect(safeNextPath(next) ?? "/dashboard");
 }
 
 export async function signOut(): Promise<void> {

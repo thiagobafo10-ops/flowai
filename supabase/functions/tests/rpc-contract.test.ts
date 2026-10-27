@@ -70,7 +70,7 @@ async function rpcCalls(file: string): Promise<Call[]> {
 
 const FILES = [
   "automation-worker/index.ts", "ai-worker/index.ts", "ai-playground/index.ts", "instagram-worker/index.ts",
-  "tests/serve-automation-e2e.ts", "tests/serve-ai-e2e.ts", "_shared/meta-repository.ts",
+  "tests/serve-automation-e2e.ts", "tests/serve-ai-e2e.ts", "_shared/meta-repository.ts", "meta-token-refresh/index.ts",
 ];
 
 Deno.test("rpc argument names match the latest SQL signatures", async () => {
@@ -128,5 +128,19 @@ Deno.test("outreach worker RPCs are wired and use latest SQL argument names", as
     const call = calls.find((c) => c.name === name);
     assert(call && JSON.stringify(call.keys) === JSON.stringify(keys), `${name} not wired with ${keys.join(",")}`);
     assert([...signatures.get(name)!.values()].some((params) => JSON.stringify(params.map((p) => p.name)) === JSON.stringify(keys)), `${name} SQL contract mismatch`);
+  }
+});
+
+Deno.test("meta token refresh RPCs are wired and use latest SQL argument names", async () => {
+  const signatures = await sqlSignatures();
+  const calls = await rpcCalls("meta-token-refresh/index.ts");
+  const required = {
+    read_automation_worker_config: [], meta_token_refresh_candidates: [],
+    record_meta_token_refresh: ["p_channel", "p_generation", "p_token", "p_expires_in", "p_error"],
+  };
+  for (const [name, keys] of Object.entries(required)) {
+    const call = calls.find((c) => c.name === name);
+    assert(call && JSON.stringify(call.keys) === JSON.stringify(keys), `${name} not wired with ${keys.join(",")}`);
+    assert([...(signatures.get(name)?.values() ?? [])].some((params) => JSON.stringify(params.map((p) => p.name)) === JSON.stringify(keys)), `${name} SQL contract mismatch`);
   }
 });

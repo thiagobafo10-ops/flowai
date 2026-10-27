@@ -88,7 +88,30 @@ describe("gatilho", () => {
     expect(v.anyKeyword).toBe(true);
     expect(v.mode).toBe("any");
     expect(triggerToConfig("instagram_comment", v)).toEqual({ channelId: "c", mediaId: null, oncePerUser: true, anyKeyword: true, keywords: [], mode: "any", publicReplies: [] });
-    expect(triggerToConfig("keyword_detected", v)).toEqual({ anyKeyword: true, keywords: [], mode: "any" });
+    const dm = triggerToValues({ anyKeyword: true, keywords: ["teste"], mode: "any" }, "keyword_detected");
+    expect(triggerToConfig("keyword_detected", dm)).toEqual({ anyKeyword: true, keywords: [], mode: "any" });
+  });
+
+  test("oncePerUser em DM e story: ida e volta, desligado quando ausente", () => {
+    const dm = { keywords: ["preco"], mode: "contains", oncePerUser: true };
+    const dmValues = triggerToValues(dm, "keyword_detected");
+    expect(dmValues.oncePerUser).toBe(true);
+    expect(triggerToConfig("keyword_detected", dmValues)).toEqual(dm);
+    expect(triggerToValues(triggerToConfig("keyword_detected", dmValues), "keyword_detected").oncePerUser).toBe(true);
+    expect(triggerConfigSchemas.keyword_detected.safeParse(triggerToConfig("keyword_detected", dmValues)).success).toBe(true);
+
+    const story = { channelId: "c", oncePerUser: true };
+    const storyValues = triggerToValues(story, "instagram_story");
+    expect(storyValues.oncePerUser).toBe(true);
+    expect(triggerToConfig("instagram_story", storyValues)).toEqual(story);
+
+    // automações antigas do painel (sem o campo) continuam disparando sempre
+    expect(triggerToValues({ keywords: ["a"], mode: "contains" }, "keyword_detected").oncePerUser).toBe(false);
+    expect(triggerToValues({ channelId: "c" }, "instagram_story").oncePerUser).toBe(false);
+    expect(triggerToConfig("instagram_story", triggerToValues({ channelId: "c" }, "instagram_story"))).toEqual({ channelId: "c" });
+    expect(triggerToConfig("keyword_detected", { ...dmValues, oncePerUser: false })).toEqual({ keywords: ["preco"], mode: "contains" });
+    // comentário mantém o padrão ligado
+    expect(triggerToValues({ channelId: "c" }, "instagram_comment").oncePerUser).toBe(true);
   });
 
   test("etiqueta e etapa em branco significam qualquer uma", () => {

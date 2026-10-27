@@ -136,7 +136,7 @@ export async function handleMetaConnection(request: Request, deps: MetaConnectio
       else if (String(profile.user_id ?? "") !== channel.accountId) errorCode = "invalid_account";
       else {
         username = typeof profile.username === "string" ? profile.username : null;
-        const subscriptionResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${channel.accountId}/subscribed_apps`, { method: "POST", headers, body: JSON.stringify({ subscribed_fields: ["messages", "comments", "messaging_seen"] }), signal: AbortSignal.timeout(15000) });
+        const subscriptionResponse = await deps.fetch(`https://graph.instagram.com/${secrets.apiVersion}/${channel.accountId}/subscribed_apps`, { method: "POST", headers, body: JSON.stringify({ subscribed_fields: ["messages", "comments", "messaging_seen", "messaging_postbacks"] }), signal: AbortSignal.timeout(15000) });
         const subscription = await subscriptionResponse.json();
         if (!subscriptionResponse.ok || subscription.success !== true) errorCode = subscription.error?.code === 190 ? "invalid_token" : "permission_denied";
       }

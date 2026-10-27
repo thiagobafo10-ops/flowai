@@ -10,34 +10,69 @@ export type AutomationRow = {
   triggerType: TriggerType;
   status: AutomationStatus;
   runs7d: number;
+  clicks7d: number;
+  contacts7d: number;
+  /** Automação criada pelo MCP: guarda o formato simples em `mcp_spec`. */
+  createdByClaude: boolean;
   updatedAt: string;
 };
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Lista com a contagem de execuções dos últimos 7 dias (RPC agrupada, sujeita ao RLS). */
+type ResultRow = { runs: number; clicks: number; contacts: number };
+
+/** Contagem do jsonb: só número finito e positivo vale; qualquer outra coisa vira zero. */
+function toCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** Lê o jsonb de `automation_results` sem confiar no formato (payload inesperado vira zero). */
+function readResults(value: unknown): Map<string, ResultRow> {
+  const rows = new Map<string, ResultRow>();
+  if (!Array.isArray(value)) return rows;
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const row = item as { automationId?: unknown; runs?: unknown; uniqueContacts?: unknown; clicks?: unknown };
+    if (typeof row.automationId !== "string") continue;
+    const clicks = typeof row.clicks === "object" && row.clicks !== null ? (row.clicks as { total?: unknown }).total : 0;
+    rows.set(row.automationId, {
+      runs: toCount(row.runs),
+      clicks: toCount(clicks),
+      contacts: toCount(row.uniqueContacts),
+    });
+  }
+  return rows;
+}
+
+/** Lista com disparos, cliques e contatos dos últimos 7 dias (RPC agrupada, sujeita ao RLS). */
 export async function listAutomations(orgId: string, now: Date = new Date()): Promise<AutomationRow[]> {
   const supabase = await createServerClient();
-  const since = new Date(now.getTime() - WEEK_MS).toISOString();
-  const [automations, runs] = await Promise.all([
+  const from = new Date(now.getTime() - WEEK_MS).toISOString();
+  const [automations, results] = await Promise.all([
     supabase
       .from("automations")
-      .select("id, name, trigger_type, status, updated_at")
+      .select("id, name, trigger_type, status, updated_at, mcp_spec")
       .eq("organization_id", orgId)
       .order("updated_at", { ascending: false }),
-    supabase.rpc("automation_run_counts", { p_org: orgId, p_since: since }),
+    supabase.rpc("automation_results", { p_org: orgId, p_from: from, p_to: now.toISOString() }),
   ]);
   if (automations.error) throw automations.error;
-  if (runs.error) throw runs.error;
-  const counts = new Map<string, number>((runs.data ?? []).map((r) => [r.automation_id, Number(r.runs)]));
-  return (automations.data ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    triggerType: a.trigger_type as TriggerType,
-    status: a.status as AutomationStatus,
-    runs7d: counts.get(a.id) ?? 0,
-    updatedAt: a.updated_at,
-  }));
+  if (results.error) throw results.error;
+  const stats = readResults(results.data);
+  return (automations.data ?? []).map((a) => {
+    const row = stats.get(a.id);
+    return {
+      id: a.id,
+      name: a.name,
+      triggerType: a.trigger_type as TriggerType,
+      status: a.status as AutomationStatus,
+      runs7d: row?.runs ?? 0,
+      clicks7d: row?.clicks ?? 0,
+      contacts7d: row?.contacts ?? 0,
+      createdByClaude: a.mcp_spec !== null && a.mcp_spec !== undefined,
+      updatedAt: a.updated_at,
+    };
+  });
 }
 
 export type RefsBundle = {
