@@ -194,6 +194,8 @@ export function AutomationList({ orgId }: { orgId: string }) {
                 <th scope="col" className="px-3 py-2 font-medium">Gatilho</th>
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>
                 <th scope="col" className="px-3 py-2 font-medium">Execuções (7 dias)</th>
+                <th scope="col" className="px-3 py-2 font-medium">Cliques (7 dias)</th>
+                <th scope="col" className="px-3 py-2 font-medium">Contatos (7 dias)</th>
                 <th scope="col" className="px-3 py-2 font-medium">Atualizada em</th>
                 {canWrite && <th scope="col" className="px-3 py-2 text-right font-medium"><span className="sr-only">Ações</span></th>}
               </tr>
@@ -201,10 +203,22 @@ export function AutomationList({ orgId }: { orgId: string }) {
             <tbody>
               {automations.map((a) => (
                 <tr key={a.id} className="border-t">
-                  <td className="px-3 py-2 font-medium">{a.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <span className="flex items-center gap-2">
+                      {a.name}
+                      {a.createdByClaude && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <SparklesIcon className="size-3" aria-hidden="true" />
+                          Criada pelo Claude
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{AUTOMATION_TRIGGER_LABEL[a.triggerType] ?? a.triggerType}</td>
                   <td className="px-3 py-2">{AUTOMATION_STATUS_LABEL[a.status] ?? a.status}</td>
                   <td className="px-3 py-2">{a.runs7d}</td>
+                  <td className="px-3 py-2">{a.clicks7d}</td>
+                  <td className="px-3 py-2">{a.contacts7d}</td>
                   <td className="px-3 py-2">{dateFormat.format(new Date(a.updatedAt))}</td>
                   {canWrite && (
                     <td className="px-3 py-2">
