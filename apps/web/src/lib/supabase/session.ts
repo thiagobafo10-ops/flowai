@@ -10,7 +10,13 @@ function isPublicRoute(pathname: string): boolean {
 
 // Conector MCP: autenticação por Bearer (OAuth), sem cookies nem redirect ao login.
 function isBearerRoute(pathname: string): boolean {
-  return pathname === "/mcp" || pathname.startsWith("/mcp/") || pathname.startsWith("/.well-known/");
+  const metadata = "/.well-known/oauth-protected-resource";
+  return (
+    pathname === "/mcp" ||
+    pathname.startsWith("/mcp/") ||
+    pathname === metadata ||
+    pathname.startsWith(`${metadata}/`)
+  );
 }
 
 function redirectTo(request: NextRequest, pathname: string, from: NextResponse, search = "") {

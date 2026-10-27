@@ -43,6 +43,17 @@ describe("protected resource metadata", () => {
     expect(protectedResourceMetadata("https://a.test").authorization_servers).toEqual(["https://ref.supabase.co/auth/v1"]);
   });
 
+  it("spoofed x-forwarded-host does not change authorization_servers", async () => {
+    const response = await getMcp(
+      new Request("http://internal/.well-known/oauth-protected-resource/mcp", {
+        headers: { "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" },
+      }),
+    );
+    const body = await response.json();
+    expect(body.authorization_servers).toEqual(["https://ref.supabase.co/auth/v1"]);
+    expect(JSON.stringify(body.authorization_servers)).not.toContain("evil.example");
+  });
+
   it.each([
     ["root", getRoot],
     ["mcp", getMcp],

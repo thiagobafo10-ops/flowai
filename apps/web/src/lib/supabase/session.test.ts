@@ -18,12 +18,21 @@ beforeEach(() => {
 });
 
 describe("updateSession (proxy)", () => {
-  it.each(["/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"])(
+  it.each(["/mcp", "/mcp/x", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"])(
     "lets bearer route %s through without session or redirect",
     async (path) => {
       const response = await updateSession(new NextRequest(`http://localhost:3000${path}`));
       expect(response.headers.get("location")).toBeNull();
       expect(state.clients).toBe(0);
+    },
+  );
+
+  it.each(["/.well-known/other", "/.well-known/oauth-protected-resourcex", "/mcpx"])(
+    "keeps the login redirect for non-MCP path %s",
+    async (path) => {
+      const response = await updateSession(new NextRequest(`http://localhost:3000${path}`));
+      expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
+      expect(state.clients).toBe(1);
     },
   );
 

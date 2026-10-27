@@ -1,16 +1,9 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { approveConsent, denyConsent } from "./actions";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { approveConsent, denyConsent, switchAccount } from "./actions";
+import { ConsentCard } from "./consent-card";
 import { loadConsent } from "./load-consent";
 
 export const metadata: Metadata = { title: "Autorizar acesso | FlowAI" };
@@ -48,37 +41,15 @@ async function ConsentContent({ searchParams }: Props) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{state.clientName}</CardTitle>
-        <CardDescription>Permitir que o Claude gerencie suas automações do Instagram?</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm text-muted-foreground">
-        <p>
-          <strong className="text-foreground">{state.clientName}</strong> poderá criar, editar, pausar e consultar
-          automações e resultados da sua organização no FlowAI, com as mesmas permissões da sua conta.
-        </p>
-        {first(params.erro) && (
-          <p role="alert" className="text-destructive">
-            Não foi possível concluir. Tente novamente.
-          </p>
-        )}
-      </CardContent>
-      <CardFooter className="flex gap-2">
-        <form action={denyConsent} className="flex-1">
-          <input type="hidden" name="authorization_id" value={state.authorizationId} />
-          <Button type="submit" variant="outline" className="w-full">
-            Recusar
-          </Button>
-        </form>
-        <form action={approveConsent} className="flex-1">
-          <input type="hidden" name="authorization_id" value={state.authorizationId} />
-          <Button type="submit" className="w-full">
-            Permitir
-          </Button>
-        </form>
-      </CardFooter>
-    </Card>
+    <ConsentCard
+      authorizationId={state.authorizationId}
+      clientName={state.clientName}
+      userEmail={state.userEmail}
+      redirectHost={state.redirectHost}
+      trustedRedirect={state.trustedRedirect}
+      failed={Boolean(first(params.erro))}
+      actions={{ approve: approveConsent, deny: denyConsent, switchAccount }}
+    />
   );
 }
 

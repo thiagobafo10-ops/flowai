@@ -20,11 +20,32 @@ function challenge(request: Request, error?: string): string {
   return error ? `Bearer error="${error}", ${metadata}` : `Bearer ${metadata}`;
 }
 
-function authError(request: Request, status: 401 | 403, error: string, challengeError?: string): Response {
+function unauthorized(request: Request, error: string, challengeError?: string): Response {
   return Response.json(
     { error },
-    { status, headers: { "WWW-Authenticate": challenge(request, challengeError), "Cache-Control": "no-store" } },
+    { status: 401, headers: { "WWW-Authenticate": challenge(request, challengeError), "Cache-Control": "no-store" } },
   );
+}
+
+function forbidden(error: string): Response {
+  return Response.json({ error }, { status: 403, headers: { "Cache-Control": "no-store" } });
+}
+
+/**
+ * Lê o claim `client_id` do payload (o JWT já foi validado por getUser). Só tokens
+ * emitidos pelo servidor OAuth do Supabase o têm; sessões do navegador não.
+ */
+function oauthClientId(token: string): string | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const claims: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (typeof claims !== "object" || claims === null) return null;
+    const clientId = (claims as { client_id?: unknown }).client_id;
+    return typeof clientId === "string" && clientId.length > 0 ? clientId : null;
+  } catch {
+    return null;
+  }
 }
 
 function serverError(): Response {
@@ -42,7 +63,7 @@ function bearerToken(request: Request): string | null {
  */
 export async function resolveMcpContext(request: Request): Promise<McpContext | Response> {
   const accessToken = bearerToken(request);
-  if (!accessToken) return authError(request, 401, "unauthorized");
+  if (!accessToken) return unauthorized(request, "unauthorized");
 
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,7 +79,9 @@ export async function resolveMcpContext(request: Request): Promise<McpContext | 
     data: { user },
     error: userError,
   } = await supabase.auth.getUser(accessToken);
-  if (userError || !user) return authError(request, 401, "invalid_token", "invalid_token");
+  if (userError || !user) return unauthorized(request, "invalid_token", "invalid_token");
+  // Só tokens do servidor OAuth (conector); token de sessão do painel é recusado.
+  if (!oauthClientId(accessToken)) return unauthorized(request, "invalid_token", "invalid_token");
 
   const { data: memberships, error: membershipError } = await supabase
     .from("memberships")
@@ -71,7 +94,7 @@ export async function resolveMcpContext(request: Request): Promise<McpContext | 
   }
   const membership =
     memberships.find((m) => m.role === "owner" || m.role === "admin") ?? memberships[0];
-  if (!membership) return authError(request, 403, "no_organization");
+  if (!membership) return forbidden("no_organization");
 
   const { data: channels, error: channelError } = await supabase
     .from("channels")
@@ -86,7 +109,7 @@ export async function resolveMcpContext(request: Request): Promise<McpContext | 
     console.error("mcp context: channels query failed", channelError.code ?? "unknown");
     return serverError();
   }
-  const row = channels.find((c) => c.meta_connection_id);
+  const row = channels[0];
   const channel = row?.meta_connection_id ? { id: row.id, connectionId: row.meta_connection_id } : null;
 
   return {
