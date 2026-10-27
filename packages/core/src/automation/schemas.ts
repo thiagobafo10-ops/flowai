@@ -80,6 +80,7 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
       anyKeyword: z.boolean().optional(),
       keywords: z.array(keywordItemSchema).max(20, "Máximo de 20 palavras-chave."),
       mode: keywordModeSchema,
+      oncePerUser: z.boolean().optional(),
     })
     .superRefine((data, ctx) => {
       if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {
@@ -101,7 +102,7 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["keywords"], message: "Informe ao menos uma palavra-chave." });
       }
     }),
-  instagram_story: z.object({ channelId: uuid }),
+  instagram_story: z.object({ channelId: uuid, oncePerUser: z.boolean().optional() }),
   contact_created: z.object({}),
   tag_added: z.object({ tagId: uuid.nullable() }),
   stage_changed: z.object({ stageId: uuid.nullable() }),

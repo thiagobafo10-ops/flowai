@@ -315,14 +315,14 @@ isOneToOne: false
                   ]
                 },"automations": {
                   Row: {
-                    "activated_at": string | null,"created_at": string,"created_by": string | null,"created_by_ai": boolean,"current_version": number,"description": string | null,"id": string,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
+                    "activated_at": string | null,"created_at": string,"created_by": string | null,"created_by_ai": boolean,"current_version": number,"description": string | null,"id": string,"mcp_spec": Json | null,"mcp_spec_stale": boolean,"name": string,"organization_id": string,"status": Database["public"]['Enums']["automation_status"],"trigger_config": NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"mcp_spec"?: Json | null,"mcp_spec_stale"?: boolean,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type": Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
                   }
                   Update: {
-                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
+                    "activated_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"created_by_ai"?: boolean,"current_version"?: number,"description"?: string | null,"id"?: string,"mcp_spec"?: Json | null,"mcp_spec_stale"?: boolean,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["automation_status"],"trigger_config"?: NonNullable<Json>,"trigger_type"?: Database["public"]['Enums']["automation_trigger_type"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1595,6 +1595,9 @@ isOneToOne: false
                            },
 "save_knowledge_document":
 { Args: { "p_content": string,"p_id": string,"p_org": string,"p_title": string }; Returns: string
+                           },
+"save_mcp_automation":
+{ Args: { "p_confirm_overwrite"?: boolean,"p_graph": Json,"p_id": string,"p_name": string,"p_org": string,"p_spec": Json,"p_trigger_config": Json,"p_trigger_type": Database["public"]['Enums']["automation_trigger_type"] }; Returns: string
                            },
 "save_sequence":
 { Args: { "p_id": string,"p_name": string,"p_org": string,"p_settings": Json,"p_steps": Json }; Returns: string

@@ -181,18 +181,16 @@ export function specToTrigger(spec: AutomationSpec, ctx: Ctx): SpecTrigger {
   const words = spec.palavras.length
     ? { keywords: spec.palavras, mode: "contains" as const }
     : { anyKeyword: true, keywords: [] as string[], mode: "any" as const };
-  if (spec.gatilho === "story") return { type: "instagram_story", config: { channelId: ctx.channelId } };
-  if (spec.gatilho === "dm") {
-    // oncePerUser em keyword_detected ainda não existe no esquema do gatilho (Task 2): não emitir por enquanto.
-    return { type: "keyword_detected", config: words };
-  }
+  const oncePerUser = spec.umaVezPorContato;
+  if (spec.gatilho === "story") return { type: "instagram_story", config: { channelId: ctx.channelId, oncePerUser } };
+  if (spec.gatilho === "dm") return { type: "keyword_detected", config: { ...words, oncePerUser } };
   return {
     type: "instagram_comment",
     config: {
       channelId: ctx.channelId,
       mediaId: spec.post === "qualquer" ? null : spec.post,
       ...words,
-      oncePerUser: spec.umaVezPorContato,
+      oncePerUser,
       ...(spec.respostaPublica.length ? { publicReplies: spec.respostaPublica } : {}),
     },
   };

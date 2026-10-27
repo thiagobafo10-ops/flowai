@@ -174,16 +174,21 @@ describe("specToGraph", () => {
     const followUp = { depois: "30min", texto: "Lembrete", botoes: [] };
     const dm = parsed({ gatilho: "dm", palavras: [], followUp });
     const gDm = specToGraph(dm, ctx);
-    expect(specToTrigger(dm, ctx)).toEqual({ type: "keyword_detected", config: { anyKeyword: true, keywords: [], mode: "any" } });
+    expect(specToTrigger(dm, ctx)).toEqual({
+      type: "keyword_detected",
+      config: { anyKeyword: true, keywords: [], mode: "any", oncePerUser: true },
+    });
     expect(gDm.nodes.map((n) => n.id)).toEqual(["t", "m1", "d1", "m3", "e"]);
     expect((gDm.nodes[1]!.config as { buttons?: { kind: string }[] }).buttons?.every((b) => b.kind === "url")).toBe(true);
 
     const story = parsed({ gatilho: "story", palavras: [] });
-    expect(specToTrigger(story, ctx)).toEqual({ type: "instagram_story", config: { channelId: CHANNEL } });
+    expect(specToTrigger(story, ctx)).toEqual({ type: "instagram_story", config: { channelId: CHANNEL, oncePerUser: true } });
     expect(specToGraph(story, ctx).nodes.map((n) => n.id)).toEqual(["t", "m1", "e"]);
 
     const dmWords = parsed({ gatilho: "dm", palavras: ["preço"] });
-    expect(specToTrigger(dmWords, ctx).config).toEqual({ keywords: ["preço"], mode: "contains" });
+    expect(specToTrigger(dmWords, ctx).config).toEqual({ keywords: ["preço"], mode: "contains", oncePerUser: true });
+    const dmRepeat = parsed({ gatilho: "dm", palavras: ["preço"], umaVezPorContato: false });
+    expect(specToTrigger(dmRepeat, ctx).config).toMatchObject({ oncePerUser: false });
   });
 
   it("graph_is_valid", () => {

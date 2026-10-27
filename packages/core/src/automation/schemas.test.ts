@@ -82,6 +82,15 @@ describe("triggers", () => {
     expect(triggerConfigSchemas.keyword_detected.safeParse({ anyKeyword: true, keywords: [], mode: "contains" }).success).toBe(true);
     expect(triggerConfigSchemas.keyword_detected.safeParse({ keywords: [], mode: "any" }).success).toBe(true);
   });
+  it("accepts_once_per_user_on_dm_and_story", () => {
+    const dm = triggerConfigSchemas.keyword_detected.safeParse({ keywords: ["a"], mode: "contains", oncePerUser: true });
+    expect(dm.success && (dm.data as { oncePerUser?: boolean }).oncePerUser).toBe(true);
+    const story = triggerConfigSchemas.instagram_story.safeParse({ channelId: uuid, oncePerUser: false });
+    expect(story.success && (story.data as { oncePerUser?: boolean }).oncePerUser).toBe(false);
+    expect(triggerConfigSchemas.keyword_detected.safeParse({ keywords: ["a"], mode: "contains", oncePerUser: "sim" }).success).toBe(false);
+    expect(triggerConfigSchemas.instagram_story.safeParse({ channelId: uuid, oncePerUser: 1 }).success).toBe(false);
+    expect(triggerConfigSchemas.instagram_story.safeParse({ channelId: uuid }).success).toBe(true);
+  });
   it("instagram_comment", () => {
     expect(
       triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, keywords: ["a"], mode: "contains" }).success,
