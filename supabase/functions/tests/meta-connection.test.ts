@@ -63,7 +63,7 @@ Deno.test("valid connection verifies account and enables required subscriptions"
   assert(response.status === 200); assert(calls.length === 2);
   assert(calls[0].url === "https://graph.instagram.com/v26.0/me?fields=user_id%2Cusername");
   assert(calls[1].url === "https://graph.instagram.com/v26.0/789/subscribed_apps");
-  assert(JSON.stringify(calls[1].body) === '{"subscribed_fields":["messages","comments","messaging_seen"]}');
+  assert(JSON.stringify(calls[1].body) === '{"subscribed_fields":["messages","comments","messaging_seen","messaging_postbacks"]}');
   assert(calls[1].authorization === "Bearer access-secret");
   const body = await response.text(); assert(!body.includes("secret"));
 });

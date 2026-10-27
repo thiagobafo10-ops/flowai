@@ -361,14 +361,14 @@ isOneToOne: false
                   ]
                 },"channels": {
                   Row: {
-                    "access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
+                    "access_token_expires_at": string | null,"access_token_refreshed_at": string | null,"access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_expires_at"?: string | null,"access_token_refreshed_at"?: string | null,"access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name": string,"organization_id": string,"status"?: Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Update: {
-                    "access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
+                    "access_token_expires_at"?: string | null,"access_token_refreshed_at"?: string | null,"access_token_secret_id"?: string | null,"app_secret_secret_id"?: string | null,"created_at"?: string,"external_account_id"?: string | null,"id"?: string,"instagram_claimed"?: boolean,"instagram_username"?: string | null,"last_error"?: string | null,"meta_connection_id"?: string | null,"name"?: string,"organization_id"?: string,"status"?: Database["public"]['Enums']["channel_status"],"type"?: Database["public"]['Enums']["channel_type"],"updated_at"?: string,"verify_token_secret_id"?: string | null,"waba_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -1471,6 +1471,9 @@ isOneToOne: false
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"dispatch_meta_token_refresh":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "duplicate_automation":
 { Args: { "p_id": string }; Returns: string
                            },
@@ -1549,6 +1552,9 @@ isOneToOne: false
 "mcp_contacts":
 { Args: { "p_automation": string,"p_limit": number,"p_org": string,"p_search": string }; Returns: Json
                            },
+"meta_token_refresh_candidates":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "open_tracked_link":
 { Args: { "p_code": string }; Returns: string
                            },
@@ -1608,6 +1614,9 @@ isOneToOne: false
                            },
 "record_instagram_vip_capability":
 { Args: { "p_channel_id": string,"p_error_code": string,"p_generation": number,"p_success": boolean }; Returns: undefined
+                           },
+"record_meta_token_refresh":
+{ Args: { "p_channel": string,"p_error": string,"p_expires_in": number,"p_generation": number,"p_token": string }; Returns: undefined
                            },
 "remove_contact_from_sequence":
 { Args: { "p_contact": string,"p_sequence": string }; Returns: undefined

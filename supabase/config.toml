@@ -32,6 +32,10 @@ import_map = "./functions/deno.json"
 verify_jwt = true
 import_map = "./functions/deno.json"
 
+[functions.meta-token-refresh]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
 [api]
 enabled = true
 # Port to use for the API URL.
