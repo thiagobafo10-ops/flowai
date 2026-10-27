@@ -1279,6 +1279,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"tracked_link_clicks": {
+                  Row: {
+                    "clicked_at": string,"id": string,"link_id": string,"organization_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "clicked_at"?: string,"id"?: string,"link_id": string,"organization_id": string
+                  }
+                  Update: {
+                    "clicked_at"?: string,"id"?: string,"link_id"?: string,"organization_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tracked_link_clicks_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "tracked_link_clicks_organization_id_link_id_fkey"
+      columns: ["organization_id","link_id"]
+isOneToOne: false
+      referencedRelation: "tracked_links"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"tracked_links": {
+                  Row: {
+                    "automation_id": string,"button_title": string,"code": string,"contact_id": string | null,"created_at": string,"id": string,"organization_id": string,"run_id": string,"url": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "automation_id": string,"button_title": string,"code": string,"contact_id"?: string | null,"created_at"?: string,"id"?: string,"organization_id": string,"run_id": string,"url": string
+                  }
+                  Update: {
+                    "automation_id"?: string,"button_title"?: string,"code"?: string,"contact_id"?: string | null,"created_at"?: string,"id"?: string,"organization_id"?: string,"run_id"?: string,"url"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tracked_links_organization_id_automation_id_fkey"
+      columns: ["organization_id","automation_id"]
+isOneToOne: false
+      referencedRelation: "automations"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "tracked_links_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "tracked_links_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -1302,6 +1360,9 @@ isOneToOne: false
                            },
 "automation_button_payloads":
 { Args: { "p_node_id": string,"p_run": string,"p_token": string }; Returns: Json
+                           },
+"automation_results":
+{ Args: { "p_automation"?: string,"p_from": string,"p_org": string,"p_to": string }; Returns: Json
                            },
 "automation_run_counts":
 { Args: { "p_org": string,"p_since": string }; Returns: {
@@ -1484,6 +1545,12 @@ isOneToOne: false
 { Args: { "p_embedding": string,"p_k"?: number,"p_min_similarity"?: number,"p_org": string }; Returns: {
               "content": string,"document_id": string,"document_title": string,"id": string,"similarity": number
             }[]
+                           },
+"mcp_contacts":
+{ Args: { "p_automation": string,"p_limit": number,"p_org": string,"p_search": string }; Returns: Json
+                           },
+"open_tracked_link":
+{ Args: { "p_code": string }; Returns: string
                            },
 "ops_health":
 { Args: { "p_org": string }; Returns: Json
