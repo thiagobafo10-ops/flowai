@@ -20,7 +20,7 @@ create table public.tracked_links (
   run_id uuid not null,
   contact_id uuid,
   button_title text not null check (char_length(button_title) between 1 and 80),
-  url text not null check (url ~ '^https://' and char_length(url) <= 2048),
+  url text not null check (url ~ '^https://' and octet_length(url) <= 2048),
   created_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (run_id, automation_id, button_title, url),
@@ -81,7 +81,7 @@ create function private.tracked_button_url(p_run uuid, p_title text, p_url text)
 language plpgsql volatile security definer set search_path = '' as $$
 declare v_base text; v_org uuid; v_auto uuid; v_contact uuid; v_code text; v_try int := 0;
 begin
-  if p_run is null or p_title is null or p_url is null or p_url !~ '^https://' or char_length(p_url) > 2048
+  if p_run is null or p_title is null or p_url is null or p_url !~ '^https://' or octet_length(p_url) > 2048
      or char_length(p_title) not between 1 and 80 then
     return p_url;
   end if;
@@ -103,10 +103,15 @@ begin
     if v_code is not null then return v_base || '/r/' || v_code; end if;
     v_try := v_try + 1;
     if v_try > 5 then return p_url; end if;
-    -- conflito de código (improvável) ou inserção concorrente do mesmo botão: a volta seguinte resolve
-    insert into public.tracked_links (organization_id, code, automation_id, run_id, contact_id, button_title, url)
-      values (v_org, private.generate_tracked_code(), v_auto, p_run, v_contact, p_title, p_url)
-      on conflict do nothing;
+    -- conflito de código (improvável) ou inserção concorrente do mesmo botão: a volta seguinte resolve.
+    -- Qualquer outro erro (limite do índice, restrição) nunca impede o envio: mantém a URL original.
+    begin
+      insert into public.tracked_links (organization_id, code, automation_id, run_id, contact_id, button_title, url)
+        values (v_org, private.generate_tracked_code(), v_auto, p_run, v_contact, p_title, p_url)
+        on conflict do nothing;
+    exception when others then
+      return p_url;
+    end;
   end loop;
 end $$;
 
@@ -204,16 +209,18 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- resultados por automação
--- [{automationId, name, status, runs, dmsSent, publicReplies, clicks:{total, byButton:{título:n}}, uniqueContacts}]
+-- [{automationId, name, status, runs, dmsSent, publicReplies,
+--   clicks:{total, byButton:[{title, kind:'link'|'path', clicks}]}, uniqueContacts}]
 -- no período [p_from, p_to] (máx. 90 dias), por automação da organização (ou só p_automation), ordenado por nome:
 -- * runs: execuções criadas no período; uniqueContacts: contatos distintos dessas execuções.
--- * dmsSent: mensagens do motor (messages.context.automation.runId de uma execução da automação, status sent,
---   delivered ou read) criadas no período + respostas privadas do comentário (instagram_send_intents
---   kind private_reply, state sent, com automation_run_id) criadas no período.
+-- * dmsSent: mensagens de saída do motor com messages.context.automation.runId de uma execução da automação,
+--   status sent, delivered ou read, criadas no período. Inclui a resposta privada do comentário: ao ficar sent,
+--   record_instagram_private_reply grava a mensagem e link_instagram_comment_run marca o runId nela (por isso
+--   instagram_send_intents não é somado à parte).
 -- * publicReplies: instagram_comment_public_replies em state sent criadas no período.
--- * clicks: cliques em links rastreáveis (tracked_link_clicks) + eventos button_clicked (botões de caminho e
---   respostas rápidas, payload {runId, nodeId, optionId}) no período; byButton pelo título do botão (o da versão
---   da execução; sem título, o optionId).
+-- * clicks: cliques em links rastreáveis (tracked_link_clicks, kind link) + eventos button_clicked (botões de
+--   caminho e respostas rápidas, payload {runId, nodeId, optionId}, kind path) no período. byButton: uma entrada
+--   por (título, kind), mais cliques primeiro; o título de path é o da versão da execução (sem título, o optionId).
 create function public.automation_results(p_org uuid, p_from timestamptz, p_to timestamptz,
   p_automation uuid default null) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
@@ -245,27 +252,19 @@ begin
       join public.automation_runs r on r.id = x.run_id and r.organization_id = p_org
       join autos a on a.id = r.automation_id
       group by r.automation_id
-  ), dm_private as (
-    select r.automation_id, count(*) as n
-      from public.instagram_send_intents i
-      join public.automation_runs r on r.id = i.automation_run_id and r.organization_id = p_org
-      join autos a on a.id = r.automation_id
-      where i.organization_id = p_org and i.kind = 'private_reply' and i.state = 'sent'
-        and i.created_at between p_from and p_to
-      group by r.automation_id
   ), public_replies as (
     select p.automation_id, count(*) as n
       from public.instagram_comment_public_replies p join autos a on a.id = p.automation_id
       where p.organization_id = p_org and p.state = 'sent' and p.created_at between p_from and p_to
       group by p.automation_id
   ), click_rows as (
-    select l.automation_id, l.button_title as title
+    select l.automation_id, l.button_title as title, 'link' as kind
       from public.tracked_link_clicks c
       join public.tracked_links l on l.id = c.link_id
       join autos a on a.id = l.automation_id
       where c.organization_id = p_org and c.clicked_at between p_from and p_to
     union all
-    select r.automation_id, coalesce(t.title, x.option_id) as title
+    select r.automation_id, coalesce(t.title, x.option_id) as title, 'path' as kind
       from (select case when e.payload ->> 'runId' ~ v_uuid then (e.payload ->> 'runId')::uuid end as run_id,
                    e.payload ->> 'nodeId' as node_id, e.payload ->> 'optionId' as option_id
               from public.events e
@@ -287,9 +286,10 @@ begin
           limit 1) t on true
       where x.option_id is not null
   ), click_titles as (
-    select automation_id, title, count(*) as n from click_rows group by automation_id, title
+    select automation_id, title, kind, count(*) as n from click_rows group by automation_id, title, kind
   ), clicks as (
-    select automation_id, sum(n)::bigint as total, jsonb_object_agg(title, n) as by_button
+    select automation_id, sum(n)::bigint as total,
+        jsonb_agg(jsonb_build_object('title', title, 'kind', kind, 'clicks', n) order by n desc, title, kind) as by_button
       from click_titles group by automation_id
   )
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -297,15 +297,14 @@ begin
       'name', a.name,
       'status', a.status,
       'runs', coalesce(rs.runs, 0),
-      'dmsSent', coalesce(dm.n, 0) + coalesce(dp.n, 0),
+      'dmsSent', coalesce(dm.n, 0),
       'publicReplies', coalesce(pr.n, 0),
-      'clicks', jsonb_build_object('total', coalesce(ck.total, 0), 'byButton', coalesce(ck.by_button, '{}'::jsonb)),
+      'clicks', jsonb_build_object('total', coalesce(ck.total, 0), 'byButton', coalesce(ck.by_button, '[]'::jsonb)),
       'uniqueContacts', coalesce(rs.contacts, 0)) order by a.name, a.id), '[]'::jsonb)
     into v_out
     from autos a
     left join run_stats rs on rs.automation_id = a.id
     left join dm_msgs dm on dm.automation_id = a.id
-    left join dm_private dp on dp.automation_id = a.id
     left join public_replies pr on pr.automation_id = a.id
     left join clicks ck on ck.automation_id = a.id;
   return v_out;
@@ -331,22 +330,28 @@ begin
     v_pattern := '%' || replace(replace(replace(v_pattern, '\', '\\'), '%', '\%'), '_', '\_') || '%';
   end if;
 
-  with base as (
-    select k.id, k.name, k.last_interaction_at, k.created_at, u.username
+  -- sem busca, o limite vale antes da consulta do @usuário (LIMIT null = sem limite quando há busca)
+  with cand as (
+    select k.id, k.name, k.last_interaction_at, k.created_at, k.instagram_id
       from public.contacts k
-      left join lateral (
-        select e.payload ->> 'senderName' as username
-          from public.instagram_events e
-          where k.instagram_id is not null and e.organization_id = p_org and e.kind = 'comment'
-            and e.payload ->> 'senderExternalId' = k.instagram_id and coalesce(e.payload ->> 'senderName', '') <> ''
-          order by e.created_at desc
-          limit 1) u on true
       where k.organization_id = p_org
         and (p_automation is null or exists (
           select 1 from public.automation_runs r
             where r.automation_id = p_automation and r.contact_id = k.id and r.organization_id = p_org))
-        and (v_pattern is null or k.name ilike v_pattern escape '\' or u.username ilike v_pattern escape '\')
       order by k.last_interaction_at desc nulls last, k.created_at desc, k.id
+      limit case when v_pattern is null then p_limit end
+  ), base as (
+    select c.id, c.name, c.last_interaction_at, c.created_at, u.username
+      from cand c
+      left join lateral (
+        select e.payload ->> 'senderName' as username
+          from public.instagram_events e
+          where c.instagram_id is not null and e.organization_id = p_org and e.kind = 'comment'
+            and e.payload ->> 'senderExternalId' = c.instagram_id and coalesce(e.payload ->> 'senderName', '') <> ''
+          order by e.created_at desc
+          limit 1) u on true
+      where v_pattern is null or c.name ilike v_pattern escape '\' or u.username ilike v_pattern escape '\'
+      order by c.last_interaction_at desc nulls last, c.created_at desc, c.id
       limit p_limit
   )
   select coalesce(jsonb_agg(jsonb_build_object(

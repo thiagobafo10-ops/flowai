@@ -94,6 +94,10 @@ select is((select count(*)::int from public.tracked_links where run_id=:'r1'),1,
 select isnt(private.tracked_button_url(:'r1','Site','https://exemplo.com.br/outra'), :'tracked','outra URL ganha outro código');
 select isnt(private.tracked_button_url(:'r2','Site','https://exemplo.com.br/oferta'), :'tracked','outra execução ganha outro código');
 select is(private.tracked_button_url(null,'Site','https://exemplo.com.br/oferta'),'https://exemplo.com.br/oferta','sem execução mantém a URL');
+select is(private.tracked_button_url(:'r1','Site','https://exemplo.com.br/' || repeat('ç',1100)),'https://exemplo.com.br/' || repeat('ç',1100),
+  'URL multibyte acima de 2048 bytes mantém a URL');
+select matches(private.tracked_button_url(:'r1','Site','https://exemplo.com.br/' || repeat('ç',1000)),'^https://flowai-web-rust\.vercel\.app/r/[a-z0-9]{12}$',
+  'URL multibyte até 2048 bytes é rastreada');
 -- simulador / IA: corpo sem botões passa intacto
 select is(private.automation_deliver(:'r1', (select c from public.conversations c where id=:'c1'), :'nm', 'Oi', null, null,
   '{"text":"Oi"}', null) is not null, true,'entrega sem botões funciona');
@@ -157,8 +161,17 @@ select tests.clear_authentication();
 update public.messages set status='sent' where conversation_id=:'c1' and context->'automation'->>'runId'=:'r1' and content='Escolha';
 insert into public.messages(organization_id, conversation_id, channel_id, direction, sender_type, content, status, context)
   values (:'oa',:'c2',:'ig','outbound','automation','Falhou','failed',jsonb_build_object('automation',jsonb_build_object('runId',:'r2')));
+-- resposta privada enviada pelo caminho real (complete_instagram_send → gatilhos gravam a mensagem com o runId)
+insert into public.instagram_events(id, organization_id, channel_id, kind, external_id, payload, occurred_at, state, automation_id, automation_version, automation_run_id)
+  values (pg_temp.n('pe3'),:'oa',:'ig','comment','cm58p3','{"senderExternalId":"5802","text":"x","mediaId":"1"}', now(), 'done', :'auto', 1, :'r2');
+insert into public.instagram_send_intents(organization_id, channel_id, event_id, kind, comment_id, text, state, claim_token, claimed_at, automation_run_id)
+  values (:'oa',:'ig',pg_temp.n('pe3'),'private_reply','cm58p3','Oi','sending',pg_temp.n('tok'),now(),:'r2') returning id as pintent \gset
+select public.complete_instagram_send(:'pintent', jsonb_build_object('state','sent','claimToken',pg_temp.n('tok'),
+  'externalId','mid58p3','recipientId','5802'));
+select is((select count(*)::int from public.messages where context->'automation'->>'runId'=:'r2' and status='sent'),1,
+  'resposta privada enviada vira mensagem marcada com o runId');
 insert into public.instagram_send_intents(organization_id, channel_id, kind, comment_id, text, state, automation_run_id)
-  values (:'oa',:'ig','private_reply','cm58x','Oi','sent',:'r2'), (:'oa',:'ig','private_reply','cm58y','Oi','failed',:'r3');
+  values (:'oa',:'ig','private_reply','cm58y','Oi','failed',:'r3');
 -- respostas públicas: uma enviada, uma falha
 insert into public.instagram_events(id, organization_id, channel_id, kind, external_id, payload, occurred_at, state, automation_id, automation_version)
   values (pg_temp.n('pe1'),:'oa',:'ig','comment','cm58p1','{"senderExternalId":"5801","text":"x","mediaId":"1"}', now(), 'done', :'auto', 1),
@@ -170,6 +183,9 @@ insert into public.instagram_comment_public_replies(organization_id, channel_id,
 -- clique de botão de caminho (r1, opção a1 = "Sim")
 insert into public.events(organization_id, type, conversation_id, contact_id, actor_type, payload)
   values (:'oa','button_clicked',:'c1',:'k1','contact',jsonb_build_object('runId',:'r1','nodeId',:'nm','optionId','a1'));
+-- clique de caminho com o mesmo título do botão de link ("Site", opção u1): entrada separada
+insert into public.events(organization_id, type, conversation_id, contact_id, actor_type, payload)
+  values (:'oa','button_clicked',:'c1',:'k1','contact',jsonb_build_object('runId',:'r1','nodeId',:'nm','optionId','u1'));
 -- fora do período: execução e clique antigos
 select pg_temp.run('old',:'auto',:'oa',null,:'k3') as rold \gset
 update public.automation_runs set created_at = now() - interval '20 days' where id=:'rold';
@@ -183,13 +199,14 @@ select (select x from jsonb_array_elements(:'res'::jsonb) x where x->>'automatio
 select is(:'ra'::jsonb->>'name','Preço por DM','nome');
 select is(:'ra'::jsonb->>'status','paused','status');
 select is((:'ra'::jsonb->>'runs')::int,3,'execuções no período (a antiga fica de fora)');
-select is((:'ra'::jsonb->>'dmsSent')::int,2,'DMs enviadas: mensagem do motor + resposta privada (falhas e pendentes fora)');
+select is((:'ra'::jsonb->>'dmsSent')::int,2,'DMs enviadas: mensagem do motor + resposta privada, cada uma uma vez (falhas e pendentes fora)');
 select is((:'ra'::jsonb->>'publicReplies')::int,1,'respostas públicas enviadas');
-select is(:'ra'::jsonb->'clicks','{"total":31,"byButton":{"Site":30,"Sim":1}}'::jsonb,'cliques de link e de caminho por botão');
+select is(:'ra'::jsonb->'clicks','{"total":32,"byButton":[{"title":"Site","kind":"link","clicks":30},{"title":"Sim","kind":"path","clicks":1},{"title":"Site","kind":"path","clicks":1}]}'::jsonb,
+  'cliques de link e de caminho por botão, títulos iguais separados por tipo');
 select is((:'ra'::jsonb->>'uniqueContacts')::int,2,'contatos únicos das execuções');
 select is(:'ra'::jsonb ?& array['automationId','name','status','runs','dmsSent','publicReplies','clicks','uniqueContacts'],true,'formato');
 select is((select (x->>'runs')::int from jsonb_array_elements(:'res'::jsonb) x where x->>'automationId'=:'auto2'),1,'outra automação contada à parte');
-select is((select x->'clicks' from jsonb_array_elements(:'res'::jsonb) x where x->>'automationId'=:'auto2'),'{"total":0,"byButton":{}}'::jsonb,'sem cliques');
+select is((select x->'clicks' from jsonb_array_elements(:'res'::jsonb) x where x->>'automationId'=:'auto2'),'{"total":0,"byButton":[]}'::jsonb,'sem cliques');
 select is(jsonb_array_length(public.automation_results(:'oa', now() - interval '7 days', now() + interval '1 hour', :'auto2')),1,'filtro por automação');
 select is(public.automation_results(:'oa', now() - interval '7 days', now() + interval '1 hour', :'autob'),'[]'::jsonb,'automação de outra organização → vazio');
 select is((select (x->>'runs')::int from jsonb_array_elements(public.automation_results(:'oa', now() - interval '30 days', now())) x
