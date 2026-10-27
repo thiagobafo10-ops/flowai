@@ -8,6 +8,12 @@ function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
 }
 
+// Links rastreados: públicos por definição e sem sessão. Não entram em PUBLIC_ROUTES porque
+// quem já está logado também precisa abrir o destino, não ser mandado ao dashboard.
+function isTrackedLinkRoute(pathname: string): boolean {
+  return pathname === "/r" || pathname.startsWith("/r/");
+}
+
 // Conector MCP: autenticação por Bearer (OAuth), sem cookies nem redirect ao login.
 function isBearerRoute(pathname: string): boolean {
   const metadata = "/.well-known/oauth-protected-resource";
@@ -30,7 +36,9 @@ function redirectTo(request: NextRequest, pathname: string, from: NextResponse, 
 }
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
-  if (isBearerRoute(request.nextUrl.pathname)) return NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
+  // Sem sessão e sem chamada ao Auth: o clique no link é anônimo e não pode pagar um getUser().
+  if (isBearerRoute(pathname) || isTrackedLinkRoute(pathname)) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 
@@ -58,7 +66,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   // APIs: sem redirect; cada Route Handler valida a sessão e responde 401.
   if (pathname.startsWith("/api/")) return response;
   if (!user && pathname === "/oauth/consent") {
