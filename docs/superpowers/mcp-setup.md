@@ -4,7 +4,7 @@ O FlowAI expõe um servidor MCP remoto em `/mcp`. Pelo conector, o Claude cria, 
 
 - **Endereço de produção:** `https://flowai-web-rust.vercel.app/mcp`
 - **Autenticação:** OAuth 2.1 do Supabase Auth (JWT do próprio usuário). A chave de serviço não existe em `apps/web`.
-- **Quem pode escrever:** owner ou admin da organização. Agentes e visualizadores só leem.
+- **Quem pode usar:** owner/admin criam, editam, pausam, ativam e excluem. Agentes e visualizadores podem listar automações, ver resultados e listar contatos; `listar_posts` exige owner/admin (a ação `list_media` da Edge verifica o papel).
 - **Canal:** o primeiro canal Instagram ativo da organização. Sem canal ativo, as ferramentas de criação de comentário/story respondem "Nenhuma conta do Instagram conectada".
 - **Escopo desta entrega:** Instagram, uma conta por organização. WhatsApp, mídia e App Review da Meta estão fora.
 
@@ -48,7 +48,7 @@ Exemplos de pedido:
 
 No painel do projeto Supabase (o mesmo de `NEXT_PUBLIC_SUPABASE_URL`):
 
-1. **Authentication → URL Configuration**: Site URL `https://flowai-web-rust.vercel.app` (e `http://localhost:3000` enquanto testar local).
+1. **Authentication → URL Configuration**: em produção, Site URL `https://flowai-web-rust.vercel.app`. O Supabase tem uma única Site URL; `http://localhost:3000` serve apenas ao ambiente local — se precisar testar o consentimento localmente, adicione `http://localhost:3000/**` às Redirect URLs permitidas e restaure a URL de produção depois.
 2. **Authentication → OAuth Server** (o nome pode aparecer como *Authorization Server*):
    - habilitar o servidor OAuth;
    - **Authorization Path**: `/oauth/consent`;
@@ -89,7 +89,7 @@ As migrations desta entrega são:
 
 ```bash
 # 1. Workers existentes (o meta-connection passa a assinar messaging_postbacks)
-npx supabase functions deploy meta-connection meta-webhook instagram-worker automation-worker
+npx supabase functions deploy meta-connection meta-webhook send-message instagram-worker automation-worker
 # sem Docker local, acrescente --use-api ao comando acima
 
 # 2. Banco
@@ -112,7 +112,14 @@ select jobname, schedule, active from cron.job where jobname = 'flowai-meta-toke
 
 O job chama `dispatch_meta_token_refresh`, que faz `net.http_post` para `https://<projeto>.supabase.co/functions/v1/meta-token-refresh` com o JWT de serviço e o header `X-FlowAI-Worker`.
 
-A função renova apenas canais Instagram ativos com token expirando em menos de 15 dias (ou expiração desconhecida) e token com mais de 24 h — a Meta recusa renovar um token novo. O token novo é gravado no **mesmo segredo do Vault**; `credential_generation` não muda, então reservas e envios em andamento continuam válidos. Falhas viram `last_error = token_refresh_failed` (ou `invalid_token`) e aparecem em **Configurações → Saúde**. Nenhum log contém o token.
+A função renova apenas canais Instagram ativos com token expirando em menos de 15 dias (ou expiração desconhecida) e token com mais de 24 h — a Meta recusa renovar um token novo. O token novo é gravado no **mesmo segredo do Vault**; `credential_generation` não muda, então reservas e envios em andamento continuam válidos. Falhas viram `last_error = token_refresh_failed` (ou `invalid_token`) e aparecem como código no cartão do canal em **Configurações → Saúde**. A data de expiração ainda não é exibida na tela; consulte no SQL editor:
+
+```sql
+select name, access_token_expires_at, access_token_refreshed_at
+from public.channels where type = 'instagram';
+```
+
+Nenhum log contém o token.
 
 ## 3. Checklist do painel Meta
 
@@ -125,10 +132,10 @@ A função renova apenas canais Instagram ativos com token expirando em menos de
    ```
 
    Cole o `access_token` devolvido em **Configurações → Canais → Instagram**. A renovação automática cuida dos próximos 60 dias.
-4. **Webhook**: em **Configurações → Canais**, copie a URL mostrada (`https://<ref>.supabase.co/functions/v1/meta-webhook`) e o **verify token** (botão "Mostrar verify token"). No app Meta, cadastre a URL e o mesmo verify token.
+4. **Webhook**: em **Configurações → Canais**, copie a URL mostrada — ela inclui o id da conexão: `https://<ref>.supabase.co/functions/v1/meta-webhook/<id da conexão>`. Copie também o **verify token** (botão "Mostrar verify token"). No app Meta, cadastre exatamente essa URL e o mesmo verify token; sem o id no final, o webhook responde 404.
 5. Assine os campos `messages`, `comments`, `messaging_seen` e `messaging_postbacks`. A assinatura HMAC (`X-Hub-Signature-256`) já cobre todos eles.
 6. Use **Testar conexão Instagram** e confirme o canal como **Ativo**. A verificação GET sozinha não ativa o canal.
-7. Em **Configurações → Saúde**, confirme o canal, a conexão e a data de expiração do token. `tokenRefreshError` deve estar vazio.
+7. Em **Configurações → Saúde**, confirme o canal e a conexão com `last_error` vazio. Falhas de renovação aparecem como `token_refresh_failed`/`invalid_token`; para a data de expiração, use a consulta SQL da seção 2.4.
 
 Mais detalhes de conta, credenciais e webhook: [instagram-setup.md](instagram-setup.md).
 
@@ -150,17 +157,17 @@ O endereço usado nos links rastreáveis fica em `private.tracked_link_settings.
 update private.tracked_link_settings set base_url = 'https://novo-dominio' where singleton;
 ```
 
-`null` desliga o rastreio e mantém a URL original nos botões.
+A mudança vale para **novos** botões: a URL `/r/<código>` é gravada no momento do envio, então links já enviados continuam apontando para o domínio antigo (que precisa continuar servindo a rota). `null` desliga o rastreio e mantém a URL original nos botões novos.
 
 ## 5. Roteiro do teste real
 
-Pré-requisitos: canal Instagram **ativo**, webhook verificado, conector FlowAI autorizado e um post/Reel publicado.
+Pré-requisitos: canal Instagram **ativo**, webhook verificado, conector FlowAI autorizado, um post/Reel publicado e uma conta **owner/admin** (o `listar_posts` e as ferramentas de escrita exigem esse papel).
 
 1. No Claude, peça: *"Liste meus posts."* Confirme que `listar_posts` devolve os posts recentes com id, legenda (até 300 caracteres) e link.
 2. Peça uma automação de teste no comentário de um post/Reel de teste: palavra `TESTEMCP`, resposta pública `Te mandei no direct!`, DM com texto e um botão para uma URL `https://` sua, e follow-up de `2min`.
 3. Confira o resumo: nome, gatilho `comentario`, palavra, post, DM e follow-up, e o aviso se outra automação ativa usa o mesmo gatilho/palavra/post. A automação deve ficar **ativa** e aparecer no painel com o selo **Criada pelo Claude**.
 4. Com **outra conta** (ou a mesma, se a Meta permitir), comente `TESTEMCP` no post escolhido.
-5. Em até alguns segundos: resposta pública no comentário + DM com o botão de abertura (quando há follow-up). Toque no botão.
+5. Em até cerca de 1 minuto (o worker do Instagram roda a cada minuto): resposta pública no comentário + DM com o botão de abertura (quando há follow-up). Toque no botão.
 6. Chega a DM com o botão de link. Toque nele: o navegador abre `https://flowai-web-rust.vercel.app/r/<12 caracteres>` e redireciona (302) para a URL de destino. Um código inexistente ou malformado mostra **Link inválido** (404).
 7. Depois de `2min`, chega o follow-up.
 8. No Claude, peça: *"Ver resultados da automação de teste nos últimos 7 dias."* Confira disparos, DMs enviadas, resposta pública, cliques (por botão: caminho e link) e contatos únicos. No painel, as colunas **Cliques (7 dias)** e **Contatos (7 dias)** devem bater.
@@ -176,8 +183,8 @@ Pré-requisitos: canal Instagram **ativo**, webhook verificado, conector FlowAI 
 | "Esta automação foi alterada no painel…" | `mcp_spec_stale` ligado | Confirme com o usuário e repita com `confirmarSobrescrever: true`. |
 | "O post … não está na conta" | Post saiu dos 50 mais recentes ou é de outra conta | Use `listar_posts` e um id da lista, ou `post: "qualquer"`. |
 | Comentário não dispara | Automação pausada, palavra diferente, post errado, fora da janela de 7 dias ou permissão da Meta | Painel Meta (comentários/Advanced Access), status da automação e aba Execuções. |
-| Link `/r/...` dá 404 | Código desconhecido ou `tracked_link_settings.base_url` nulo | Confira a tabela `tracked_links` e o singleton. |
-| Token expirou / saúde com `token_refresh_failed` | Função ou cron não publicados, ou token com menos de 24 h | Logs de `meta-token-refresh`, `cron.job` e `net._http_response`; reconecte com um token longo se necessário. |
+| Link `/r/...` dá 404 | Código desconhecido/malformado, ou `base_url` aponta para um domínio sem a rota | Confira a tabela `tracked_links`, o singleton e se o domínio publicado serve `/r/[code]`. |
+| Token expirou / saúde com `token_refresh_failed` | Função ou cron não publicados, `private.automation_worker_config` não configurado (o job sai sem chamar nada) ou token com menos de 24 h (não é falha, só não é candidato) | Logs de `meta-token-refresh`, `cron.job`, `net._http_response` e `select * from private.automation_worker_config;`; reconecte com um token longo se necessário. |
 
 ## 6. Limites conhecidos
 
@@ -186,4 +193,33 @@ Pré-requisitos: canal Instagram **ativo**, webhook verificado, conector FlowAI 
 - A edição pelo Claude só vale para automações criadas por ele; as do painel podem ser pausadas, ativadas, excluídas e consultadas.
 - Se o painel salvar uma automação criada pelo Claude, a próxima edição pelo Claude exige `confirmarSobrescrever: true`.
 - O link `/r/<código>` registra no máximo 30 cliques por minuto por link e redireciona mesmo acima disso, sem registrar. Não há limite por IP nesta entrega (sem helper público reutilizável; um teto por IP bloquearia NAT).
+- Follow-ups longos dependem da janela de 24 h do Direct: se o contato não interagir antes de ela fechar, o passo é pulado (`window_closed`) e não é reenviado. No gatilho de comentário com follow-up, a DM com os links e o próprio follow-up só seguem depois que o contato toca no botão de abertura.
 - Não há sessão MCP: `GET`/`DELETE` autenticam e respondem `405`; o conector usa `POST` com respostas JSON.
+
+## 7. Verificação automatizada desta entrega
+
+Execução local em 2026-10-27 (branch `feat/mcp-automacoes`, commit de documentação):
+
+| Suíte | Comando | Resultado |
+|---|---|---|
+| Core | `npm test` (workspace core) | 454 testes / 37 arquivos, todos passando |
+| Web | `npm test` (workspace web) | 348 testes / 50 arquivos, todos passando |
+| Scripts | `npm run test:scripts` | 17 testes, todos passando |
+| Edge (Deno 2) | `npm run test:edge` | 244 testes, 0 falhas |
+| Tipos | `npm run typecheck` | ok |
+| Lint | `npm run lint -w apps/web` | 0 erros (3 avisos pré-existentes) |
+| Build | `npm run build -w apps/web` | ok (`/mcp` e `/r/[code]` dinâmicos) |
+
+Total: **1063 testes automatizados** executados sem falha.
+
+**Pendente por ambiente:** pgTAP (`npm run db:test`), e2e de navegador e `npm run db:types` exigem o Supabase local/Docker, que não estava rodando nesta máquina (`DbConnectError`, `ECONNREFUSED 127.0.0.1:54322`). Rode, com Docker ativo:
+
+```bash
+npm run db:start
+npm run db:reset
+npm run db:test
+npm run db:types
+FLOWAI_E2E_SLOW_HOST=1 npm run e2e -w apps/web
+```
+
+A validação ao vivo com Meta e Claude (seção 5) continua pendente de uma conta real e do conector autorizado.
