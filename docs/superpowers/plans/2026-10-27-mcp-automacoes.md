@@ -103,7 +103,7 @@
 **Interfaces:**
 - Produces:
   - Colunas `channels.access_token_expires_at timestamptz`, `channels.access_token_refreshed_at timestamptz`.
-  - `public.meta_token_refresh_candidates() returns jsonb` (service-only): canais Instagram ativos com expiração nula ou < now()+15 dias e `access_token_refreshed_at` nula ou < now()−24 h → `[{channelId, generation, accessToken, apiVersion}]`.
+  - `public.meta_token_refresh_candidates() returns jsonb` (service-only): canais Instagram de conexão não desconectada, com expiração nula ou < now()+15 dias e `access_token_refreshed_at` nula ou < now()−24 h → `[{channelId, generation, accessToken, apiVersion}]`. O status de verificação do canal não filtra: canal em `error`/`needs_setup` continua renovando.
   - `public.record_meta_token_refresh(p_channel uuid, p_generation int, p_token text, p_expires_in int, p_error text) returns void` (service-only): sucesso → `vault.update_secret` no mesmo id, expiração = now()+p_expires_in s, limpa erro; **não** incrementa `credential_generation`; geração diferente → ignora; erro (`token_refresh_failed`|`invalid_token`) → `last_error` da conexão.
   - `ops_health` inclui `tokenExpiresAt` e `tokenRefreshError` do canal.
   - Edge `meta-token-refresh`: segredo interno igual aos workers; `GET https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token` com o token no header `Authorization`; cron `flowai-meta-token-refresh` diário (`0 6 * * *`) via `net.http_post` no padrão de `dispatch_automation_worker`.

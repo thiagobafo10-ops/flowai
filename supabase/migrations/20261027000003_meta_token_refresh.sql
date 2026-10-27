@@ -7,8 +7,11 @@ alter table public.channels
   add column access_token_expires_at timestamptz,
   add column access_token_refreshed_at timestamptz;
 
--- Canais Instagram ativos cujo token expira em menos de 15 dias (ou expiração desconhecida) e que
--- não foram renovados nas últimas 24 h (a Meta só renova tokens com pelo menos 24 h).
+-- Canais Instagram com token expirando em menos de 15 dias (ou expiração desconhecida) e que não
+-- foram renovados nas últimas 24 h (a Meta só renova tokens com pelo menos 24 h). A saúde da
+-- verificação não entra no filtro: um canal com webhook quebrado (status error) ou ainda em
+-- configuração continua renovando o token, senão uma falha de webhook condena o token a expirar
+-- sem chance de recuperação. O guard de 24 h já impede tentar o token recém-salvo.
 create function public.meta_token_refresh_candidates() returns jsonb
 language sql stable security definer set search_path='' as $$
   select coalesce(jsonb_agg(jsonb_build_object('channelId',ch.id,'generation',m.credential_generation,
@@ -17,7 +20,7 @@ language sql stable security definer set search_path='' as $$
   from public.channels ch
   join public.meta_connections m on m.id=ch.meta_connection_id
   join vault.decrypted_secrets t on t.id=ch.access_token_secret_id
-  where ch.type='instagram' and ch.status='active' and m.disconnected_at is null
+  where ch.type='instagram' and m.disconnected_at is null
     and (ch.access_token_expires_at is null or ch.access_token_expires_at < now()+interval '15 days')
     and (ch.access_token_refreshed_at is null or ch.access_token_refreshed_at < now()-interval '24 hours');
 $$;

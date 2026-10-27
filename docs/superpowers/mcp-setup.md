@@ -112,7 +112,7 @@ select jobname, schedule, active from cron.job where jobname = 'flowai-meta-toke
 
 O job chama `dispatch_meta_token_refresh`, que faz `net.http_post` para `https://<projeto>.supabase.co/functions/v1/meta-token-refresh` com o JWT de serviço e o header `X-FlowAI-Worker`.
 
-A função renova apenas canais Instagram ativos com token expirando em menos de 15 dias (ou expiração desconhecida) e token com mais de 24 h — a Meta recusa renovar um token novo. O token novo é gravado no **mesmo segredo do Vault**; `credential_generation` não muda, então reservas e envios em andamento continuam válidos. Falhas viram `last_error = token_refresh_failed` (ou `invalid_token`) e aparecem como código no cartão do canal em **Configurações → Saúde**. A data de expiração ainda não é exibida na tela; consulte no SQL editor:
+A função renova os canais Instagram com token expirando em menos de 15 dias (ou expiração desconhecida) e token com mais de 24 h — a Meta recusa renovar um token novo. A saúde da verificação não entra no filtro: um canal com webhook quebrado (status `error`) ou ainda em configuração continua renovando, senão uma falha de webhook deixaria o token expirar sem chance de recuperação. O token novo é gravado no **mesmo segredo do Vault**; `credential_generation` não muda, então reservas e envios em andamento continuam válidos. Falhas viram `last_error = token_refresh_failed` (ou `invalid_token`) e aparecem como código no cartão do canal em **Configurações → Saúde**. A data de expiração ainda não é exibida na tela; consulte no SQL editor:
 
 ```sql
 select name, access_token_expires_at, access_token_refreshed_at

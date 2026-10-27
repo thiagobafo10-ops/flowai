@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(32);
 select tests.create_user('owner59@t.test','Owner') as ua \gset
 select tests.create_user('other59@t.test','Other') as ub \gset
 select tests.create_org(:'ua','Org59A') as oa \gset
@@ -35,12 +35,18 @@ select is((select access_token_refreshed_at from public.channels where id=:'chan
 select is(jsonb_array_length(public.meta_token_refresh_candidates()), 0, 'canal salvo agora não é candidato');
 update public.channels set access_token_refreshed_at=now()-interval '2 days' where id in (:'chan', :'chanb');
 
-select is(public.meta_token_refresh_candidates(),
-  jsonb_build_array(jsonb_build_object('channelId',:'chan'::uuid,'generation',1,'accessToken','access-secret','apiVersion','v26.0')),
-  'só o canal ativo com expiração desconhecida é candidato');
+select is(jsonb_array_length(public.meta_token_refresh_candidates()), 2, 'canal ativo e canal em configuração com token antigo são candidatos');
+select is(public.meta_token_refresh_candidates() @> jsonb_build_array(jsonb_build_object('channelId',:'chan'::uuid,'generation',1,'accessToken','access-secret','apiVersion','v26.0')), true, 'canal ativo vem com o token e a geração da conexão');
+-- O canal em configuração sai do caminho para o resto do teste.
+update public.channels set access_token_refreshed_at=now() where id=:'chanb';
 update public.meta_connections set disconnected_at=now() where id=:'conn';
 select is(jsonb_array_length(public.meta_token_refresh_candidates()), 0, 'conexão desconectada não é candidata');
 update public.meta_connections set disconnected_at=null where id=:'conn';
+
+-- Webhook quebrado (canal em erro) não impede renovar o token.
+update public.channels set status='error' where id=:'chan';
+select is(public.meta_token_refresh_candidates()->0->>'channelId', :'chan', 'canal em erro continua candidato à renovação');
+update public.channels set status='active' where id=:'chan';
 
 -- Renovação bem-sucedida: mesmo segredo no Vault, mesma geração.
 select access_token_secret_id as secret_id from public.channels where id=:'chan' \gset
