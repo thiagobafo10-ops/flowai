@@ -166,8 +166,16 @@ async function existingNodeIds(
       ),
     };
   }
+  // Automação salva pelo Claude sempre tem grafo; lista vazia é falha (e re-mintaria todos os ids).
+  if (!data || data.length === 0) {
+    console.error("mcp automations: nodes lookup returned no rows");
+    return {
+      ok: false,
+      error: toolError("Não foi possível carregar o grafo atual da automação. Tente novamente em instantes."),
+    };
+  }
   const ids = new Map<string, string[]>();
-  const rows = [...(data ?? [])].sort((a, b) => nodeY(a.position) - nodeY(b.position) || a.id.localeCompare(b.id));
+  const rows = [...data].sort((a, b) => nodeY(a.position) - nodeY(b.position) || a.id.localeCompare(b.id));
   for (const row of rows) {
     const list = ids.get(row.type) ?? [];
     list.push(row.id);
@@ -378,10 +386,21 @@ function valueLabel(field: string, value: unknown): string {
 function changesBetween(before: AutomationSpec, after: AutomationSpec, patch: Record<string, unknown>): Change[] {
   const from = before as unknown as Record<string, unknown>;
   const to = after as unknown as Record<string, unknown>;
-  return Object.entries(patch)
-    .filter(([, value]) => value !== undefined)
-    .map(([field]) => ({ campo: FIELD_NAMES[field] ?? field, antes: valueLabel(field, from[field]), depois: valueLabel(field, to[field]) }))
-    .filter((change) => change.antes !== change.depois);
+  const changes: Change[] = [];
+  for (const [field, patchValue] of Object.entries(patch)) {
+    if (patchValue === undefined) continue;
+    // Compara o valor inteiro: mudar só a URL de um botão também é alteração.
+    if (JSON.stringify(from[field] ?? null) === JSON.stringify(to[field] ?? null)) continue;
+    const antes = valueLabel(field, from[field]);
+    const depois = valueLabel(field, to[field]);
+    const compact = antes === depois;
+    changes.push({
+      campo: FIELD_NAMES[field] ?? field,
+      antes: compact ? `${antes} (conteúdo alterado)` : antes,
+      depois: compact ? `${depois} (conteúdo alterado)` : depois,
+    });
+  }
+  return changes;
 }
 
 const changeNote = (changes: Change[]) =>

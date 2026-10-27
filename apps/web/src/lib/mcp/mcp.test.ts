@@ -69,6 +69,9 @@ const TOKEN = jwt({ sub: "user-1", role: "authenticated", client_id: "9a8b7c6d-5
 const AUTOMATION_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_ID = "22222222-2222-4222-8222-222222222222";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TRIGGER_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const MESSAGE_NODE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const END_NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 const SPEC: Row = {
   nome: "Ebook",
@@ -97,6 +100,10 @@ function automationRow(overrides: Row = {}): Row {
 
 function nodeRow(id: string, type: string, y: number): Row {
   return { id, organization_id: "org-1", automation_id: AUTOMATION_ID, type, position: { x: 0, y } };
+}
+
+function seedNodes(): Row[] {
+  return [nodeRow(TRIGGER_NODE, "trigger", 0), nodeRow(MESSAGE_NODE, "message", 160), nodeRow(END_NODE, "end", 320)];
 }
 const handlers: Record<string, (request: Request) => Promise<Response>> = { POST, GET, DELETE };
 
@@ -442,6 +449,7 @@ describe("/mcp", () => {
 
   it("edit_partial_merges", async () => {
     state.automations = [automationRow()];
+    state.nodes = seedNodes();
     state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
     const mcp = await connect();
     const result = await mcp.callTool({
@@ -467,9 +475,6 @@ describe("/mcp", () => {
   });
 
   it("edit_reuses_existing_node_ids", async () => {
-    const TRIGGER_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    const MESSAGE_NODE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-    const END_NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     state.automations = [automationRow()];
     state.nodes = [nodeRow(END_NODE, "end", 320), nodeRow(TRIGGER_NODE, "trigger", 0), nodeRow(MESSAGE_NODE, "message", 160)];
     state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
@@ -488,6 +493,38 @@ describe("/mcp", () => {
     ]);
   });
 
+  it("edit_without_stored_graph_changes_nothing", async () => {
+    state.automations = [automationRow()];
+    state.nodes = [];
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("Não foi possível carregar o grafo");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
+  it("edit_reports_nested_changes", async () => {
+    state.automations = [automationRow()];
+    state.nodes = seedNodes();
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: {
+        id: AUTOMATION_ID,
+        alteracoes: { dm: { texto: "Aqui está o ebook.", botoes: [{ titulo: "Baixar", url: "https://exemplo.com.br/novo.pdf" }] } },
+      },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toContain("conteúdo alterado");
+    expect((result.structuredContent as { alteracoes: Row[] }).alteracoes).toEqual([
+      { campo: "dm", antes: expect.stringContaining("conteúdo alterado"), depois: expect.stringContaining("conteúdo alterado") },
+    ]);
+  });
+
   it("edit_invalid_patch_changes_nothing", async () => {
     state.automations = [automationRow()];
     const mcp = await connect();
@@ -502,6 +539,7 @@ describe("/mcp", () => {
 
   it("edit_panel_modified_requires_confirmation", async () => {
     state.automations = [automationRow({ mcp_spec_stale: true })];
+    state.nodes = seedNodes();
     state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
     const mcp = await connect();
     const blocked = await mcp.callTool({
