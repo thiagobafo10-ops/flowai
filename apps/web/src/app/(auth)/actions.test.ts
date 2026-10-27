@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ rpc: [] as unknown[][], allowed: true }));
+const state = vi.hoisted(() => ({ rpc: [] as unknown[][], allowed: true, redirects: [] as string[] }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ delete: () => {} }) }));
-vi.mock("next/navigation", () => ({ redirect: () => { throw new Error("NEXT_REDIRECT"); } }));
+vi.mock("next/navigation", () => ({ redirect: (url: string) => { state.redirects.push(url); throw new Error("NEXT_REDIRECT"); } }));
 vi.mock("@/lib/request-ip", () => ({ getRequestIp: async () => "203.0.113.7" }));
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
@@ -31,4 +31,16 @@ test("login usa o limite público com namespace login por IP e e-mail", async ()
 test("limite excedido bloqueia o cadastro", async () => {
   state.allowed = false;
   expect(await signUp({ fullName: "Ana Souza", email: "ana@example.test", password: "senha-segura-123" })).toEqual({ ok: false, error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." });
+});
+
+test("login volta ao consentimento OAuth quando há retorno seguro", async () => {
+  state.redirects = [];
+  await expect(signIn({ email: "ana@example.test", password: "senha-segura-123" }, "/oauth/consent?authorization_id=a1")).rejects.toThrow("NEXT_REDIRECT");
+  expect(state.redirects).toEqual(["/oauth/consent?authorization_id=a1"]);
+});
+
+test("login ignora retorno para outro domínio", async () => {
+  state.redirects = [];
+  await expect(signIn({ email: "ana@example.test", password: "senha-segura-123" }, "//evil.example")).rejects.toThrow("NEXT_REDIRECT");
+  expect(state.redirects).toEqual(["/dashboard"]);
 });

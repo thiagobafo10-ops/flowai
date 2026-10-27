@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string } = {}) {
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -36,7 +36,7 @@ export function LoginForm() {
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
     startTransition(async () => {
-      const result = await signIn(values);
+      const result = await signIn(values, next);
       // Em caso de sucesso a action redireciona e não retorna.
       if (result && !result.ok) {
         // Erros de campo: só inline. Erros gerais: inline + toast.
