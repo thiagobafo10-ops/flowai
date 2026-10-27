@@ -16,6 +16,7 @@ test.each([
   ["invalid_account", "O token pertence a outra conta do Instagram."],
   ["subscription_missing", "As notificações da conta não estão assinadas. Teste a conexão novamente."],
   ["provider_unavailable", "O Instagram não respondeu. Teste a conexão novamente em alguns minutos."],
+  ["token_refresh_failed", "Não foi possível renovar o token do Instagram automaticamente. Gere um novo token no painel da Meta e salve a conexão."],
 ])("último erro %s aparece em português", (code, text) => {
   expect(instagramConnectionErrorMessage(code)).toBe(text);
 });

@@ -14,7 +14,7 @@ Confira os requisitos de acesso e revisão no painel Meta. A documentação de w
 2. Informe nome, IDs, versão e credenciais. Salve. Os valores de App Secret e Access Token são apagados do formulário e não podem ser consultados na interface.
 3. Use **Testar conexão Instagram**. O FlowAI verifica se o token representa a conta informada e solicita as subscrições da conta.
 4. Configure no app Meta a URL de webhook mostrada pelo FlowAI. Use **Mostrar verify token** para obter o valor de confirmação; depois oculte-o.
-5. Assine `messages`, `comments` e `messaging_seen`. A URL deve ser pública e HTTPS para receber eventos da Meta; localhost só atende os testes locais.
+5. Assine `messages`, `comments`, `messaging_seen` e `messaging_postbacks`. A URL deve ser pública e HTTPS para receber eventos da Meta; localhost só atende os testes locais.
 6. Após verificar token e callback, o canal fica ativo. A confirmação GET sozinha não ativa o canal.
 
 Para trocar credenciais, use **Atualizar credenciais**, mantendo os IDs. A alteração invalida as verificações anteriores. Para outra conta, cadastre uma conexão com outro app. **Desconectar Instagram** bloqueia novos eventos/envios e preserva o histórico. Depois de desconectar, **Remover conexão** apaga as credenciais do Vault; sem histórico, a conexão e o canal somem, com histórico ficam desconectados até novas credenciais.

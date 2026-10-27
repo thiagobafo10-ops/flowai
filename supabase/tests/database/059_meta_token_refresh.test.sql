@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(30);
 select tests.create_user('owner59@t.test','Owner') as ua \gset
 select tests.create_user('other59@t.test','Other') as ub \gset
 select tests.create_org(:'ua','Org59A') as oa \gset
@@ -9,6 +9,7 @@ select tests.create_org(:'ub','Org59B') as ob \gset
 select has_column('public','channels','access_token_expires_at','canal guarda a expiração do token');
 select has_column('public','channels','access_token_refreshed_at','canal guarda a última renovação do token');
 select ok(not has_function_privilege('authenticated','public.meta_token_refresh_candidates()','execute'), 'candidatos não são do usuário');
+select ok(not has_function_privilege('anon','public.meta_token_refresh_candidates()','execute'), 'anon não lê candidatos');
 select ok(not has_function_privilege('anon','public.record_meta_token_refresh(uuid,integer,text,integer,text)','execute'), 'anon não grava renovação');
 select ok(has_function_privilege('service_role','public.record_meta_token_refresh(uuid,integer,text,integer,text)','execute'), 'serviço grava renovação');
 select ok(not has_function_privilege('authenticated','public.dispatch_meta_token_refresh()','execute'), 'disparo do cron não é do usuário');
@@ -29,9 +30,17 @@ select throws_ok('select public.meta_token_refresh_candidates()', '42501', null,
 select throws_ok(format('select public.record_meta_token_refresh(%L,1,%L,100,null)', :'chan', 'x'), '42501', null, 'authenticated → 42501 na gravação');
 select tests.clear_authentication();
 
+-- Token salvo agora (< 24 h) ainda não pode ser renovado pela Meta.
+select is((select access_token_refreshed_at from public.channels where id=:'chan'), now(), 'salvar marca o token como recém-emitido');
+select is(jsonb_array_length(public.meta_token_refresh_candidates()), 0, 'canal salvo agora não é candidato');
+update public.channels set access_token_refreshed_at=now()-interval '2 days' where id in (:'chan', :'chanb');
+
 select is(public.meta_token_refresh_candidates(),
   jsonb_build_array(jsonb_build_object('channelId',:'chan'::uuid,'generation',1,'accessToken','access-secret','apiVersion','v26.0')),
   'só o canal ativo com expiração desconhecida é candidato');
+update public.meta_connections set disconnected_at=now() where id=:'conn';
+select is(jsonb_array_length(public.meta_token_refresh_candidates()), 0, 'conexão desconectada não é candidata');
+update public.meta_connections set disconnected_at=null where id=:'conn';
 
 -- Renovação bem-sucedida: mesmo segredo no Vault, mesma geração.
 select access_token_secret_id as secret_id from public.channels where id=:'chan' \gset
@@ -67,5 +76,11 @@ select tests.clear_authentication();
 -- Nova renovação limpa o erro.
 select public.record_meta_token_refresh(:'chan', 1, 'renewed-again', 5184000, null);
 select is((select last_error from public.meta_connections where id=:'conn'), null, 'sucesso limpa o erro de renovação');
+
+-- Trocar o token pelo painel reinicia o relógio da renovação.
+update public.channels set access_token_refreshed_at=now()-interval '30 days', access_token_expires_at=now()+interval '1 day' where id=:'chan';
+select public.save_instagram_connection(:'ua', :'oa', format('{"connectionId":"%s","name":"Insta 59","appId":"5901","appSecret":"app-secret","accessToken":"replaced-secret","accountId":"78959","apiVersion":"v26.0"}', :'conn')::jsonb);
+select is((select row(access_token_refreshed_at, access_token_expires_at)::text from public.channels where id=:'chan'),
+  row(now(), null::timestamptz)::text, 'token trocado: renovado agora, expiração desconhecida');
 select * from finish();
 rollback;

@@ -75,6 +75,86 @@ begin
       'apikey', service_key, 'X-FlowAI-Worker', worker_secret), timeout_milliseconds := 150000);
 end $$;
 
+-- Igual a 20261012000011, mais: salvar/trocar o token marca access_token_refreshed_at=now() e zera a
+-- expiração, para a renovação automática não tentar um token com menos de 24 h.
+create or replace function public.save_instagram_connection(p_actor_id uuid,p_org_id uuid,p_input jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_connection public.meta_connections;
+  v_channel public.channels;
+  v_app_secret uuid;
+  v_verify_secret uuid;
+  v_access_secret uuid;
+  v_verify_token text;
+begin
+  if not exists(select 1 from public.memberships where user_id=p_actor_id and organization_id=p_org_id and role in ('admin','owner')) then
+    raise exception 'forbidden' using errcode='42501';
+  end if;
+  if p_input->>'appId' is null or p_input->>'appId' !~ '^[0-9]{1,100}$'
+     or p_input->>'accountId' is null or p_input->>'accountId' !~ '^[0-9]{1,100}$'
+     or p_input->>'apiVersion' is null or p_input->>'apiVersion' !~ '^v[0-9]+\.0$'
+     or coalesce(length(btrim(p_input->>'appSecret')),0) not between 1 and 8192
+     or coalesce(length(btrim(p_input->>'accessToken')),0) not between 1 and 8192 then
+    raise exception 'invalid connection input' using errcode='22023';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('meta-app:'||(p_input->>'appId'),0));
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('meta-account:'||(p_input->>'accountId'),0));
+  if private.instagram_claimed_elsewhere(p_org_id, p_input->>'appId', p_input->>'accountId') then
+    raise exception 'instagram account already connected' using errcode='23505';
+  end if;
+  if nullif(p_input->>'connectionId','') is not null then
+    select * into v_connection from public.meta_connections
+      where id=(p_input->>'connectionId')::uuid and organization_id=p_org_id for update;
+    if not found or v_connection.app_id<>p_input->>'appId' then
+      raise exception 'connection not owned or immutable app changed' using errcode='42501';
+    end if;
+    select * into v_channel from public.channels where meta_connection_id=v_connection.id and external_account_id=p_input->>'accountId' for update;
+    if not found then raise exception 'account binding is immutable' using errcode='22023'; end if;
+    -- Uma conexão removida com histórico não tem mais segredos: recria.
+    if v_connection.app_secret_id is null then
+      select vault.create_secret(p_input->>'appSecret','flowai-meta-'||v_connection.id||'-app') into v_app_secret;
+    else
+      perform vault.update_secret(v_connection.app_secret_id,p_input->>'appSecret');
+      v_app_secret:=v_connection.app_secret_id;
+    end if;
+    if v_connection.verify_token_secret_id is null then
+      select vault.create_secret(encode(extensions.gen_random_bytes(32),'hex'),'flowai-meta-'||v_connection.id||'-verify') into v_verify_secret;
+    else
+      v_verify_secret:=v_connection.verify_token_secret_id;
+    end if;
+    if v_channel.access_token_secret_id is null then
+      select vault.create_secret(p_input->>'accessToken','flowai-meta-'||v_channel.id||'-access') into v_access_secret;
+    else
+      perform vault.update_secret(v_channel.access_token_secret_id,p_input->>'accessToken');
+      v_access_secret:=v_channel.access_token_secret_id;
+    end if;
+    update public.meta_connections set api_version=p_input->>'apiVersion', credential_generation=credential_generation+1,
+      app_secret_id=v_app_secret, verify_token_secret_id=v_verify_secret,
+      token_verified_at=null,webhook_verified_at=null,disconnected_at=null,last_error=null where id=v_connection.id;
+    update public.channels set name=coalesce(nullif(btrim(p_input->>'name'),''),'Instagram'),status='needs_setup',last_error=null,
+      access_token_secret_id=v_access_secret,access_token_refreshed_at=now(),access_token_expires_at=null where id=v_channel.id;
+  else
+    -- Duplicatas na mesma organização: atualize a conexão existente.
+    if exists(select 1 from public.meta_connections where app_id=p_input->>'appId' and organization_id=p_org_id)
+       or exists(select 1 from public.channels where type='instagram' and organization_id=p_org_id and external_account_id=p_input->>'accountId') then
+      raise exception 'app already connected in organization' using errcode='23505', hint='same_organization';
+    end if;
+    v_connection.id:=gen_random_uuid();
+    v_channel.id:=gen_random_uuid();
+    v_verify_token:=encode(extensions.gen_random_bytes(32),'hex');
+    select vault.create_secret(p_input->>'appSecret','flowai-meta-'||v_connection.id||'-app') into v_app_secret;
+    select vault.create_secret(v_verify_token,'flowai-meta-'||v_connection.id||'-verify') into v_verify_secret;
+    select vault.create_secret(p_input->>'accessToken','flowai-meta-'||v_channel.id||'-access') into v_access_secret;
+    insert into public.meta_connections(id,organization_id,app_id,api_version,app_secret_id,verify_token_secret_id)
+      values(v_connection.id,p_org_id,p_input->>'appId',p_input->>'apiVersion',v_app_secret,v_verify_secret);
+    insert into public.channels(id,organization_id,type,name,external_account_id,access_token_secret_id,meta_connection_id,access_token_refreshed_at)
+      values(v_channel.id,p_org_id,'instagram',coalesce(nullif(btrim(p_input->>'name'),''),'Instagram'),p_input->>'accountId',v_access_secret,v_connection.id,now());
+  end if;
+  insert into public.audit_logs(organization_id,actor_id,action,entity_type,entity_id)
+    values(p_org_id,p_actor_id,'instagram_connection_saved','meta_connection',v_connection.id);
+  return jsonb_build_object('connectionId',v_connection.id,'channelId',v_channel.id);
+end $$;
+
 -- ---------------------------------------------------------------- Saúde/Ops
 -- Igual a 20261022000001, mais: cada canal informa tokenExpiresAt e tokenRefreshError.
 create or replace function public.ops_health(p_org uuid) returns jsonb
