@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   memberships: [] as Row[],
   channels: [] as Row[],
   automations: [] as Row[],
+  nodes: [] as Row[],
   queries: [] as Query[],
   rpcs: [] as [string, Record<string, unknown>][],
   rpcResults: {} as Record<string, { data: unknown; error: unknown }>,
@@ -35,7 +36,7 @@ vi.mock("@supabase/supabase-js", () => ({
         order: () => builder,
         limit: () => builder,
         then: (resolve: (value: unknown) => unknown) => {
-          const rows = table === "memberships" ? state.memberships : table === "channels" ? state.channels : state.automations;
+          const rows = table === "memberships" ? state.memberships : table === "channels" ? state.channels : table === "automation_nodes" ? state.nodes : state.automations;
           const filtered = rows.filter((row) =>
             query.filters.every(([op, k, v]) => op !== "eq" || k === "user_id" || row[k] === undefined || row[k] === v),
           );
@@ -93,6 +94,10 @@ function automationRow(overrides: Row = {}): Row {
     ...overrides,
   };
 }
+
+function nodeRow(id: string, type: string, y: number): Row {
+  return { id, organization_id: "org-1", automation_id: AUTOMATION_ID, type, position: { x: 0, y } };
+}
 const handlers: Record<string, (request: Request) => Promise<Response>> = { POST, GET, DELETE };
 
 let client: Client | null = null;
@@ -122,6 +127,7 @@ beforeEach(() => {
   state.memberships = [{ organization_id: "org-1", role: "owner", created_at: "2026-01-01" }];
   state.channels = [{ id: "ch-1", meta_connection_id: "conn-1", created_at: "2026-01-01" }];
   state.automations = [];
+  state.nodes = [];
   state.queries = [];
   state.rpcs = [];
   state.rpcResults = {};
@@ -378,6 +384,7 @@ describe("/mcp", () => {
     const graph = save?.[1].p_graph as { nodes: { id: string }[]; edges: { id: string; source: string; target: string }[] };
     const nodeIds = graph.nodes.map((n) => n.id);
     for (const id of nodeIds) expect(id).toMatch(UUID);
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
     for (const edge of graph.edges) {
       expect(edge.id).toMatch(UUID);
       expect(nodeIds).toContain(edge.source);
@@ -444,6 +451,8 @@ describe("/mcp", () => {
     expect(result.isError).toBeFalsy();
     expect(text(result)).toContain("guia");
     expect(text(result)).toContain("atualizada");
+    expect(text(result)).toContain("Antes → depois");
+    expect(text(result)).toContain("ebook → guia");
     const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
     expect(save?.[1]).toMatchObject({ p_id: AUTOMATION_ID, p_name: "Ebook", p_confirm_overwrite: false });
     expect(save?.[1].p_spec).toMatchObject({
@@ -451,6 +460,32 @@ describe("/mcp", () => {
       respostaPublica: SPEC.respostaPublica,
       dm: SPEC.dm,
     });
+    expect(save?.[1].p_trigger_config).toMatchObject({ keywords: ["guia"], mediaId: null, channelId: "ch-1" });
+    expect((result.structuredContent as { alteracoes: Row[] }).alteracoes).toEqual([
+      { campo: "palavras", antes: "ebook", depois: "guia" },
+    ]);
+  });
+
+  it("edit_reuses_existing_node_ids", async () => {
+    const TRIGGER_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const MESSAGE_NODE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const END_NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    state.automations = [automationRow()];
+    state.nodes = [nodeRow(END_NODE, "end", 320), nodeRow(TRIGGER_NODE, "trigger", 0), nodeRow(MESSAGE_NODE, "message", 160)];
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBeFalsy();
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    const graph = save?.[1].p_graph as { nodes: { id: string }[]; edges: { source: string; target: string }[] };
+    expect(graph.nodes.map((node) => node.id)).toEqual([TRIGGER_NODE, MESSAGE_NODE, END_NODE]);
+    expect(graph.edges.map((edge) => [edge.source, edge.target])).toEqual([
+      [TRIGGER_NODE, MESSAGE_NODE],
+      [MESSAGE_NODE, END_NODE],
+    ]);
   });
 
   it("edit_invalid_patch_changes_nothing", async () => {
@@ -543,6 +578,19 @@ describe("/mcp", () => {
     expect(created.isError).toBeFalsy();
     expect(text(created)).toContain("Promo");
 
+    // Mesmo gatilho com outras palavras não é conflito.
+    state.automations = [
+      automationRow({
+        id: OTHER_ID,
+        name: "Promo",
+        trigger_config: { channelId: "ch-1", mediaId: null, keywords: ["promo"], mode: "contains", oncePerUser: true },
+      }),
+    ];
+    state.rpcs = [];
+    const different = await mcp.callTool({ name: "criar_automacao", arguments: SPEC });
+    expect(different.isError).toBeFalsy();
+    expect(text(different)).not.toContain("Promo");
+
     state.automations = [
       automationRow({ id: AUTOMATION_ID, name: "Novo", status: "paused" }),
       automationRow({ id: OTHER_ID, name: "Promo" }),
@@ -551,6 +599,8 @@ describe("/mcp", () => {
     const activated = await mcp.callTool({ name: "ativar_automacao", arguments: { id: AUTOMATION_ID } });
     expect(activated.isError).toBeFalsy();
     expect(text(activated)).toContain("Promo");
+    const note = text(activated).split("Atenção:")[1] ?? "";
+    expect(note).not.toContain("Novo");
   });
 
   it("rpc_failures_are_short_tool_errors", async () => {

@@ -25,14 +25,14 @@ export function triggerLabel(type: string): string {
   return Object.hasOwn(TRIGGER_LABEL, type) ? TRIGGER_LABEL[type] : `outro (${type})`;
 }
 
-function triggerWords(config: unknown): string[] {
+export function triggerWords(config: unknown): string[] {
   if (!config || typeof config !== "object") return [];
   const { keywords, anyKeyword } = config as { keywords?: unknown; anyKeyword?: unknown };
   if (anyKeyword === true || !Array.isArray(keywords)) return [];
   return keywords.filter((k): k is string => typeof k === "string");
 }
 
-function triggerPost(type: string, config: unknown): string | null {
+export function triggerPost(type: string, config: unknown): string | null {
   if (type !== "instagram_comment") return null;
   const mediaId = config && typeof config === "object" ? (config as { mediaId?: unknown }).mediaId : null;
   return typeof mediaId === "string" && mediaId ? mediaId : "qualquer";

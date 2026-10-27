@@ -13,7 +13,7 @@ import {
   type SpecPatch,
 } from "@flowai/core";
 import type { McpContext } from "../context";
-import { statusLabel } from "./automations-read";
+import { statusLabel, triggerLabel, triggerPost, triggerWords } from "./automations-read";
 import { NO_CHANNEL, fetchPosts } from "./posts";
 import { dbError, registerTool, toolError, toolOk, type ToolResult } from "./result";
 
@@ -118,10 +118,18 @@ function parseSpec(input: unknown): { ok: true; spec: AutomationSpec } | { ok: f
 
 /**
  * O grafo do formato simples usa ids curtos e determinísticos ("t", "m1"); o banco guarda
- * nodes/edges com id uuid, então cada envio ganha ids novos.
+ * nodes/edges com id uuid. Na edição reaproveitamos os ids atuais por tipo e ordem (posição),
+ * para não apagar histórico de execuções nem quebrar contatos parados num nó; ids novos só
+ * aparecem para nós que ainda não existem.
  */
-function withUuidIds(graph: AutomationGraph): AutomationGraph {
-  const ids = new Map(graph.nodes.map((node) => [node.id, randomUUID()]));
+function withUuidIds(graph: AutomationGraph, reuse?: Map<string, string[]>): AutomationGraph {
+  const ids = new Map<string, string>();
+  const used = new Set<string>();
+  for (const node of graph.nodes) {
+    const id = reuse?.get(node.type)?.find((candidate) => !used.has(candidate)) ?? randomUUID();
+    used.add(id);
+    ids.set(node.id, id);
+  }
   return {
     nodes: graph.nodes.map((node) => ({ ...node, id: ids.get(node.id)! })),
     edges: graph.edges.map((edge) => ({
@@ -131,6 +139,41 @@ function withUuidIds(graph: AutomationGraph): AutomationGraph {
       target: ids.get(edge.target)!,
     })),
   };
+}
+
+function nodeY(position: unknown): number {
+  if (!position || typeof position !== "object") return 0;
+  const y = (position as { y?: unknown }).y;
+  return typeof y === "number" && Number.isFinite(y) ? y : 0;
+}
+
+async function existingNodeIds(
+  ctx: McpContext,
+  automationId: string,
+): Promise<{ ok: true; ids: Map<string, string[]> } | { ok: false; error: ToolResult }> {
+  const { data, error } = await ctx.supabase
+    .from("automation_nodes")
+    .select("id, type, position")
+    .eq("organization_id", ctx.orgId)
+    .eq("automation_id", automationId);
+  if (error) {
+    return {
+      ok: false,
+      error: dbError(
+        "automations: nodes lookup failed",
+        error,
+        "Não foi possível carregar o grafo atual da automação. Tente novamente em instantes.",
+      ),
+    };
+  }
+  const ids = new Map<string, string[]>();
+  const rows = [...(data ?? [])].sort((a, b) => nodeY(a.position) - nodeY(b.position) || a.id.localeCompare(b.id));
+  for (const row of rows) {
+    const list = ids.get(row.type) ?? [];
+    list.push(row.id);
+    ids.set(row.type, list);
+  }
+  return { ok: true, ids };
 }
 
 async function validatePost(ctx: McpContext, post: string): Promise<ToolResult | null> {
@@ -156,9 +199,16 @@ async function saveSpec(
   spec: AutomationSpec,
   id: string | null,
   confirmOverwrite: boolean,
+  channel: string,
 ): Promise<{ ok: true; id: string } | { ok: false; error: ToolResult }> {
-  const trigger = specToTrigger(spec, { channelId: channelId(ctx) });
-  const graph = withUuidIds(specToGraph(spec, { channelId: channelId(ctx) }));
+  let reuse: Map<string, string[]> | undefined;
+  if (id) {
+    const existing = await existingNodeIds(ctx, id);
+    if (!existing.ok) return existing;
+    reuse = existing.ids;
+  }
+  const trigger = specToTrigger(spec, { channelId: channel });
+  const graph = withUuidIds(specToGraph(spec, { channelId: channel }), reuse);
   const { data, error } = await ctx.supabase.rpc("save_mcp_automation", {
     p_org: ctx.orgId,
     // A RPC aceita null (criação); os tipos gerados não marcam o argumento como opcional.
@@ -211,14 +261,19 @@ function wordsSignature(config: Record<string, unknown> | null): string {
   return anyKeyword ? "*" : [...new Set(list.filter(Boolean))].sort().join("|");
 }
 
-/** Mesmo gatilho + palavras + post, no vocabulário do motor. */
+function configChannel(config: Record<string, unknown> | null): string {
+  const id = config?.channelId;
+  return typeof id === "string" && id ? id : "*";
+}
+
+/** Mesmo canal + gatilho + palavras + post, no vocabulário do motor. */
 function triggerSignature(trigger: Trigger): string | null {
   if (trigger.type === "instagram_comment") {
     const media = typeof trigger.config.mediaId === "string" && trigger.config.mediaId ? trigger.config.mediaId : "*";
-    return `comment:${wordsSignature(trigger.config)}:${media}`;
+    return `comment:${configChannel(trigger.config)}:${wordsSignature(trigger.config)}:${media}`;
   }
   if (trigger.type === "keyword_detected") return `dm:${wordsSignature(trigger.config)}`;
-  if (trigger.type === "instagram_story") return "story";
+  if (trigger.type === "instagram_story") return `story:${configChannel(trigger.config)}`;
   return null;
 }
 
@@ -265,7 +320,7 @@ type AutomationItem = {
   alteradaNoPainel: boolean;
 };
 
-function specItem(id: string, spec: AutomationSpec, status: string, stale = false): AutomationItem {
+function specItem(id: string, spec: AutomationSpec, status: string): AutomationItem {
   return {
     id,
     nome: spec.nome,
@@ -274,12 +329,69 @@ function specItem(id: string, spec: AutomationSpec, status: string, stale = fals
     palavras: spec.palavras,
     post: spec.gatilho === "comentario" ? spec.post : null,
     criadaPeloClaude: true,
-    alteradaNoPainel: stale,
+    alteradaNoPainel: false,
   };
 }
 
-function rowItem(row: AutomationRow, status: string) {
-  return { id: row.id, nome: row.name, status: statusLabel(status) };
+function rowItem(row: AutomationRow, status: string): AutomationItem {
+  return {
+    id: row.id,
+    nome: row.name,
+    status: statusLabel(status),
+    gatilho: triggerLabel(row.trigger_type),
+    palavras: triggerWords(row.trigger_config),
+    post: triggerPost(row.trigger_type, row.trigger_config),
+    criadaPeloClaude: row.mcp_spec !== null,
+    alteradaNoPainel: row.mcp_spec_stale,
+  };
+}
+
+type Change = { campo: string; antes: string; depois: string };
+
+const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+function valueLabel(field: string, value: unknown): string {
+  if (value === null || value === undefined) return "(removido)";
+  switch (field) {
+    case "palavras":
+      return Array.isArray(value) && value.length ? value.join(", ") : "qualquer texto";
+    case "respostaPublica":
+      return Array.isArray(value) && value.length ? `${value.length} resposta(s) pública(s)` : "nenhuma";
+    case "dm": {
+      const dm = value as { texto?: unknown; botoes?: unknown };
+      const buttons = Array.isArray(dm.botoes) && dm.botoes.length ? ` + ${dm.botoes.length} botão(ões)` : "";
+      return `DM "${truncate(typeof dm.texto === "string" ? dm.texto : "", 60)}"${buttons}`;
+    }
+    case "followUp": {
+      const follow = value as { depois?: unknown; texto?: unknown };
+      return `depois de ${typeof follow.depois === "string" ? follow.depois : "?"}: "${truncate(typeof follow.texto === "string" ? follow.texto : "", 60)}"`;
+    }
+    case "umaVezPorContato":
+      return value ? "sim" : "não";
+    case "post":
+      return value === "qualquer" ? "qualquer post" : String(value);
+    default:
+      return String(value);
+  }
+}
+
+function changesBetween(before: AutomationSpec, after: AutomationSpec, patch: Record<string, unknown>): Change[] {
+  const from = before as unknown as Record<string, unknown>;
+  const to = after as unknown as Record<string, unknown>;
+  return Object.entries(patch)
+    .filter(([, value]) => value !== undefined)
+    .map(([field]) => ({ campo: FIELD_NAMES[field] ?? field, antes: valueLabel(field, from[field]), depois: valueLabel(field, to[field]) }))
+    .filter((change) => change.antes !== change.depois);
+}
+
+const changeNote = (changes: Change[]) =>
+  changes.length ? `\n\nAntes → depois:\n${changes.map((c) => `• ${c.campo}: ${c.antes} → ${c.depois}`).join("\n")}` : "";
+
+/** Canal gravado no gatilho (preserva o canal escolhido no painel quando existe). */
+function storedChannel(row: AutomationRow): string | null {
+  const config = row.trigger_config as Record<string, unknown> | null;
+  const id = config?.channelId;
+  return typeof id === "string" && id ? id : null;
 }
 
 // ---------------------------------------------------------------- ferramentas
@@ -309,18 +421,22 @@ export function registerAutomationWriteTools(server: McpServer, ctx: McpContext)
       if (postError) return postError;
 
       const overlaps = await activeOverlaps(ctx, specToTrigger(spec, { channelId: channelId(ctx) }), null);
-      const saved = await saveSpec(ctx, spec, null, false);
+      const saved = await saveSpec(ctx, spec, null, false, channelId(ctx));
       if (!saved.ok) return saved.error;
 
       let status = "draft";
       if (ativar) {
         const { error } = await ctx.supabase.rpc("activate_automation", { p_id: saved.id });
         if (error) {
-          if (error.code === "42501") {
-            return toolError(`Automação "${spec.nome}" foi criada como rascunho, mas você não tem permissão para ativá-la.`);
-          }
-          console.error("mcp automations: activate after create failed", error.code ?? "unknown");
-          return toolError(`Automação "${spec.nome}" foi criada como rascunho, mas não foi possível ativá-la agora. Ative no painel do FlowAI.`);
+          const reason =
+            error.code === "42501"
+              ? "você não tem permissão para ativá-la"
+              : "não foi possível ativá-la agora";
+          if (error.code !== "42501") console.error("mcp automations: activate after create failed", error.code ?? "unknown");
+          return toolOk(
+            `Automação "${spec.nome}" foi criada como rascunho, mas ${reason}. Ative pelo painel do FlowAI ou com ativar_automacao (id: ${saved.id}).`,
+            { automacao: specItem(saved.id, spec, "draft"), aviso: "ativação falhou" },
+          );
         }
         status = "active";
       }
@@ -337,12 +453,16 @@ export function registerAutomationWriteTools(server: McpServer, ctx: McpContext)
     "editar_automacao",
     {
       description:
-        "Edita uma automação criada pelo Claude, mudando só os campos enviados em alteracoes (os demais são mantidos). " +
-        "Use quando o usuário quiser trocar palavras, mensagem, botões, resposta pública ou follow-up. Automações criadas " +
-        "no painel não podem ser editadas; se o painel alterou a automação, peça confirmação e use confirmarSobrescrever: true.",
+        "Edita uma automação criada pelo Claude, mudando só os campos enviados em alteracoes (os outros campos do formato " +
+        "simples são mantidos). Atenção: dm e followUp são substituídos inteiros quando enviados — mande o objeto completo " +
+        "(texto e todos os botões). Use quando o usuário quiser trocar palavras, mensagem, botões, resposta pública ou " +
+        "follow-up. Automações criadas no painel não podem ser editadas; se o painel alterou a automação, peça confirmação " +
+        "e use confirmarSobrescrever: true.",
       inputSchema: {
         id: z.uuid("id deve ser o id de uma automação.").describe("Id da automação (veja em listar_automacoes)."),
-        alteracoes: z.object(patchInputShape).describe("Somente os campos que mudam, no formato simples."),
+        alteracoes: z
+          .object(patchInputShape)
+          .describe("Somente os campos que mudam, no formato simples. dm e followUp, quando enviados, são substituídos inteiros."),
         confirmarSobrescrever: z
           .boolean()
           .optional()
@@ -364,23 +484,27 @@ export function registerAutomationWriteTools(server: McpServer, ctx: McpContext)
       const merged = parseSpec(mergeSpec(base.data, alteracoes as SpecPatch));
       if (!merged.ok) return toolError(merged.error);
       const spec = merged.spec;
-      if (spec.gatilho !== "dm" && !ctx.channel) return toolError(NO_CHANNEL);
-      const postError = await validatePost(ctx, spec.post);
-      if (postError) return postError;
+      // Mantém o canal já gravado (o painel pode ter escolhido outro); só exige canal quando não há nenhum.
+      const channel = storedChannel(row) ?? channelId(ctx);
+      if (spec.gatilho !== "dm" && !channel) return toolError(NO_CHANNEL);
+      // Só consulta a conta quando o post mudou: posts antigos podem ter saído dos 50 mais recentes.
+      const postChanged = spec.post !== base.data.post;
+      if (postChanged) {
+        const postError = await validatePost(ctx, spec.post);
+        if (postError) return postError;
+      }
 
-      const trigger = specToTrigger(spec, { channelId: channelId(ctx) });
+      const trigger = specToTrigger(spec, { channelId: channel });
       const overlaps = await activeOverlaps(ctx, trigger, id);
-      const saved = await saveSpec(ctx, spec, id, Boolean(confirmarSobrescrever));
+      const saved = await saveSpec(ctx, spec, id, Boolean(confirmarSobrescrever), channel);
       if (!saved.ok) return saved.error;
 
       const status = row.status === "active" || row.status === "paused" ? row.status : "draft";
-      const changed = Object.entries(alteracoes)
-        .filter(([, value]) => value !== undefined)
-        .map(([key]) => FIELD_NAMES[key] ?? key)
-        .join(", ");
-      const headline = `Automação "${spec.nome}" atualizada${changed ? ` (${changed})` : ""}.`;
-      return toolOk(`${headline}\n\n${summarizeSpec(spec)}${overlapNote(overlaps)}`, {
-        automacao: specItem(id, spec, status, Boolean(confirmarSobrescrever)),
+      const changes = changesBetween(base.data, spec, alteracoes as Record<string, unknown>);
+      const headline = `Automação "${spec.nome}" atualizada (${statusLabel(status)}).`;
+      return toolOk(`${headline}${changeNote(changes)}\n\n${summarizeSpec(spec)}${overlapNote(overlaps)}`, {
+        automacao: specItem(id, spec, status),
+        alteracoes: changes,
       });
     },
   );
