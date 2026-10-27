@@ -14,6 +14,7 @@ import {
 export const SPEC_DM_MAX_BYTES = 1000;
 export const SPEC_FOLLOWUP_MIN_MINUTES = 1;
 export const SPEC_FOLLOWUP_MAX_MINUTES = 10080;
+const BUTTON_TEXT_MAX_CHARS = 640;
 export const DEFAULT_OPENING_BUTTON = "Quero!";
 
 const DURATION_REGEX = /^\s*(\d+)\s*(min|m|h|d)\s*$/;
@@ -110,19 +111,41 @@ export const automationSpecSchema = z
         });
       }
     }
+    // Limite do Instagram: mensagens com botões aceitam até 640 caracteres (validate.ts / instagram.ts).
+    const opening = spec.gatilho === "comentario" && !!spec.followUp;
+    if ((spec.dm.botoes.length > 0 || opening) && [...spec.dm.texto].length > BUTTON_TEXT_MAX_CHARS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dm", "texto"],
+        message: "Com botões, o texto deve ter no máximo 640 caracteres.",
+      });
+    }
+    if (spec.followUp && spec.followUp.botoes.length > 0 && [...spec.followUp.texto].length > BUTTON_TEXT_MAX_CHARS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["followUp", "texto"],
+        message: "Com botões, o texto deve ter no máximo 640 caracteres.",
+      });
+    }
   });
 
 export type AutomationSpec = z.infer<typeof automationSpecSchema>;
 export type AutomationSpecInput = z.input<typeof automationSpecSchema>;
 
-export type SpecPatch = Omit<Partial<AutomationSpec>, "followUp"> & { followUp?: AutomationSpec["followUp"] | null };
+export type SpecPatch = Omit<Partial<AutomationSpec>, "followUp" | "botaoDeAbertura"> & {
+  followUp?: AutomationSpec["followUp"] | null;
+  botaoDeAbertura?: string | null;
+};
 
-/** Patch raso: `dm` e `followUp` são substituídos inteiros; `followUp: null` remove. */
+/**
+ * Patch raso: `dm` e `followUp` são substituídos inteiros; `followUp: null` e `botaoDeAbertura: null` removem.
+ * O resultado NÃO é validado: quem chama deve usar `automationSpecSchema.parse(mergeSpec(...))` antes de `specToGraph`.
+ */
 export function mergeSpec(base: AutomationSpec, patch: SpecPatch): AutomationSpec {
   const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
-    if (key === "followUp" && value === null) delete merged.followUp;
+    if ((key === "followUp" || key === "botaoDeAbertura") && value === null) delete merged[key];
     else merged[key] = value;
   }
   return merged as AutomationSpec;
@@ -199,6 +222,9 @@ export function specToGraph(spec: AutomationSpec, _ctx: Ctx): AutomationGraph {
     edges.push({ id: `e${edges.length + 1}`, source, target, sourceHandle });
 
   const followUpMinutes = spec.followUp ? parseDuration(spec.followUp.depois) : null;
+  if (spec.followUp && followUpMinutes === null) {
+    throw new Error(`Espera do follow-up inválida ("${spec.followUp.depois}"): use entre 1 minuto e 7 dias, como 30min, 2h ou 1d.`);
+  }
   // Regra da Meta: após a Private Reply só cabe uma mensagem até a pessoa interagir → botão de abertura.
   const needsOpening = spec.gatilho === "comentario" && !!spec.followUp;
 

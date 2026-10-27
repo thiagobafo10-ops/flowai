@@ -61,6 +61,19 @@ describe("automationSpecSchema", () => {
     expect(bad({ followUp: { depois: "2 horas", texto: "oi", botoes: [] } })).toMatch(/1 minuto e 7 dias/);
   });
 
+  it("rejects_texts_over_640_chars_when_buttons_are_sent", () => {
+    const long = "a".repeat(700);
+    const btn = [{ titulo: "Abrir", url: "https://exemplo.com.br" }];
+    const msg = (r: ReturnType<typeof parse>) => (r.success ? "" : r.error.issues.map((i) => i.message).join(" | "));
+    expect(msg(parse({ dm: { texto: long, botoes: btn } }))).toMatch(/640/);
+    expect(msg(parse({ dm: { texto: long, botoes: [] }, followUp: { depois: "2h", texto: "oi", botoes: [] } }))).toMatch(/640/);
+    expect(msg(parse({ followUp: { depois: "2h", texto: long, botoes: btn } }))).toMatch(/640/);
+    // sem botão em nenhuma mensagem, 700 caracteres seguem válidos (limite de 1000 bytes)
+    expect(parse({ dm: { texto: long, botoes: [] } }).success).toBe(true);
+    expect(parse({ gatilho: "dm", palavras: [], dm: { texto: long, botoes: [] }, followUp: { depois: "2h", texto: long, botoes: [] } }).success).toBe(true);
+    expect(parse({ dm: { texto: "a".repeat(640), botoes: btn } }).success).toBe(true);
+  });
+
   it("counts dm.texto limit in UTF-8 bytes", () => {
     expect(parse({ dm: { texto: "ã".repeat(500), botoes: [] } }).success).toBe(true);
     expect(parse({ dm: { texto: "ã".repeat(501), botoes: [] } }).success).toBe(false);
@@ -189,6 +202,11 @@ describe("specToGraph", () => {
     }
   });
 
+  it("throws on an unparseable follow-up delay", () => {
+    const spec = { ...parsed(), followUp: { depois: "2 horas", texto: "Oi", botoes: [] } } as AutomationSpec;
+    expect(() => specToGraph(spec, ctx)).toThrow(/inválida/);
+  });
+
   it("positions nodes in a column", () => {
     const g = specToGraph(parsed({ followUp: { depois: "2h", texto: "Oi", botoes: [] } }), ctx);
     expect(g.nodes.map((n) => n.position)).toEqual([0, 160, 320, 480, 640, 800].map((y) => ({ x: 0, y })));
@@ -206,6 +224,11 @@ describe("mergeSpec and summarizeSpec", () => {
     const replaced = mergeSpec(withFollow, { dm: { texto: "Outra", botoes: [] } });
     expect(replaced.dm).toEqual({ texto: "Outra", botoes: [] });
     expect(replaced.followUp).toEqual(withFollow.followUp);
+
+    const withOpening = parsed({ botaoDeAbertura: "Me manda", followUp: { depois: "2h", texto: "Oi", botoes: [] } });
+    expect(mergeSpec(withOpening, { botaoDeAbertura: null }).botaoDeAbertura).toBeUndefined();
+    expect("botaoDeAbertura" in mergeSpec(withOpening, { botaoDeAbertura: null })).toBe(false);
+    expect(mergeSpec(withOpening, { nome: "x" }).botaoDeAbertura).toBe("Me manda");
 
     const summary = summarizeSpec(withFollow);
     expect(summary).toContain("Link do guia");
