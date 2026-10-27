@@ -131,6 +131,9 @@ declare a public.automations; v_id uuid;
 begin
   if not public.has_role(p_org, 'admin') then raise exception 'forbidden' using errcode = '42501'; end if;
   if jsonb_typeof(p_spec) is distinct from 'object' then raise exception 'invalid_spec' using errcode = '22023'; end if;
+  if p_trigger_type is null or p_trigger_type not in ('instagram_comment', 'keyword_detected', 'instagram_story') then
+    raise exception 'invalid_trigger' using errcode = '22023';
+  end if;
   if p_id is not null then
     select * into a from public.automations where id = p_id and organization_id = p_org for update;
     if not found then raise exception 'automation_not_found' using errcode = 'P0002'; end if;
@@ -145,6 +148,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- uma vez por contato
+create index if not exists automation_runs_automation_contact_idx on public.automation_runs (automation_id, contact_id);
+
 -- O contato já teve execução desta automação: qualquer estado conta, exceto falha antes do primeiro envio
 -- (execução 'failed' sem mensagem de saída não falhada).
 create function private.automation_contact_already_ran(p_auto uuid, p_contact uuid) returns boolean

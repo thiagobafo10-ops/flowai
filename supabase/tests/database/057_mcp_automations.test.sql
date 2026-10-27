@@ -51,6 +51,8 @@ select ok(not has_function_privilege('anon',
   'anon não executa save_mcp_automation');
 select ok(not has_function_privilege('authenticated','private.automation_contact_already_ran(uuid,uuid)','execute'),
   'authenticated não executa o helper privado');
+select has_index('public','automation_runs','automation_runs_automation_contact_idx',array['automation_id','contact_id'],
+  'índice (automation_id, contact_id) para uma vez por contato');
 
 -- =============================================================== criar / permissões
 select tests.authenticate_as(:'ua');
@@ -64,6 +66,10 @@ select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, '  '
   '{"keywords":["a"],"mode":"contains"}', pg_temp.g('x'))$$,'22023','invalid_name','mesmas validações de save_automation');
 select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, 'X', '[]', 'keyword_detected',
   '{"keywords":["a"],"mode":"contains"}', pg_temp.g('x'))$$,'22023','invalid_spec','spec precisa ser objeto');
+select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, 'X', '{}', 'message_received',
+  '{"firstMessageOnly":false}', pg_temp.g('x'))$$,'22023','invalid_trigger','MCP só cria comentário, DM ou story');
+select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, 'X', '{}', null,
+  '{}', pg_temp.g('x'))$$,'22023','invalid_trigger','tipo de gatilho nulo');
 
 select tests.authenticate_as(:'uad');
 select lives_ok($$select public.save_mcp_automation('$$||:'oa'||$$', '$$||:'dm'||$$', 'Preço por DM', '{"gatilho":"dm","palavras":["preco"]}',
@@ -72,12 +78,18 @@ select lives_ok($$select public.save_mcp_automation('$$||:'oa'||$$', '$$||:'dm'|
 select tests.authenticate_as(:'uag');
 select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, 'X', '{}', 'keyword_detected',
   '{"keywords":["a"],"mode":"contains"}', pg_temp.g('x'))$$,'42501',null,'agent não salva');
+select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', '$$||:'dm'||$$', 'X', '{}', 'keyword_detected',
+  '{"keywords":["a"],"mode":"contains"}', pg_temp.g('dm'))$$,'42501',null,'agent não edita automação existente');
 select tests.authenticate_as(:'uv');
 select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', null, 'X', '{}', 'keyword_detected',
   '{"keywords":["a"],"mode":"contains"}', pg_temp.g('x'))$$,'42501',null,'viewer não salva');
 select tests.authenticate_as(:'ub');
 select throws_ok($$select public.save_mcp_automation('$$||:'ob'||$$', '$$||:'dm'||$$', 'X', '{}', 'keyword_detected',
   '{"keywords":["a"],"mode":"contains"}', pg_temp.g('dm'))$$,'P0002',null,'automação de outra organização');
+select throws_ok($$select public.save_mcp_automation('$$||:'oa'||$$', '$$||:'dm'||$$', 'X', '{}', 'keyword_detected',
+  '{"keywords":["a"],"mode":"contains"}', pg_temp.g('dm'))$$,'42501',null,'p_org sem papel de admin com p_id válido');
+select tests.clear_authentication();
+select is((select name from public.automations where id=:'dm'),'Preço por DM','nada alterado por quem não é admin');
 
 -- =============================================================== automação do painel / stale
 select tests.authenticate_as(:'ua');
@@ -148,6 +160,17 @@ select pg_temp.ingest('r1','+5557000000021','repete');
 select pg_temp.finish(:'rep');
 select pg_temp.ingest('r2','+5557000000021','repete de novo');
 select is(pg_temp.runs(:'rep'),2,'sem oncePerUser dispara duas vezes para o mesmo contato');
+
+select tests.authenticate_as(:'ua');
+select public.pause_automation(:'story');
+select public.save_automation(:'oa', null, 'Story repete', 'instagram_story',
+  '{"channelId":"00000000-0000-0000-0000-000000005701"}', pg_temp.g('story2')) as story2 \gset
+select public.activate_automation(:'story2');
+select tests.clear_authentication();
+select pg_temp.ingest('t1','+5557000000031','Amei!','{"origin":"story_reply","storyId":"t1"}');
+select pg_temp.finish(:'story2');
+select pg_temp.ingest('t2','+5557000000031','Amei de novo!','{"origin":"story_mention"}');
+select is(pg_temp.runs(:'story2'),2,'story sem oncePerUser dispara duas vezes para o mesmo contato');
 
 select * from finish();
 rollback;

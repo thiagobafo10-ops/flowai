@@ -51,7 +51,7 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
 }) {
   const { register, control, watch, setValue, formState: { errors } } = useLiveForm<TriggerValues>(
     triggerConfigSchemas[type],
-    triggerToValues(config),
+    triggerToValues(config, type),
     (v) => triggerToConfig(type, v),
     onChange
   );
@@ -140,6 +140,16 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
     </Field>
   );
 
+  const oncePerUserField = (hint: string) => (
+    <div className="pt-1">
+      <label htmlFor="trigger-once-per-user" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+        <input id="trigger-once-per-user" type="checkbox" role="switch" className="size-4" {...register("oncePerUser")} />
+        <span>Responder apenas uma vez por pessoa</span>
+      </label>
+      <p className="text-xs text-muted-foreground mt-1 ml-6">{hint}</p>
+    </div>
+  );
+
   switch (type) {
     case "message_received":
       return (
@@ -149,7 +159,12 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
         </label>
       );
     case "keyword_detected":
-      return <div className="space-y-3">{keywordSection}</div>;
+      return (
+        <div className="space-y-3">
+          {oncePerUserField("Evita disparar de novo caso a mesma pessoa envie a palavra mais de uma vez.")}
+          {keywordSection}
+        </div>
+      );
     case "instagram_comment":
       return (
         <div className="space-y-4">
@@ -160,15 +175,7 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
             onChange={(mediaId) => setValue("mediaId", mediaId, { shouldValidate: true })}
             error={err("mediaId")}
           />
-          <div className="pt-1">
-            <label htmlFor="trigger-once-per-user" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input id="trigger-once-per-user" type="checkbox" role="switch" className="size-4" {...register("oncePerUser")} />
-              <span>Responder apenas uma vez por pessoa</span>
-            </label>
-            <p className="text-xs text-muted-foreground mt-1 ml-6">
-              Evita enviar mensagens repetidas caso a mesma pessoa comente mais de uma vez na publicação.
-            </p>
-          </div>
+          {oncePerUserField("Evita enviar mensagens repetidas caso a mesma pessoa comente mais de uma vez na publicação.")}
           {keywordSection}
           <PublicRepliesField
             control={control}
@@ -182,7 +189,12 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
         </div>
       );
     case "instagram_story":
-      return channelField;
+      return (
+        <div className="space-y-4">
+          {channelField}
+          {oncePerUserField("Evita disparar de novo caso a mesma pessoa responda ou mencione mais de um story.")}
+        </div>
+      );
     case "entry_link":
       return (
         <Field id="trigger-links" label="Links de entrada" error={err("linkIds")} hint="Selecione um ou mais links. Use Ctrl ou Command para selecionar vários.">

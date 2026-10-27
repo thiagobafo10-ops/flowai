@@ -138,13 +138,17 @@ export type TriggerValues = {
   linkIds: string[];
 };
 
-export function triggerToValues(config: unknown): TriggerValues {
+/** Gatilhos em que oncePerUser só vale quando gravado como true (ausente = dispara sempre, como antes). */
+const ONCE_PER_USER_OPT_IN: readonly TriggerType[] = ["keyword_detected", "instagram_story"];
+
+export function triggerToValues(config: unknown, type?: TriggerType): TriggerValues {
   const c = rec(config);
+  const optIn = type !== undefined && ONCE_PER_USER_OPT_IN.includes(type);
   const isAny = c.anyKeyword === true || c.mode === "any";
   const publicReplies = Array.isArray(c.publicReplies) ? c.publicReplies.filter((t): t is string => typeof t === "string") : [];
   return {
     firstMessageOnly: c.firstMessageOnly === true,
-    oncePerUser: c.oncePerUser !== false,
+    oncePerUser: optIn ? c.oncePerUser === true : c.oncePerUser !== false,
     publicReplyEnabled: publicReplies.length > 0,
     publicReplies,
     anyKeyword: isAny,
@@ -167,6 +171,7 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
         ...(v.anyKeyword ? { anyKeyword: true } : {}),
         keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
+        ...(v.oncePerUser === true ? { oncePerUser: true } : {}),
       };
     case "instagram_comment":
       return {
@@ -181,7 +186,7 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
         publicReplies: v.publicReplyEnabled ? (v.publicReplies?.length ? [...v.publicReplies] : [""]) : [],
       };
     case "instagram_story":
-      return { channelId: v.channelId };
+      return { channelId: v.channelId, ...(v.oncePerUser === true ? { oncePerUser: true } : {}) };
     case "contact_created":
       return {};
     case "tag_added":
