@@ -474,6 +474,36 @@ describe("/mcp", () => {
     ]);
   });
 
+  it("edit_switches_to_current_channel_when_stored_channel_is_gone", async () => {
+    state.channels = [{ id: "ch-2", meta_connection_id: "conn-2", created_at: "2026-01-02" }];
+    state.automations = [automationRow()];
+    state.nodes = seedNodes();
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBeFalsy();
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    expect(save?.[1].p_trigger_config).toMatchObject({ keywords: ["guia"], channelId: "ch-2" });
+    expect(text(result)).toContain("O canal do Instagram mudou");
+  });
+
+  it("edit_without_any_channel_returns_no_channel", async () => {
+    state.channels = [];
+    state.automations = [automationRow()];
+    state.nodes = seedNodes();
+    const mcp = await connect();
+    const result = await mcp.callTool({
+      name: "editar_automacao",
+      arguments: { id: AUTOMATION_ID, alteracoes: { palavras: ["guia"] } },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("Nenhuma conta do Instagram conectada");
+    expect(state.rpcs).toHaveLength(0);
+  });
+
   it("edit_reuses_existing_node_ids", async () => {
     state.automations = [automationRow()];
     state.nodes = [nodeRow(END_NODE, "end", 320), nodeRow(TRIGGER_NODE, "trigger", 0), nodeRow(MESSAGE_NODE, "message", 160)];

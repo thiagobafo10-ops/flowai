@@ -413,6 +413,28 @@ function storedChannel(row: AutomationRow): string | null {
   return typeof id === "string" && id ? id : null;
 }
 
+/**
+ * Só reusa o canal gravado se ele ainda existir nesta organização. Depois de reconectar o
+ * Instagram o canal antigo some, e manter o id morto deixaria a automação ativa sem nunca
+ * disparar — a troca explícita para o canal atual (com aviso no resumo) é o mal menor.
+ */
+async function resolveChannel(
+  ctx: McpContext,
+  stored: string | null,
+): Promise<{ ok: true; id: string; replaced: boolean } | { ok: false; error: ToolResult }> {
+  const current = channelId(ctx);
+  if (!stored || stored === current) return { ok: true, id: current, replaced: false };
+  const { data, error } = await ctx.supabase
+    .from("channels")
+    .select("id")
+    .eq("organization_id", ctx.orgId)
+    .eq("id", stored)
+    .limit(1);
+  if (error) return { ok: false, error: dbError("channels: lookup failed", error, SAVE_FAILED) };
+  if (data && data.length > 0) return { ok: true, id: stored, replaced: false };
+  return { ok: true, id: current, replaced: Boolean(current) };
+}
+
 // ---------------------------------------------------------------- ferramentas
 
 export function registerAutomationWriteTools(server: McpServer, ctx: McpContext): void {
@@ -504,7 +526,9 @@ export function registerAutomationWriteTools(server: McpServer, ctx: McpContext)
       if (!merged.ok) return toolError(merged.error);
       const spec = merged.spec;
       // Mantém o canal já gravado (o painel pode ter escolhido outro); só exige canal quando não há nenhum.
-      const channel = storedChannel(row) ?? channelId(ctx);
+      const channelResult = await resolveChannel(ctx, storedChannel(row));
+      if (!channelResult.ok) return channelResult.error;
+      const channel = channelResult.id;
       if (spec.gatilho !== "dm" && !channel) return toolError(NO_CHANNEL);
       // Só consulta a conta quando o post mudou: posts antigos podem ter saído dos 50 mais recentes.
       const postChanged = spec.post !== base.data.post;
@@ -521,7 +545,10 @@ export function registerAutomationWriteTools(server: McpServer, ctx: McpContext)
       const status = row.status === "active" || row.status === "paused" ? row.status : "draft";
       const changes = changesBetween(base.data, spec, alteracoes as Record<string, unknown>);
       const headline = `Automação "${spec.nome}" atualizada (${statusLabel(status)}).`;
-      return toolOk(`${headline}${changeNote(changes)}\n\n${summarizeSpec(spec)}${overlapNote(overlaps)}`, {
+      const channelNote = channelResult.replaced
+        ? "\n\nO canal do Instagram mudou desde que a automação foi criada: ela passou a apontar para o canal atual."
+        : "";
+      return toolOk(`${headline}${changeNote(changes)}${channelNote}\n\n${summarizeSpec(spec)}${overlapNote(overlaps)}`, {
         automacao: specItem(id, spec, status),
         alteracoes: changes,
       });
