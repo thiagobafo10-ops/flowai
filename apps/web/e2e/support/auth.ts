@@ -25,6 +25,7 @@ export async function signUpWithOrg(page: Page, email: string, orgName: string):
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
   // The URL can update while the redirect's streamed UI is still committing.
   // Wait for the destination before starting another hard navigation.
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  // O herói do dashboard é o h1 "«org» Resumo do seu negócio" (tema claro-lima).
+  await expect(page.getByRole("heading", { level: 1, name: /Resumo do seu negócio/ })).toBeVisible();
   await waitForHydration(page);
 }

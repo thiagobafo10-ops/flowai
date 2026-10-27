@@ -54,9 +54,9 @@ test("no celular a gaveta abre e fecha ao navegar", async ({ page }) => {
 
 test("módulos não construídos mostram Em construção; Automações abre o módulo real", async ({ page }) => {
   await signUpWithOrg(page, newEmail(), "Org Placeholder");
-  await gotoReady(page, "/analytics");
-  await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
-  await expect(page.getByText("Relatórios detalhados de atendimento e vendas.")).toBeVisible();
+  await gotoReady(page, "/configuracoes");
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+  await expect(page.getByText("Organização, equipe e integrações.")).toBeVisible();
   await expect(page.getByText("Em construção")).toBeVisible();
 
   await gotoReady(page, "/automacoes");
@@ -69,8 +69,9 @@ test("menu do usuário mostra e-mail e sai", async ({ page }) => {
   const email = newEmail();
   await signUpWithOrg(page, email, "Org Usuário");
   await page.getByRole("button", { name: "Menu do usuário" }).click();
-  await expect(page.getByText(email)).toBeVisible();
-  await expect(page.getByText("Ana Souza")).toBeVisible();
+  const menu = page.getByRole("menu", { name: "Menu do usuário" });
+  await expect(menu.getByText(email)).toBeVisible();
+  await expect(menu.getByText("Ana Souza")).toBeVisible();
   await page.getByRole("menuitem", { name: "Sair" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
