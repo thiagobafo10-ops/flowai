@@ -197,7 +197,25 @@ describe("/mcp", () => {
     expect(text(result)).toBe("O token do Instagram é inválido ou expirou.");
   });
 
+  it("listar_posts_maps_forbidden", async () => {
+    state.invokeResult = { data: null, error: { message: "Edge Function returned a non-2xx status code", context: Response.json({ error: "forbidden" }, { status: 403 }) } };
+    const mcp = await connect();
+    const result = await mcp.callTool({ name: "listar_posts", arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toBe("Só administradores da organização podem listar os posts do Instagram.");
+  });
+
+  it("authenticated_get_is_405", async () => {
+    const response = await GET(
+      new Request("https://app.example.com/mcp", { headers: { authorization: `Bearer ${TOKEN}`, accept: "text/event-stream" } }),
+    );
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST");
+  });
+
   it("listar_automacoes_maps_rows", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-27T12:00:00.000Z"));
     state.automations = [
       { id: AUTOMATION_ID, name: "Ebook", status: "active", trigger_type: "instagram_comment", trigger_config: { channelId: "ch-1", mediaId: null, keywords: ["ebook"], mode: "contains" }, mcp_spec: { nome: "Ebook" }, mcp_spec_stale: false, updated_at: "2026-10-26" },
       { id: "22222222-2222-4222-8222-222222222222", name: "Painel", status: "paused", trigger_type: "keyword_detected", trigger_config: { anyKeyword: true, keywords: [], mode: "any" }, mcp_spec: null, mcp_spec_stale: false, updated_at: "2026-10-25" },
@@ -210,6 +228,8 @@ describe("/mcp", () => {
       { id: AUTOMATION_ID, nome: "Ebook", status: "ativa", gatilho: "comentario", palavras: ["ebook"], post: "qualquer", criadaPeloClaude: true, alteradaNoPainel: false, disparos7dias: 4 },
       { id: "22222222-2222-4222-8222-222222222222", nome: "Painel", status: "pausada", gatilho: "dm", palavras: [], post: null, criadaPeloClaude: false, alteradaNoPainel: false, disparos7dias: 0 },
     ]);
+
+    expect(state.rpcs).toEqual([["automation_run_counts", { p_org: "org-1", p_since: "2026-10-20T12:00:00.000Z" }]]);
 
     state.queries = [];
     await mcp.callTool({ name: "listar_automacoes", arguments: { status: "pausada" } });
