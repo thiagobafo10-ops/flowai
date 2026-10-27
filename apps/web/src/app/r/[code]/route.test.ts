@@ -50,6 +50,8 @@ describe("GET /r/[code]", () => {
 
     expect(response.status).toBe(404);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(await response.text()).toContain("Link inválido");
     if (!/^[a-z0-9]{12}$/.test(code)) expect(state.rpc).not.toHaveBeenCalled();
   });
@@ -76,5 +78,14 @@ describe("GET /r/[code]", () => {
     expect(body).toContain("Link inválido");
     expect(body).not.toContain("forbidden");
     expect(body).not.toContain("42501");
+  });
+
+  it("answers 404 instead of 500 when the RPC rejects", async () => {
+    state.rpc.mockRejectedValue(new Error("fetch failed"));
+
+    const response = await call("abcdefghijkl");
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("Link inválido");
   });
 });

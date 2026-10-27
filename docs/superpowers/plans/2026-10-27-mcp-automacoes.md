@@ -166,6 +166,8 @@
 - [ ] **Step 2–4:** FAIL → implementar → PASS + typecheck + lint.
 - [ ] **Step 5: Commit** `feat(mcp): tracked link redirect and automation numbers`.
 
+> Nota de implementação (concluída): limite por IP não adicionado — sem helper público utilizável (`check_auth_rate_limit` restrito a `signup`/`login`; `check_rate_limit` só `service_role`), e um teto por IP bloquearia NAT. O SQL limita o registro a 30 cliques/min por link. Registrado na spec (§Link rastreável) e no ledger SDD.
+
 ### Task 9: Documentação e verificação completa
 
 **Files:** Create `docs/superpowers/mcp-setup.md`; Modify `README.md`, `docs/superpowers/instagram-setup.md` (postbacks, renovação).

@@ -12,7 +12,7 @@ export type AutomationRow = {
   runs7d: number;
   clicks7d: number;
   contacts7d: number;
-  /** Automação criada (ou editada) pelo MCP: guarda o formato simples em `mcp_spec`. */
+  /** Automação criada pelo MCP: guarda o formato simples em `mcp_spec`. */
   createdByClaude: boolean;
   updatedAt: string;
 };
@@ -20,6 +20,11 @@ export type AutomationRow = {
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type ResultRow = { runs: number; clicks: number; contacts: number };
+
+/** Contagem do jsonb: só número finito e positivo vale; qualquer outra coisa vira zero. */
+function toCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
 
 /** Lê o jsonb de `automation_results` sem confiar no formato (payload inesperado vira zero). */
 function readResults(value: unknown): Map<string, ResultRow> {
@@ -31,9 +36,9 @@ function readResults(value: unknown): Map<string, ResultRow> {
     if (typeof row.automationId !== "string") continue;
     const clicks = typeof row.clicks === "object" && row.clicks !== null ? (row.clicks as { total?: unknown }).total : 0;
     rows.set(row.automationId, {
-      runs: Number(row.runs ?? 0) || 0,
-      clicks: Number(clicks ?? 0) || 0,
-      contacts: Number(row.uniqueContacts ?? 0) || 0,
+      runs: toCount(row.runs),
+      clicks: toCount(clicks),
+      contacts: toCount(row.uniqueContacts),
     });
   }
   return rows;
@@ -64,7 +69,7 @@ export async function listAutomations(orgId: string, now: Date = new Date()): Pr
       runs7d: row?.runs ?? 0,
       clicks7d: row?.clicks ?? 0,
       contacts7d: row?.contacts ?? 0,
-      createdByClaude: a.mcp_spec !== null,
+      createdByClaude: a.mcp_spec !== null && a.mcp_spec !== undefined,
       updatedAt: a.updated_at,
     };
   });

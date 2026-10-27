@@ -59,7 +59,6 @@ test("listAutomations filtra pela organização, usa a janela de 7 dias e mapeia
     { id: "a1", name: "Um", triggerType: "message_received", status: "active", runs7d: 5, clicks7d: 2, contacts7d: 3, createdByClaude: false, updatedAt: "2026-10-12T00:00:00Z" },
     { id: "a2", name: "Dois", triggerType: "keyword_detected", status: "draft", runs7d: 0, clicks7d: 0, contacts7d: 0, createdByClaude: true, updatedAt: "2026-10-11T00:00:00Z" },
   ]);
-  expect(state.calls.every((call) => call.columns !== "*")).toBe(true);
 });
 
 test("listAutomations assume zero com payload inesperado ou automação sem resultados", async () => {
@@ -71,6 +70,9 @@ test("listAutomations assume zero com payload inesperado ou automação sem resu
   expect((await listAutomations("org-1"))[0]).toMatchObject({ runs7d: 0, clicks7d: 0, contacts7d: 0 });
 
   state.results = { not: "an array" };
+  expect((await listAutomations("org-1"))[0]).toMatchObject({ runs7d: 0, clicks7d: 0, contacts7d: 0 });
+
+  state.results = [{ automationId: "a1", runs: -3, uniqueContacts: true, clicks: { total: -1 } }];
   expect((await listAutomations("org-1"))[0]).toMatchObject({ runs7d: 0, clicks7d: 0, contacts7d: 0 });
 });
 

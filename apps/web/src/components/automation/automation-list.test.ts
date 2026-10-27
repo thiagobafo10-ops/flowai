@@ -41,8 +41,15 @@ test("mostra disparos, cliques e contatos de 7 dias e o selo apenas nas automaç
   for (const heading of ["Execuções (7 dias)", "Cliques (7 dias)", "Contatos (7 dias)"]) {
     expect(markup).toContain(heading);
   }
-  for (const value of [">12<", ">5<", ">7<", ">3<", ">0<", ">2<"]) expect(markup).toContain(value);
-  expect(markup).toContain("Promo de outubro");
-  expect(markup).toContain("Boas-vindas");
-  expect(markup.split("Criada pelo Claude")).toHaveLength(2);
+  const rows = markup.split("<tr").filter((row) => row.includes("<td"));
+  const claude = rows.find((row) => row.includes("Promo de outubro"));
+  const panel = rows.find((row) => row.includes("Boas-vindas"));
+  expect(claude).toContain(">12<");
+  expect(claude).toContain(">5<");
+  expect(claude).toContain(">7<");
+  expect(claude).toContain("Criada pelo Claude");
+  expect(panel).toContain(">3<");
+  expect(panel).toContain(">0<");
+  expect(panel).toContain(">2<");
+  expect(panel).not.toContain("Criada pelo Claude");
 });

@@ -47,14 +47,21 @@ export async function GET(
   const { code } = await params;
   if (!CODE.test(code)) return invalidLink();
 
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
-  );
-  const { data, error } = await supabase.rpc("open_tracked_link", { p_code: code });
-  if (error) {
-    console.error("tracked link: open failed", error.code ?? "unknown");
+  let data: unknown;
+  try {
+    const supabase = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
+    );
+    const result = await supabase.rpc("open_tracked_link", { p_code: code });
+    if (result.error) {
+      console.error("tracked link: open failed", result.error.code ?? "unknown");
+      return invalidLink();
+    }
+    data = result.data;
+  } catch (error) {
+    console.error("tracked link: open failed", error instanceof Error ? error.name : "unknown");
     return invalidLink();
   }
   if (typeof data !== "string" || !data.startsWith("https://")) return invalidLink();
