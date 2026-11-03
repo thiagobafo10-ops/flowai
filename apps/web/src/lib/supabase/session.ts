@@ -14,6 +14,11 @@ function isTrackedLinkRoute(pathname: string): boolean {
   return pathname === "/r" || pathname.startsWith("/r/");
 }
 
+// Descadastro de e-mail (`/e/sair/<token>`): mesmo caso dos links rastreados, anônimo e sem sessão.
+function isUnsubscribeRoute(pathname: string): boolean {
+  return pathname.startsWith("/e/sair/");
+}
+
 // Conector MCP: autenticação por Bearer (OAuth), sem cookies nem redirect ao login.
 function isBearerRoute(pathname: string): boolean {
   const metadata = "/.well-known/oauth-protected-resource";
@@ -38,7 +43,7 @@ function redirectTo(request: NextRequest, pathname: string, from: NextResponse, 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   // Sem sessão e sem chamada ao Auth: o clique no link é anônimo e não pode pagar um getUser().
-  if (isBearerRoute(pathname) || isTrackedLinkRoute(pathname)) return NextResponse.next({ request });
+  if (isBearerRoute(pathname) || isTrackedLinkRoute(pathname) || isUnsubscribeRoute(pathname)) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 

@@ -43,7 +43,16 @@ describe("updateSession (proxy)", () => {
     expect(state.clients).toBe(0);
   });
 
-  it.each(["/rx", "/r-dashboard", "/route"])(
+  it.each(["/e/sair/abc", "/e/sair/abc/one-click"])(
+    "lets unsubscribe page %s through without session or redirect",
+    async (path) => {
+      const response = await updateSession(new NextRequest(`http://localhost:3000${path}`));
+      expect(response.headers.get("location")).toBeNull();
+      expect(state.clients).toBe(0);
+    },
+  );
+
+  it.each(["/rx", "/r-dashboard", "/route", "/e/sairx", "/e"])(
     "keeps the login redirect for non tracked-link path %s",
     async (path) => {
       const response = await updateSession(new NextRequest(`http://localhost:3000${path}`));
