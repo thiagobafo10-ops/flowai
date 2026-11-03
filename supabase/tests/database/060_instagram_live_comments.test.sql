@@ -68,5 +68,13 @@ select pg_temp.save_rule(:'chan','beta','{}'::jsonb) as rule_posts_beta \gset
 select tests.clear_authentication();
 select is(public.reselect_instagram_comment_rule(:'ev_live',now()),'null'::jsonb,'reseleção não escolhe automação de posts para comentário de live');
 
+-- 8. VIP (resposta pública + convite) não roda em comentário de live; post continua.
+insert into public.instagram_vip_settings(channel_id,organization_id,enabled,public_reply_text,group_url,activated_at)
+  values(:'chan',:'oa',true,'Convite','https://chat.whatsapp.com/abc',now()-interval '1 minute');
+select pg_temp.comment(:'conn','l9','909','qualquer','live3',true) as ev_vip_live \gset
+select pg_temp.comment(:'conn','p9','909','qualquer','80060',false) as ev_vip_post \gset
+select is((select count(*)::int from pgmq.q_instagram_work where message->>'task'='vip' and message->>'eventId'=:'ev_vip_live'),0,'comentário de live não entra na fila VIP');
+select is((select count(*)::int from pgmq.q_instagram_work where message->>'task'='vip' and message->>'eventId'=:'ev_vip_post'),1,'comentário de post continua na fila VIP');
+
 select * from finish();
 rollback;

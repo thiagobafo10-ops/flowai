@@ -79,7 +79,7 @@ export async function processInstagramWork(item: InstagramWork, deps: InstagramW
           const eligible = Number.isFinite(createdAt) && createdAt <= now && now - createdAt < 7 * 86400000
             && String(comment.id) === prepared.commentId && String(comment.from?.id) === prepared.senderExternalId
             && String(comment.from?.id) !== channel.accountId && !(connectedUsername && officialAuthorName === connectedUsername)
-            && expectedMediaIds.includes(String(comment.media?.id ?? "")) && (!productType || ["FEED", "REELS", "AD"].includes(productType));
+            && expectedMediaIds.includes(String(comment.media?.id ?? "")) && (!productType || ["FEED", "REELS", "AD", "LIVE"].includes(productType));
           // The first rule may have been (re)activated after the comment was posted:
           // fall back to the next rule that was already effective at that time.
           let target: PreparedComment | null = prepared;

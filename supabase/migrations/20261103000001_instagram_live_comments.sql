@@ -198,3 +198,9 @@ begin
     perform pgmq.send('instagram_work',jsonb_build_object('eventId',p_event.id,'task','public_reply','automationId',p_event.automation_id));
   end if;
 end $$;
+
+-- VIP (resposta pública + convite) não vale para live: a Meta não aceita resposta pública em comentário de live.
+drop trigger instagram_vip_enqueue on public.instagram_events;
+create trigger instagram_vip_enqueue after insert on public.instagram_events for each row
+  when (new.kind='comment' and new.payload->>'mediaProductType' is distinct from 'LIVE')
+  execute function private.enqueue_instagram_vip();
