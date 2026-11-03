@@ -223,3 +223,23 @@ FLOWAI_E2E_SLOW_HOST=1 npm run e2e -w apps/web
 ```
 
 A validação ao vivo com Meta e Claude (seção 5) continua pendente de uma conta real e do conector autorizado.
+
+## 8. Automação de live
+
+Comentários feitos durante uma live chegam pelo campo de webhook `live_comments`. No gatilho "Comentário", escolha **Onde: Lives** (ou **Posts e lives**). Pelo Claude, use `gatilho: "live"`.
+
+Regras:
+- Cada pessoa recebe a DM **uma vez por live**; numa live nova, recebe de novo.
+- A Meta só aceita a DM **enquanto a live está no ar** e não permite resposta pública em comentário de live.
+- A automação vale para qualquer live (não há escolha de post).
+
+Ativação (uma vez):
+1. Painel da Meta → app → Webhooks (Instagram) → marcar o campo `live_comments`.
+2. FlowAI → Canais → **Testar conexão** (reassina os campos, agora incluindo `live_comments`).
+
+Roteiro do teste real:
+1. Criar uma automação com Onde: **Lives**, qualquer comentário, uma DM curta, e ativar.
+2. Fazer uma live curta e comentar de outra conta → a DM chega.
+3. Comentar de novo na mesma live → nenhuma DM nova.
+4. Encerrar, fazer outra live e comentar → a DM chega de novo.
+5. Conferir que as automações de post não dispararam durante a live.
