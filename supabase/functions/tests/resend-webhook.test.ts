@@ -35,13 +35,20 @@ Deno.test("valid signature records the event", async () => {
   const f = fixture();
   const response = await handleResendWebhook(await request("email.delivered"), f.deps);
   assert(response.status === 200, String(response.status));
-  assert(JSON.stringify(f.recorded) === JSON.stringify([["resend-id-1", "email.delivered", "2026-11-03T11:59:00.000Z"]]), JSON.stringify(f.recorded));
+  assert(JSON.stringify(f.recorded) === JSON.stringify([[["o2"], "resend-id-1", "email.delivered", "2026-11-03T11:59:00.000Z"]]), JSON.stringify(f.recorded));
+});
+
+Deno.test("a shared signing secret authorizes only its matching organizations", async () => {
+  const f = fixture();
+  f.deps.readSecrets = async () => [{ organizationId: "o1", secret: OTHER }, { organizationId: "o2", secret: SECRET }, { organizationId: "o3", secret: SECRET }];
+  await handleResendWebhook(await request("email.delivered"), f.deps);
+  assert(JSON.stringify(f.recorded[0]?.[0]) === JSON.stringify(["o2", "o3"]), JSON.stringify(f.recorded));
 });
 
 Deno.test("email.bounced passes its type through", async () => {
   const f = fixture();
   await handleResendWebhook(await request("email.bounced"), f.deps);
-  assert(f.recorded[0]![1] === "email.bounced");
+  assert(f.recorded[0]![2] === "email.bounced");
 });
 
 Deno.test("invalid or missing signature is rejected", async () => {

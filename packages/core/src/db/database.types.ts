@@ -1868,6 +1868,8 @@ isOneToOne: false
                            },
 "record_email_event":
 { Args: { "p_at": string,"p_provider_id": string,"p_type": string }; Returns: undefined
+                           } |
+{ Args: { "p_at": string,"p_org_ids": (string)[],"p_provider_id": string,"p_type": string }; Returns: undefined
                            },
 "record_instagram_username":
 { Args: { "p_channel_id": string,"p_username": string }; Returns: undefined

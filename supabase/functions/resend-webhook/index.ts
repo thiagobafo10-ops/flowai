@@ -10,6 +10,6 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 }
 Deno.serve((request) => handleResendWebhook(request, {
   readSecrets: async () => (await rpc<{ organizationId: string; secret: string }[] | null>("read_resend_webhook_secrets", {})) ?? [],
-  record: (providerId, type, at) => rpc<void>("record_email_event", { p_provider_id: providerId, p_type: type, p_at: at }),
+  record: (organizationIds, providerId, type, at) => rpc<void>("record_email_event", { p_org_ids: organizationIds, p_provider_id: providerId, p_type: type, p_at: at }),
   now: () => new Date(),
 }));

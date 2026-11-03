@@ -31,8 +31,12 @@ export async function handleEmailWorker(request: Request, deps: EmailWorkerDeps)
     const provided = request.headers.get("x-flowai-worker") ?? "";
     if (!secret || !provided || provided.length > 8192 || !await constantTimeTextEqual(provided, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
     const counts = { sent: 0, retry: 0, failed: 0 };
+    const startedAt = Date.now();
     // Sequential: keeps under Resend's per-second rate limit; a 429 is simply retried later.
-    for (const send of await deps.claim(BATCH)) {
+    for (let processed = 0; processed < BATCH && Date.now() - startedAt < 90000; processed++) {
+      // Revalidate immediately before sending so payments and opt-outs affect waiting emails.
+      const [send] = await deps.claim(1);
+      if (!send) break;
       let result: "sent" | "retry" | "failed", providerId: string | null = null, error: string | null = null;
       try {
         const unsubscribe = send.category === "marketing" && send.ctx.unsubscribeToken

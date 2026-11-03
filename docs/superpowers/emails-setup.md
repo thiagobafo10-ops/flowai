@@ -8,7 +8,7 @@ Recuperação de carrinho abandonado da Holy Spirit, enviada pelo FlowAI via Res
 2. Em **Domains**, adicione `useholyspirit.store`.
 3. O Resend mostra os registros DNS (SPF, DKIM e, se oferecido, DMARC). Crie cada um no painel onde o domínio é gerenciado, copiando tipo, nome e valor exatamente. Aguarde o status **Verified**.
 4. Em **Domains**, ligue o rastreio de abertura (**Open tracking**) e de clique (**Click tracking**).
-5. Em **API Keys**, crie uma chave com permissão de envio (**Sending access**). Copie na hora: ela só aparece uma vez.
+5. Em **API Keys**, crie uma chave **Full access**: esta integração também consulta o domínio pelo botão **Verificar**. Uma chave **Sending access** permite enviar, mas não consultar os domínios ([permissões oficiais do Resend](https://resend.com/changelog/new-api-key-permissions)). Copie na hora: ela só aparece uma vez e ficará guardada no Vault.
 6. Em **Webhooks**, crie um webhook:
    - URL: `https://<ref>.supabase.co/functions/v1/resend-webhook` (`<ref>` é o ID do projeto Supabase).
    - Eventos: `email.delivered`, `email.opened`, `email.clicked`, `email.bounced`, `email.complained`.
@@ -42,7 +42,7 @@ npx supabase functions deploy email-admin
 npx supabase functions deploy resend-webhook
 ```
 
-3. Aplique as migrações (`20261104000001_store_emails.sql` e `20261104000002_email_worker.sql`):
+3. Aplique as migrações `20261104000001` a `20261104000004`. As duas últimas restringem eventos à organização autorizada e fazem a fila avançar por envios cancelados. Publique as versões correspondentes de `resend-webhook` e `email-worker` antes de ativar a jornada:
 
 ```bash
 npx supabase db push
@@ -96,3 +96,9 @@ O que o teste precisa confirmar:
 - O link `simulate_url` reabre o carrinho.
 - A assinatura da Yampi é aceita. Se **todos** os eventos da Yampi forem rejeitados com 401, avise: a validação sobre o corpo bruto precisa de ajuste.
 - Nesta etapa os e-mails não mostram foto do produto.
+
+## Validação local de 03/11/2026
+
+A etapa de carrinho foi conferida sem chamadas reais à Yampi ou ao Resend. Passaram os testes da aplicação, do serviço e do banco, a verificação de tipos, o build de produção e a conferência da página pública de descadastro no navegador. A revisão final corrigiu o isolamento dos webhooks por organização e a reserva de um e-mail por vez, para revalidar compra, descadastro e bloqueios antes de cada tentativa. Envios cancelados não bloqueiam os próximos válidos.
+
+Publicação, DNS, permissões das credenciais, assinatura real da Yampi, entrega na caixa de entrada e reabertura do carrinho ainda precisam do roteiro acima; os testes locais não comprovam essas integrações reais.

@@ -17,15 +17,16 @@ function fixture(reply: () => Response | Promise<Response>, sends: ClaimedSend[]
   const completed: unknown[][] = [];
   const calls: { url: string; init: RequestInit }[] = [];
   let claimedLimit = 0;
+  const queue = [...sends];
   const deps: EmailWorkerDeps = {
     readWorkerSecret: async () => SECRET,
-    claim: async (limit) => { claimedLimit = limit; return sends; },
+    claim: async (limit) => { claimedLimit = limit; return queue.splice(0, limit); },
     complete: async (...args) => { completed.push(args); },
     fetch: async (input, init) => { calls.push({ url: String(input), init: init ?? {} }); return await reply(); },
     appUrl: "https://app.flowai.example", log: () => {},
   };
   const request = (secret = SECRET) => new Request("http://local/email-worker", { method: "POST", headers: { "X-FlowAI-Worker": secret }, body: "{}" });
-  return { deps, completed, calls, request, limit: () => claimedLimit };
+  return { deps, completed, calls, request, queue, limit: () => claimedLimit };
 }
 
 Deno.test("rejects requests without the internal worker secret", async () => {
@@ -40,7 +41,7 @@ Deno.test("sends through Resend with the send id as idempotency key and complete
   const f = fixture(() => Response.json({ id: "resend-id-1" }));
   const response = await handleEmailWorker(f.request(), f.deps);
   assert(response.status === 200);
-  assert(f.limit() === 50);
+  assert(f.limit() === 1);
   assert(f.calls.length === 1 && f.calls[0]!.url === "https://api.resend.com/emails");
   const headers = new Headers(f.calls[0]!.init.headers);
   assert(headers.get("authorization") === `Bearer ${KEY}`);
@@ -50,6 +51,37 @@ Deno.test("sends through Resend with the send id as idempotency key and complete
   assert(body.subject === "Oi Ana" && body.html.includes("Esqueceu algo?") && typeof body.text === "string");
   assert(body.headers === undefined && !body.html.includes("/e/sair/"), "transactional has no unsubscribe");
   assert(JSON.stringify(f.completed) === JSON.stringify([[SEND, "sent", "resend-id-1", null]]), JSON.stringify(f.completed));
+});
+
+Deno.test("revalidates remaining recipients after an unsubscribe during the first send", async () => {
+  const second = { ...claimed("marketing"), sendId: "00000000-0000-4000-8000-000000000002" };
+  const f = fixture(() => {
+    // Simulate claim's cancellation filtering after this recipient unsubscribes.
+    f.queue.splice(0);
+    return Response.json({ id: "first" });
+  }, [claimed(), second]);
+  await handleEmailWorker(f.request(), f.deps);
+  assert(f.calls.length === 1, "unsubscribed recipient must remain unsent");
+  assert(f.completed.length === 1);
+});
+
+Deno.test("stops claiming after the 90 second runtime budget", async () => {
+  const original = Date.now;
+  let now = 0;
+  Date.now = () => now;
+  try {
+    const f = fixture(() => { now += 90000; return Response.json({ id: "first" }); }, [claimed(), claimed()]);
+    await handleEmailWorker(f.request(), f.deps);
+    assert(f.calls.length === 1, "must leave the next email for another invocation");
+    assert(f.queue.length === 1, "must not reserve beyond the runtime budget");
+  } finally { Date.now = original; }
+});
+
+Deno.test("processes at most 50 emails per invocation", async () => {
+  const f = fixture(() => Response.json({ id: "sent" }), Array.from({ length: 51 }, () => claimed()));
+  await handleEmailWorker(f.request(), f.deps);
+  assert(f.calls.length === 50);
+  assert(f.queue.length === 1);
 });
 
 Deno.test("429 and network errors complete as retry; 422 completes as failed", async () => {

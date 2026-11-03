@@ -53,7 +53,7 @@ select tests.clear_authentication();
 select is(public.read_email_settings_secret(:'oa'),
   jsonb_build_object('resendKey','re_123','fromName','Loja Santa','fromEmail','loja@ex.com','replyTo','sac@ex.com'),
   'absent keys keep the stored secrets');
-select is(public.read_resend_webhook_secrets(),jsonb_build_array(jsonb_build_object('organizationId',:'oa','secret','whsec_1')),'webhook secrets listed');
+select is((select entry from jsonb_array_elements(public.read_resend_webhook_secrets()) entry where entry->>'organizationId'=:'oa'),jsonb_build_object('organizationId',:'oa','secret','whsec_1'),'webhook secrets listed for this fixture');
 select public.record_email_domain_status(:'oa','verified');
 select is((select domain_status from public.email_settings where organization_id=:'oa'),'verified','domain status recorded');
 select throws_ok(format('select public.record_email_domain_status(%L,%L)',:'oa','bogus'),'22023',null,'invalid domain status rejected');
@@ -245,6 +245,32 @@ select throws_ok('select count(*) from public.email_unsubscribe_tokens','42501',
 select tests.clear_authentication();
 select ok(not has_function_privilege('authenticated','public.dispatch_email_worker()','execute'),'dispatch is not for users');
 select is((select schedule from cron.job where jobname='flowai-email-worker'),'* * * * *','cron every minute');
+
+-- A assinatura de uma organização não autoriza eventos sobre envios de outra.
+select ok(not has_function_privilege('service_role','public.record_email_event(text,text,timestamptz)','execute'),'legacy unscoped event RPC is not exposed to the service');
+update public.email_sends set provider_id='scope-check', delivered_at=null, bounced_at=null where id=:'s1';
+delete from public.email_suppressions where organization_id=:'oa';
+select public.record_email_event('scope-check','email.bounced',now(),array[:'ob'::uuid]);
+select is((select bounced_at from public.email_sends where id=:'s1'),null::timestamptz,'another signing organization cannot bounce this send');
+select is((select count(*)::int from public.email_suppressions where organization_id=:'oa'),0,'foreign signature cannot suppress recipient');
+select public.record_email_event('scope-check','email.delivered',now(),array[:'oa'::uuid]);
+select ok((select delivered_at is not null from public.email_sends where id=:'s1'),'matching signing organization records delivery');
+select public.record_email_event('scope-check','email.bounced',now(),array[:'oa'::uuid]);
+select is((select count(*)::int from public.email_suppressions where organization_id=:'oa'),1,'matching signing organization suppresses bounced recipient');
+select ok(not has_function_privilege('authenticated','public.record_email_event(text,text,timestamptz,uuid[])','execute'),'users cannot forge scoped provider events');
+
+-- Uma reserva de um envio deve atravessar cancelamentos, sem bloquear a fila válida.
+update public.email_sends set send_at=now()+interval '1 day' where organization_id=:'oa' and state='scheduled';
+update public.email_journey_steps set enabled=true where id in (:'step1',:'step2');
+select pg_temp.cart(:'conn','queue-backlog','queue@ex.com','Queue') as backlog_cart \gset
+select pg_temp.due(:'backlog_cart',1) as cancelled_send \gset
+select pg_temp.due(:'backlog_cart',2) as valid_send \gset
+update public.email_sends set send_at=now()-interval '2 minutes' where id=:'cancelled_send';
+update public.email_journey_steps set enabled=false where id=:'step1';
+select public.claim_email_sends(1) as after_cancellation \gset
+select is(:'after_cancellation'::jsonb->0->>'sendId',:'valid_send','one-at-a-time claim skips cancelled rows to reach the next valid send');
+select is(pg_temp.reason(:'cancelled_send'),'cancelled/step_disabled','skipped row retains its cancellation reason');
+select is(jsonb_array_length(:'after_cancellation'::jsonb),1,'only the next valid send is reserved');
 
 select * from finish();
 rollback;
