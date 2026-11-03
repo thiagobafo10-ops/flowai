@@ -212,6 +212,28 @@ select is((select e->'recoveredOrders' from jsonb_array_elements(:'res'::jsonb) 
 select is((select (e->'cancelled'->>'no_settings')::int from jsonb_array_elements(:'res'::jsonb) e where e->>'stepId'=:'step1'),1,'cancellations counted by reason');
 select ok((select (e->>'sent')::int>=3 and (e->>'delivered')::int=1 and (e->>'opened')::int=1
   from jsonb_array_elements(:'res'::jsonb) e where e->>'stepId'=:'step1'),'sent/delivered/opened counted');
+-- 9b. Só jornadas cart/pending_payment recuperam vendas; post_purchase nunca.
+insert into public.email_journeys(organization_id,kind,enabled) values(:'oa','post_purchase',true) returning id as pp \gset
+insert into public.email_journey_steps(organization_id,journey_id,position,delay_minutes,subject,body,button_label,category)
+  values(:'oa',:'pp',1,60,'Obrigado','Obrigado','Ver pedido','transactional') returning id as ppstep \gset
+select pg_temp.cart(:'conn','c13','mia@ex.com','Mia') as c13 \gset
+update public.email_sends e set state='sent', sent_at=now()-interval '6 days'
+  from public.email_journey_steps s where s.id=e.step_id and e.cart_id=:'c13' and s.position=1;
+insert into public.email_sends(organization_id,contact_id,step_id,to_email,send_at,state,sent_at)
+  select :'oa',contact_id,:'ppstep','mia@ex.com',now(),'sent',now()-interval '4 days' from public.store_carts where id=:'c13';
+insert into public.store_orders(organization_id,connection_id,external_id,number,contact_id,total,paid_at)
+  select :'oa',:'conn','o13','N13',contact_id,10,now()-interval '3 days' from public.store_carts where id=:'c13';
+insert into public.contacts(organization_id,name,email) values(:'oa','Noa','noa@ex.com') returning id as noa \gset
+insert into public.email_sends(organization_id,contact_id,step_id,to_email,send_at,state,sent_at)
+  values(:'oa',:'noa',:'ppstep','noa@ex.com',now(),'sent',now()-interval '2 days');
+insert into public.store_orders(organization_id,connection_id,external_id,number,contact_id,total,paid_at)
+  values(:'oa',:'conn','o14','N14',:'noa',20,now()-interval '1 day');
+select tests.authenticate_as(:'ub');
+select public.email_journey_results(:'oa',now()-interval '30 days',now()+interval '1 day') as res \gset
+select tests.clear_authentication();
+select is((select e->'recoveredOrders' from jsonb_array_elements(:'res'::jsonb) e where e->>'stepId'=:'step1'),'1'::jsonb,'order after a later post_purchase send is credited to the cart send');
+select is((select e->'recoveredOrders' from jsonb_array_elements(:'res'::jsonb) e where e->>'stepId'=:'ppstep'),'0'::jsonb,'post_purchase sends never recover orders');
+
 select tests.authenticate_as(:'uc');
 select throws_ok(format('select public.email_journey_results(%L,now()-interval ''1 day'',now())',:'oa'),'42501',null,'non-member cannot read results');
 

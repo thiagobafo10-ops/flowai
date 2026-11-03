@@ -223,7 +223,7 @@ end $$;
 
 -- ---------------------------------------------------------------- resultados
 -- Envios criados na janela. Pedido recuperado: pedido pago do contato atribuído ao último envio
--- dele nos 7 dias anteriores ao pagamento (último toque).
+-- dele nos 7 dias anteriores ao pagamento (último toque), só de jornadas cart/pending_payment.
 create function public.email_journey_results(p_org uuid, p_from timestamptz, p_to timestamptz) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
 declare v_out jsonb;
@@ -244,6 +244,8 @@ begin
     from public.store_orders o
     cross join lateral (
       select e.step_id, e.created_at from public.email_sends e
+      join public.email_journey_steps s on s.id=e.step_id
+      join public.email_journeys j on j.id=s.journey_id and j.kind in ('cart','pending_payment')
       where e.organization_id=p_org and e.contact_id=o.contact_id
         and e.sent_at<=o.paid_at and e.sent_at>o.paid_at-interval '7 days'
       order by e.sent_at desc limit 1) x
