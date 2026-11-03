@@ -70,9 +70,10 @@ export function parseInstagramEvents(raw: unknown): InstagramEvent[] {
       const change = changeSchema.parse(rawChange);
       if (entry.time === undefined) throw new Error("Missing Instagram event timestamp");
       const base = { accountId: entry.id, occurredAt: timestamp(entry.time, entry.time > 1e12) };
-      if (change.field === "comments") {
+      if (change.field === "comments" || change.field === "live_comments") {
         const comment = commentSchema.parse(change.value);
-        events.push({ ...base, kind: "comment", externalId: comment.id, commentId: comment.id, mediaId: comment.media.id, mediaProductType: comment.media.media_product_type ?? null, originalMediaId: comment.media.original_media_id ?? null, adId: comment.media.ad_id ?? null, senderExternalId: comment.from.id, senderName: comment.from.username ?? null, text: comment.text ?? "" });
+        const mediaProductType = change.field === "live_comments" ? "LIVE" : comment.media.media_product_type ?? null;
+        events.push({ ...base, kind: "comment", externalId: comment.id, commentId: comment.id, mediaId: comment.media.id, mediaProductType, originalMediaId: comment.media.original_media_id ?? null, adId: comment.media.ad_id ?? null, senderExternalId: comment.from.id, senderName: comment.from.username ?? null, text: comment.text ?? "" });
       } else events.push({ ...base, kind: "ignored", externalId: `${change.field}:${entry.time}`, reason: "unsupported_change" });
     }
   }

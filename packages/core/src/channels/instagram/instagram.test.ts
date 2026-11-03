@@ -25,6 +25,14 @@ describe("Instagram webhook events", () => {
     const payload = { object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, changes: [{ field: "comments", value: { id: "c9", from: { id: "9001", username: "cliente" }, text: "GUIA", media: { id: "ad1", media_product_type: "AD", ad_id: "ad1", original_media_id: "p1" } } }] }] };
     expect(parseInstagramEvents(payload)[0]).toMatchObject({ kind: "comment", commentId: "c9", mediaId: "ad1", mediaProductType: "AD", originalMediaId: "p1", adId: "ad1" });
   });
+  it("parses live_comments as a LIVE comment", () => {
+    const payload = { object: "instagram", entry: [{ id: "acc", time: 1700000000, changes: [{ field: "live_comments", value: { id: "c1", from: { id: "u1", username: "ana" }, text: "oi", media: { id: "live1", media_product_type: "LIVE" } } }] }] };
+    expect(parseInstagramEvents(payload)).toMatchObject([{ kind: "comment", commentId: "c1", mediaId: "live1", mediaProductType: "LIVE", senderExternalId: "u1", senderName: "ana", text: "oi" }]);
+  });
+  it("forces LIVE when live_comments omits media_product_type", () => {
+    const payload = { object: "instagram", entry: [{ id: "acc", time: 1700000000, changes: [{ field: "live_comments", value: { id: "c1", from: { id: "u1" }, text: "oi", media: { id: "live1" } } }] }] };
+    expect(parseInstagramEvents(payload)[0]).toMatchObject({ kind: "comment", mediaProductType: "LIVE" });
+  });
   it("accepts the documented entry-level comment shape", () => {
     expect(parseInstagramEvents({ object: "instagram", entry: [{ id: "178414000000001", time: 1791806400, field: "comments", value: { id: "c2", from: { id: "9001" }, text: "guia", media: { id: "p1" } } }] })[0]).toMatchObject({ kind: "comment", commentId: "c2" });
   });
