@@ -359,6 +359,52 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"cart_contact_actions": {
+                  Row: {
+                    "action": string,"actor_id": string,"cart_id": string,"contact_id": string,"created_at": string,"id": string,"note": string | null,"organization_id": string,"request_hash": string,"request_key": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "action": string,"actor_id": string,"cart_id": string,"contact_id": string,"created_at"?: string,"id"?: string,"note"?: string | null,"organization_id": string,"request_hash": string,"request_key": string
+                  }
+                  Update: {
+                    "action"?: string,"actor_id"?: string,"cart_id"?: string,"contact_id"?: string,"created_at"?: string,"id"?: string,"note"?: string | null,"organization_id"?: string,"request_hash"?: string,"request_key"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "cart_contact_actions_organization_id_cart_id_fkey"
+      columns: ["organization_id","cart_id"]
+isOneToOne: false
+      referencedRelation: "store_carts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "cart_contact_actions_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"cart_recovery_settings": {
+                  Row: {
+                    "organization_id": string,"updated_at": string,"updated_by": string | null,"whatsapp_template": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "organization_id": string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template": string
+                  }
+                  Update: {
+                    "organization_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "cart_recovery_settings_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"channels": {
                   Row: {
                     "access_token_expires_at": string | null,"access_token_refreshed_at": string | null,"access_token_secret_id": string | null,"app_secret_secret_id": string | null,"created_at": string,"external_account_id": string | null,"id": string,"instagram_claimed": boolean,"instagram_username": string | null,"last_error": string | null,"meta_connection_id": string | null,"name": string,"organization_id": string,"status": Database["public"]['Enums']["channel_status"],"type": Database["public"]['Enums']["channel_type"],"updated_at": string,"verify_token_secret_id": string | null,"waba_id": string | null
@@ -383,6 +429,26 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"contact_channel_permissions": {
+                  Row: {
+                    "channel": string,"contact_id": string,"created_at": string,"evidence_at": string,"id": string,"organization_id": string,"recorded_by": string,"source": string,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel": string,"contact_id": string,"created_at"?: string,"evidence_at": string,"id"?: string,"organization_id": string,"recorded_by": string,"source": string,"status": string
+                  }
+                  Update: {
+                    "channel"?: string,"contact_id"?: string,"created_at"?: string,"evidence_at"?: string,"id"?: string,"organization_id"?: string,"recorded_by"?: string,"source"?: string,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "contact_channel_permissions_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
     }
                   ]
                 },"contact_custom_fields": {
@@ -445,14 +511,14 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "assigned_to": string | null,"avatar_url": string | null,"created_at": string,"email": string | null,"email_marketing_opt_out_at": string | null,"id": string,"instagram_id": string | null,"last_interaction_at": string | null,"lead_score": number,"name": string | null,"organization_id": string,"phone": string | null,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"updated_at": string,"whatsapp_id": string | null
+                    "assigned_to": string | null,"avatar_url": string | null,"contact_blocked_at": string | null,"contact_blocked_reason": string | null,"created_at": string,"email": string | null,"email_marketing_opt_out_at": string | null,"id": string,"instagram_id": string | null,"last_interaction_at": string | null,"lead_score": number,"name": string | null,"organization_id": string,"phone": string | null,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"updated_at": string,"whatsapp_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id": string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
+                    "assigned_to"?: string | null,"avatar_url"?: string | null,"contact_blocked_at"?: string | null,"contact_blocked_reason"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id": string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
                   }
                   Update: {
-                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id"?: string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
+                    "assigned_to"?: string | null,"avatar_url"?: string | null,"contact_blocked_at"?: string | null,"contact_blocked_reason"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id"?: string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -1399,14 +1465,14 @@ isOneToOne: false
                   ]
                 },"store_carts": {
                   Row: {
-                    "connection_id": string,"contact_id": string,"converted_at": string | null,"created_at": string,"external_id": string,"id": string,"items": NonNullable<Json>,"organization_id": string,"recovery_url": string | null,"token": string | null,"total": number,"updated_at": string
+                    "abandoned_at": string | null,"closed_at": string | null,"commercial_status": string,"connection_id": string,"contact_id": string,"converted_at": string | null,"created_at": string,"external_id": string,"id": string,"items": NonNullable<Json>,"last_contact_at": string | null,"order_id": string | null,"organization_id": string,"pause_reason": string | null,"paused_at": string | null,"recovery_stage": string,"recovery_url": string | null,"token": string | null,"total": number,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "connection_id": string,"contact_id": string,"converted_at"?: string | null,"created_at"?: string,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"organization_id": string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
+                    "abandoned_at"?: string | null,"closed_at"?: string | null,"commercial_status"?: string,"connection_id": string,"contact_id": string,"converted_at"?: string | null,"created_at"?: string,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"last_contact_at"?: string | null,"order_id"?: string | null,"organization_id": string,"pause_reason"?: string | null,"paused_at"?: string | null,"recovery_stage"?: string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
                   }
                   Update: {
-                    "connection_id"?: string,"contact_id"?: string,"converted_at"?: string | null,"created_at"?: string,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"organization_id"?: string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
+                    "abandoned_at"?: string | null,"closed_at"?: string | null,"commercial_status"?: string,"connection_id"?: string,"contact_id"?: string,"converted_at"?: string | null,"created_at"?: string,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"last_contact_at"?: string | null,"order_id"?: string | null,"organization_id"?: string,"pause_reason"?: string | null,"paused_at"?: string | null,"recovery_stage"?: string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1421,18 +1487,24 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "contacts"
       referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "store_carts_organization_id_order_id_fkey"
+      columns: ["organization_id","order_id"]
+isOneToOne: false
+      referencedRelation: "store_orders"
+      referencedColumns: ["organization_id","id"]
     }
                   ]
                 },"store_connections": {
                   Row: {
-                    "created_at": string,"id": string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
+                    "checkout_hosts": (string)[],"created_at": string,"id": string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
+                    "checkout_hosts"?: (string)[],"created_at"?: string,"id"?: string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"merchant_alias"?: string,"organization_id"?: string,"webhook_secret_id"?: string
+                    "checkout_hosts"?: (string)[],"created_at"?: string,"id"?: string,"merchant_alias"?: string,"organization_id"?: string,"webhook_secret_id"?: string
                   }
                   Relationships: [
                     {
