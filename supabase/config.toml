@@ -16,6 +16,10 @@ import_map = "./functions/deno.json"
 verify_jwt = false
 import_map = "./functions/deno.json"
 
+[functions.yampi-webhook]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
 [functions.send-message]
 verify_jwt = true
 import_map = "./functions/deno.json"
