@@ -445,14 +445,14 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "assigned_to": string | null,"avatar_url": string | null,"created_at": string,"email": string | null,"id": string,"instagram_id": string | null,"last_interaction_at": string | null,"lead_score": number,"name": string | null,"organization_id": string,"phone": string | null,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"updated_at": string,"whatsapp_id": string | null
+                    "assigned_to": string | null,"avatar_url": string | null,"created_at": string,"email": string | null,"email_marketing_opt_out_at": string | null,"id": string,"instagram_id": string | null,"last_interaction_at": string | null,"lead_score": number,"name": string | null,"organization_id": string,"phone": string | null,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"updated_at": string,"whatsapp_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id": string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
+                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id": string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
                   }
                   Update: {
-                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id"?: string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
+                    "assigned_to"?: string | null,"avatar_url"?: string | null,"created_at"?: string,"email"?: string | null,"email_marketing_opt_out_at"?: string | null,"id"?: string,"instagram_id"?: string | null,"last_interaction_at"?: string | null,"lead_score"?: number,"name"?: string | null,"organization_id"?: string,"phone"?: string | null,"source"?: Database["public"]['Enums']["contact_source"],"status"?: Database["public"]['Enums']["contact_status"],"updated_at"?: string,"whatsapp_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -555,6 +555,104 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "pipeline_stages"
       referencedColumns: ["organization_id","pipeline_id","id"]
+    }
+                  ]
+                },"email_journey_steps": {
+                  Row: {
+                    "body": string,"button_label": string,"category": string,"coupon": string,"delay_minutes": number,"enabled": boolean,"heading": string,"id": string,"journey_id": string,"organization_id": string,"position": number,"subject": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body": string,"button_label": string,"category": string,"coupon"?: string,"delay_minutes": number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id": string,"organization_id": string,"position": number,"subject": string
+                  }
+                  Update: {
+                    "body"?: string,"button_label"?: string,"category"?: string,"coupon"?: string,"delay_minutes"?: number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id"?: string,"organization_id"?: string,"position"?: number,"subject"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_journey_steps_organization_id_journey_id_fkey"
+      columns: ["organization_id","journey_id"]
+isOneToOne: false
+      referencedRelation: "email_journeys"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"email_journeys": {
+                  Row: {
+                    "enabled": boolean,"id": string,"kind": string,"organization_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "enabled"?: boolean,"id"?: string,"kind": string,"organization_id": string
+                  }
+                  Update: {
+                    "enabled"?: boolean,"id"?: string,"kind"?: string,"organization_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_journeys_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"email_sends": {
+                  Row: {
+                    "attempts": number,"bounced_at": string | null,"cancel_reason": string | null,"cart_id": string | null,"claimed_at": string | null,"clicked_at": string | null,"contact_id": string,"created_at": string,"delivered_at": string | null,"error_code": string | null,"id": string,"opened_at": string | null,"order_id": string | null,"organization_id": string,"provider_id": string | null,"send_at": string,"sent_at": string | null,"state": string,"step_id": string,"to_email": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"bounced_at"?: string | null,"cancel_reason"?: string | null,"cart_id"?: string | null,"claimed_at"?: string | null,"clicked_at"?: string | null,"contact_id": string,"created_at"?: string,"delivered_at"?: string | null,"error_code"?: string | null,"id"?: string,"opened_at"?: string | null,"order_id"?: string | null,"organization_id": string,"provider_id"?: string | null,"send_at": string,"sent_at"?: string | null,"state"?: string,"step_id": string,"to_email": string
+                  }
+                  Update: {
+                    "attempts"?: number,"bounced_at"?: string | null,"cancel_reason"?: string | null,"cart_id"?: string | null,"claimed_at"?: string | null,"clicked_at"?: string | null,"contact_id"?: string,"created_at"?: string,"delivered_at"?: string | null,"error_code"?: string | null,"id"?: string,"opened_at"?: string | null,"order_id"?: string | null,"organization_id"?: string,"provider_id"?: string | null,"send_at"?: string,"sent_at"?: string | null,"state"?: string,"step_id"?: string,"to_email"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_sends_organization_id_cart_id_fkey"
+      columns: ["organization_id","cart_id"]
+isOneToOne: false
+      referencedRelation: "store_carts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "email_sends_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "email_sends_organization_id_order_id_fkey"
+      columns: ["organization_id","order_id"]
+isOneToOne: false
+      referencedRelation: "store_orders"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "email_sends_organization_id_step_id_fkey"
+      columns: ["organization_id","step_id"]
+isOneToOne: false
+      referencedRelation: "email_journey_steps"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"email_suppressions": {
+                  Row: {
+                    "created_at": string,"email": string,"organization_id": string,"reason": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"email": string,"organization_id": string,"reason": string
+                  }
+                  Update: {
+                    "created_at"?: string,"email"?: string,"organization_id"?: string,"reason"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_suppressions_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
     }
                   ]
                 },"entry_link_hits": {
@@ -1259,6 +1357,98 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"store_carts": {
+                  Row: {
+                    "connection_id": string,"contact_id": string,"converted_at": string | null,"created_at": string,"external_id": string,"id": string,"items": NonNullable<Json>,"organization_id": string,"recovery_url": string | null,"token": string | null,"total": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "connection_id": string,"contact_id": string,"converted_at"?: string | null,"created_at"?: string,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"organization_id": string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
+                  }
+                  Update: {
+                    "connection_id"?: string,"contact_id"?: string,"converted_at"?: string | null,"created_at"?: string,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"organization_id"?: string,"recovery_url"?: string | null,"token"?: string | null,"total"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "store_carts_organization_id_connection_id_fkey"
+      columns: ["organization_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "store_connections"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "store_carts_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"store_connections": {
+                  Row: {
+                    "created_at": string,"id": string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"merchant_alias": string,"organization_id": string,"webhook_secret_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"merchant_alias"?: string,"organization_id"?: string,"webhook_secret_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "store_connections_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"store_events": {
+                  Row: {
+                    "body_hash": string,"connection_id": string,"event": string,"id": string,"organization_id": string,"received_at": string,"resource_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body_hash": string,"connection_id": string,"event": string,"id"?: string,"organization_id": string,"received_at"?: string,"resource_id": string
+                  }
+                  Update: {
+                    "body_hash"?: string,"connection_id"?: string,"event"?: string,"id"?: string,"organization_id"?: string,"received_at"?: string,"resource_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "store_events_organization_id_connection_id_fkey"
+      columns: ["organization_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "store_connections"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"store_orders": {
+                  Row: {
+                    "cart_token": string | null,"connection_id": string,"contact_id": string,"created_at": string,"external_id": string,"id": string,"items": NonNullable<Json>,"number": string,"organization_id": string,"paid_at": string | null,"payment_alias": string | null,"status_alias": string | null,"total": number,"track_code": string | null,"track_url": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cart_token"?: string | null,"connection_id": string,"contact_id": string,"created_at"?: string,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"number": string,"organization_id": string,"paid_at"?: string | null,"payment_alias"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "cart_token"?: string | null,"connection_id"?: string,"contact_id"?: string,"created_at"?: string,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"number"?: string,"organization_id"?: string,"paid_at"?: string | null,"payment_alias"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "store_orders_organization_id_connection_id_fkey"
+      columns: ["organization_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "store_connections"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "store_orders_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
                 },"tags": {
                   Row: {
                     "color": string,"created_at": string,"id": string,"name": string,"organization_id": string,"updated_at": string
@@ -1521,6 +1711,9 @@ isOneToOne: false
 "ingest_instagram_event":
 { Args: { "p_connection_id": string,"p_event": Json }; Returns: Json
                            },
+"ingest_yampi_event":
+{ Args: { "p_body_hash": string,"p_connection": string,"p_event": Json }; Returns: Json
+                           },
 "instagram_keyword_matches":
 { Args: { "p_keyword": string,"p_text": string }; Returns: boolean
                            },
@@ -1609,6 +1802,9 @@ isOneToOne: false
 "read_meta_connection_secrets":
 { Args: { "p_connection_id": string }; Returns: Json
                            },
+"read_yampi_connection":
+{ Args: { "p_connection": string }; Returns: Json
+                           },
 "record_instagram_username":
 { Args: { "p_channel_id": string,"p_username": string }; Returns: undefined
                            },
@@ -1654,6 +1850,9 @@ isOneToOne: false
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
                            },
+"save_email_journey_step":
+{ Args: { "p_input": Json,"p_org": string,"p_step": string }; Returns: undefined
+                           },
 "save_entry_link":
 { Args: { "p_id": string,"p_input": Json,"p_org": string }; Returns: string
                            },
@@ -1678,6 +1877,9 @@ isOneToOne: false
 "save_sequence":
 { Args: { "p_id": string,"p_name": string,"p_org": string,"p_settings": Json,"p_steps": Json }; Returns: string
                            },
+"save_store_connection":
+{ Args: { "p_alias": string,"p_org": string,"p_secret": string }; Returns: string
+                           },
 "schedule_campaign":
 { Args: { "p_at": string,"p_id": string }; Returns: undefined
                            },
@@ -1685,6 +1887,9 @@ isOneToOne: false
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
               "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
             }[]
+                           },
+"set_email_journey_enabled":
+{ Args: { "p_enabled": boolean,"p_kind": string,"p_org": string }; Returns: string
                            },
 "set_instagram_username":
 { Args: { "p_channel": string,"p_username": string }; Returns: undefined
