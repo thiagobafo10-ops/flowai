@@ -182,8 +182,9 @@ begin
         converted_at=coalesce(public.store_carts.converted_at,excluded.converted_at),
         abandoned_at=coalesce(public.store_carts.abandoned_at,excluded.abandoned_at),
         order_id=coalesce(public.store_carts.order_id,excluded.order_id),
-        commercial_status=case when public.store_carts.order_id is null then excluded.commercial_status
-          else public.store_carts.commercial_status end
+        -- pago nunca reabre, mesmo se o pedido foi apagado (order_id null)
+        commercial_status=case when public.store_carts.commercial_status='paid' or public.store_carts.order_id is not null
+          then public.store_carts.commercial_status else excluded.commercial_status end
       returning * into v_cart;
     if v_cart.converted_at is null
        and not exists(select 1 from public.email_sends where cart_id=v_cart.id) then
@@ -209,13 +210,14 @@ begin
       track_url=coalesce(excluded.track_url,public.store_orders.track_url)
     returning * into v_order;
 
-  if v_res->>'cartToken' is not null then
+  -- token gravado no pedido: o evento de pagamento pode vir sem cartToken
+  if v_order.cart_token is not null then
     with converted as (
       update public.store_carts set converted_at=coalesce(converted_at,now()),
         -- carrinho pago mantém o pedido que o pagou
         order_id=case when commercial_status='paid' then coalesce(order_id,v_order.id) else v_order.id end,
         commercial_status=private.cart_commercial_status(commercial_status,v_order.paid_at is not null,v_order.status_alias)
-      where connection_id=v_conn.id and token=v_res->>'cartToken' returning id)
+      where connection_id=v_conn.id and token=v_order.cart_token returning id)
     update public.email_sends set state='cancelled', cancel_reason='converted'
       where state='scheduled' and cart_id in (select id from converted);
   end if;

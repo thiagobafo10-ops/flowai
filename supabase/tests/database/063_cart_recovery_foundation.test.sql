@@ -96,6 +96,20 @@ select pg_temp.cart(:'conn','c5','tk5','bia@ex.com',null,null,'h13') as c5 \gset
 select pg_temp.ord(:'conn','order.paid','o5',null,'bia@ex.com',true,'paid','h14');
 select is((select commercial_status||'/'||coalesce(order_id::text,'-') from public.store_carts where id=:'c5'),'abandoned/-','unreconciled payment does not mark cart paid');
 
+-- Pagamento chega sem cartToken num pedido já associado: vale o cart_token gravado no pedido.
+select pg_temp.cart(:'conn','ca','tka','fia@ex.com',null,'https://allowed.host/r/ca','h15') as ca \gset
+select pg_temp.perm(:'ca','granted',:'ua');
+select pg_temp.ord(:'conn','order.created','oa','tka','fia@ex.com',false,'waiting_payment','h16');
+select pg_temp.ord(:'conn','order.paid','oa',null,'fia@ex.com',true,'paid','h17');
+select is(pg_temp.st(:'ca'),'paid','paid event without cartToken uses the stored order cart_token');
+select is(pg_temp.reason(:'ca'),'Pagamento confirmado','paid via stored cart_token blocks WhatsApp');
+
+-- Carrinho pago cujo pedido sumiu (order_id null) não reabre com reminder tardio.
+delete from public.store_orders where external_id='o9';
+select is((select order_id from public.store_carts where id=:'c9'),null,'paid cart lost its order reference');
+select pg_temp.cart(:'conn','c9','tk9','eva@ex.com',null,'https://allowed.host/r/c9','h18');
+select is(pg_temp.st(:'c9'),'paid','late reminder never reopens a paid cart without order');
+
 -- Pedido apagado: o carrinho perde só a referência.
 delete from public.store_orders where external_id='o3';
 select is((select order_id from public.store_carts where id=:'c3'),null,'deleted order sets order_id null');
