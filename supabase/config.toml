@@ -40,6 +40,18 @@ import_map = "./functions/deno.json"
 verify_jwt = true
 import_map = "./functions/deno.json"
 
+[functions.email-worker]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.email-admin]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.resend-webhook]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
 [api]
 enabled = true
 # Port to use for the API URL.
