@@ -67,7 +67,7 @@ const followUpSchema = z.object({
 export const automationSpecSchema = z
   .object({
     nome: z.string().trim().min(1, "Informe o nome da automação.").max(100, "O nome deve ter no máximo 100 caracteres."),
-    gatilho: z.enum(["comentario", "dm", "story"], { message: 'O gatilho deve ser "comentario", "dm" ou "story".' }),
+    gatilho: z.enum(["comentario", "live", "dm", "story"], { message: 'O gatilho deve ser "comentario", "live", "dm" ou "story".' }),
     palavras: z
       .array(
         z
@@ -95,7 +95,14 @@ export const automationSpecSchema = z
     umaVezPorContato: z.boolean().default(true),
   })
   .superRefine((spec, ctx) => {
-    if (spec.gatilho !== "comentario") {
+    if (spec.gatilho === "live") {
+      if (spec.respostaPublica.length > 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["respostaPublica"], message: "A Meta não permite resposta pública em comentário de live." });
+      }
+      if (spec.post !== "qualquer") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["post"], message: "Comentários de live valem para qualquer live; não escolha um post." });
+      }
+    } else if (spec.gatilho !== "comentario") {
       if (spec.respostaPublica.length > 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -112,7 +119,7 @@ export const automationSpecSchema = z
       }
     }
     // Limite do Instagram: mensagens com botões aceitam até 640 caracteres (validate.ts / instagram.ts).
-    const opening = spec.gatilho === "comentario" && !!spec.followUp;
+    const opening = (spec.gatilho === "comentario" || spec.gatilho === "live") && !!spec.followUp;
     if ((spec.dm.botoes.length > 0 || opening) && [...spec.dm.texto].length > BUTTON_TEXT_MAX_CHARS) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -153,6 +160,7 @@ export function mergeSpec(base: AutomationSpec, patch: SpecPatch): AutomationSpe
 
 const GATILHO_LABEL: Record<AutomationSpec["gatilho"], string> = {
   comentario: "comentário no Instagram",
+  live: "comentário em live",
   dm: "mensagem direta (DM)",
   story: "resposta a story",
 };
@@ -184,6 +192,9 @@ export function specToTrigger(spec: AutomationSpec, ctx: Ctx): SpecTrigger {
   const oncePerUser = spec.umaVezPorContato;
   if (spec.gatilho === "story") return { type: "instagram_story", config: { channelId: ctx.channelId, oncePerUser } };
   if (spec.gatilho === "dm") return { type: "keyword_detected", config: { ...words, oncePerUser } };
+  if (spec.gatilho === "live") {
+    return { type: "instagram_comment", config: { channelId: ctx.channelId, mediaId: null, ...words, oncePerUser, source: "lives" } };
+  }
   return {
     type: "instagram_comment",
     config: {
@@ -224,7 +235,7 @@ export function specToGraph(spec: AutomationSpec, _ctx: Ctx): AutomationGraph {
     throw new Error(`Espera do follow-up inválida ("${spec.followUp.depois}"): use entre 1 minuto e 7 dias, como 30min, 2h ou 1d.`);
   }
   // Regra da Meta: após a Private Reply só cabe uma mensagem até a pessoa interagir → botão de abertura.
-  const needsOpening = spec.gatilho === "comentario" && !!spec.followUp;
+  const needsOpening = (spec.gatilho === "comentario" || spec.gatilho === "live") && !!spec.followUp;
 
   add("t", "trigger", {});
   let tail = "t";

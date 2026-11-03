@@ -21,7 +21,8 @@ export function statusLabel(status: string): string {
 }
 
 /** Gatilho no vocabulário do formato simples; outros gatilhos do painel ficam como "outro (<tipo>)". */
-export function triggerLabel(type: string): string {
+export function triggerLabel(type: string, config?: unknown): string {
+  if (type === "instagram_comment" && (config as { source?: unknown } | null)?.source === "lives") return "live";
   return Object.hasOwn(TRIGGER_LABEL, type) ? TRIGGER_LABEL[type] : `outro (${type})`;
 }
 
@@ -92,7 +93,7 @@ export function registerAutomationReadTools(server: McpServer, ctx: McpContext):
         id: a.id,
         nome: a.name,
         status: statusLabel(a.status),
-        gatilho: triggerLabel(a.trigger_type),
+        gatilho: triggerLabel(a.trigger_type, a.trigger_config),
         palavras: triggerWords(a.trigger_config),
         post: triggerPost(a.trigger_type, a.trigger_config),
         criadaPeloClaude: a.mcp_spec !== null,
