@@ -21,6 +21,10 @@ export async function sendResendEmail(fetcher: typeof fetch, key: string, msg: R
       const id = (body as { id?: unknown } | null)?.id;
       return typeof id === "string" && id ? { ok: true, id } : { ok: false, retry: true, code: "invalid_response" };
     }
+    // Only the error name is read: same key still in flight → retry later; same key, other payload → never.
+    const name = (body as { name?: unknown } | null)?.name;
+    if (response.status === 409 && name === "concurrent_idempotent_requests") return { ok: false, retry: true, code: "idempotency_in_flight" };
+    if (response.status === 409 && name === "invalid_idempotent_request") return { ok: false, retry: false, code: "idempotency_conflict" };
     return { ok: false, retry: response.status === 429 || response.status >= 500, code: `http_${response.status}` };
   } catch { return { ok: false, retry: true, code: "network_error" }; }
 }

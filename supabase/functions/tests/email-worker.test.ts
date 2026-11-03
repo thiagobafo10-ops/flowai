@@ -64,6 +64,21 @@ Deno.test("429 and network errors complete as retry; 422 completes as failed", a
   assert(down.completed[0]![1] === "retry", JSON.stringify(down.completed));
 });
 
+Deno.test("5xx completes as retry", async () => {
+  const f = fixture(() => new Response("{}", { status: 503 }));
+  await handleEmailWorker(f.request(), f.deps);
+  assert(f.completed[0]![1] === "retry" && f.completed[0]![3] === "http_503", JSON.stringify(f.completed));
+});
+
+Deno.test("409 concurrent_idempotent_requests retries; 409 invalid_idempotent_request fails as idempotency_conflict", async () => {
+  const concurrent = fixture(() => Response.json({ name: "concurrent_idempotent_requests", message: "x" }, { status: 409 }));
+  await handleEmailWorker(concurrent.request(), concurrent.deps);
+  assert(concurrent.completed[0]![1] === "retry", JSON.stringify(concurrent.completed));
+  const invalid = fixture(() => Response.json({ name: "invalid_idempotent_request", message: "x" }, { status: 409 }));
+  await handleEmailWorker(invalid.request(), invalid.deps);
+  assert(invalid.completed[0]![1] === "failed" && invalid.completed[0]![3] === "idempotency_conflict", JSON.stringify(invalid.completed));
+});
+
 Deno.test("marketing carries both List-Unsubscribe headers and the unsubscribe link", async () => {
   const f = fixture(() => Response.json({ id: "r2" }), [claimed("marketing")]);
   await handleEmailWorker(f.request(), f.deps);
