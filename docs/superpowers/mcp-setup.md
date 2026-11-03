@@ -233,6 +233,8 @@ Regras:
 - A Meta só aceita a DM **enquanto a live está no ar** e não permite resposta pública em comentário de live.
 - A automação vale para qualquer live (não há escolha de post).
 
+Deploy: `npx supabase functions deploy meta-webhook` (lê o campo `live_comments`), `instagram-worker` (aceita mídia LIVE) e `meta-connection` (assina o campo), depois `npx supabase db push`. Sem o `meta-webhook` novo, os comentários da live chegam e são ignorados como `unsupported_change`.
+
 Ativação (uma vez):
 1. Painel da Meta → app → Webhooks (Instagram) → marcar o campo `live_comments`.
 2. FlowAI → Canais → **Testar conexão** (reassina os campos, agora incluindo `live_comments`).
