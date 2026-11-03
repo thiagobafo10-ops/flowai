@@ -165,29 +165,50 @@ function TriggerFields({ type, config, channels, refs, onChange }: {
           {keywordSection}
         </div>
       );
-    case "instagram_comment":
+    case "instagram_comment": {
+      const source = watch("source");
       return (
         <div className="space-y-4">
           {channelField}
-          <InstagramMediaPicker
-            channelId={watch("channelId")}
-            value={watch("mediaId")}
-            onChange={(mediaId) => setValue("mediaId", mediaId, { shouldValidate: true })}
-            error={err("mediaId")}
-          />
-          {oncePerUserField("Evita enviar mensagens repetidas caso a mesma pessoa comente mais de uma vez na publicação.")}
+          <Field
+            id="trigger-source"
+            label="Onde"
+            hint={source === "lives" ? "Só envia enquanto a live estiver no ar." : source === "both" ? "Respostas públicas valem só para posts." : undefined}
+          >
+            <select id="trigger-source" className={selectClass} {...register("source")}>
+              <option value="posts">Posts</option>
+              <option value="lives">Lives</option>
+              <option value="both">Posts e lives</option>
+            </select>
+          </Field>
+          {source === "posts" && (
+            <InstagramMediaPicker
+              channelId={watch("channelId")}
+              value={watch("mediaId")}
+              onChange={(mediaId) => setValue("mediaId", mediaId, { shouldValidate: true })}
+              error={err("mediaId")}
+            />
+          )}
+          {oncePerUserField(
+            source === "posts"
+              ? "Evita enviar mensagens repetidas caso a mesma pessoa comente mais de uma vez na publicação."
+              : "Na live, cada pessoa recebe uma vez por live.",
+          )}
           {keywordSection}
-          <PublicRepliesField
-            control={control}
-            errors={errors}
-            enabled={watch("publicReplyEnabled")}
-            onToggle={(on) => {
-              setValue("publicReplyEnabled", on, { shouldValidate: true });
-              if (on && watch("publicReplies").length === 0) setValue("publicReplies", [""], { shouldValidate: true });
-            }}
-          />
+          {source !== "lives" && (
+            <PublicRepliesField
+              control={control}
+              errors={errors}
+              enabled={watch("publicReplyEnabled")}
+              onToggle={(on) => {
+                setValue("publicReplyEnabled", on, { shouldValidate: true });
+                if (on && watch("publicReplies").length === 0) setValue("publicReplies", [""], { shouldValidate: true });
+              }}
+            />
+          )}
         </div>
       );
+    }
     case "instagram_story":
       return (
         <div className="space-y-4">
