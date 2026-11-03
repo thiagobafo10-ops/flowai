@@ -635,6 +635,26 @@ isOneToOne: false
       referencedColumns: ["organization_id","id"]
     }
                   ]
+                },"email_settings": {
+                  Row: {
+                    "domain_status": string | null,"from_email": string,"from_name": string,"organization_id": string,"reply_to": string | null,"resend_key_secret_id": string | null,"resend_webhook_secret_id": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "domain_status"?: string | null,"from_email": string,"from_name": string,"organization_id": string,"reply_to"?: string | null,"resend_key_secret_id"?: string | null,"resend_webhook_secret_id"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "domain_status"?: string | null,"from_email"?: string,"from_name"?: string,"organization_id"?: string,"reply_to"?: string | null,"resend_key_secret_id"?: string | null,"resend_webhook_secret_id"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_settings_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"email_suppressions": {
                   Row: {
                     "created_at": string,"email": string,"organization_id": string,"reason": string
@@ -653,6 +673,26 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"email_unsubscribe_tokens": {
+                  Row: {
+                    "contact_id": string,"organization_id": string,"token": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "contact_id": string,"organization_id": string,"token"?: string
+                  }
+                  Update: {
+                    "contact_id"?: string,"organization_id"?: string,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_unsubscribe_tokens_organization_id_contact_id_fkey"
+      columns: ["organization_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["organization_id","id"]
     }
                   ]
                 },"entry_link_hits": {
@@ -1577,6 +1617,9 @@ isOneToOne: false
 "claim_automation_runs":
 { Args: { "p_limit": number }; Returns: Json
                            },
+"claim_email_sends":
+{ Args: { "p_limit": number }; Returns: Json
+                           },
 "claim_instagram_comment_public_reply":
 { Args: { "p_comment_at": string,"p_expected_connection_id": string,"p_expected_generation": number,"p_reply_id": string }; Returns: Json
                            },
@@ -1597,6 +1640,9 @@ isOneToOne: false
                            },
 "complete_ai_reply":
 { Args: { "p_job": string,"p_result": Json,"p_token": string }; Returns: Json
+                           },
+"complete_email_send":
+{ Args: { "p_error": string,"p_provider_id": string,"p_result": string,"p_send": string }; Returns: undefined
                            },
 "complete_index_document":
 { Args: { "p_chunks": Json,"p_job": string,"p_token": string }; Returns: string
@@ -1658,6 +1704,9 @@ isOneToOne: false
 "dispatch_automation_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"dispatch_email_worker":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "dispatch_instagram_worker":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -1666,6 +1715,9 @@ isOneToOne: false
                            },
 "duplicate_automation":
 { Args: { "p_id": string }; Returns: string
+                           },
+"email_journey_results":
+{ Args: { "p_from": string,"p_org": string,"p_to": string }; Returns: Json
                            },
 "emit_event":
 { Args: { "p_contact_id": string,"p_conversation_id": string,"p_deal_id": string,"p_org": string,"p_payload"?: Json,"p_type": string }; Returns: undefined
@@ -1793,6 +1845,9 @@ isOneToOne: false
 "read_automation_worker_config":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
+"read_email_settings_secret":
+{ Args: { "p_org": string }; Returns: Json
+                           },
 "read_instagram_work":
 { Args: { "p_limit": number }; Returns: Json
                            },
@@ -1802,8 +1857,17 @@ isOneToOne: false
 "read_meta_connection_secrets":
 { Args: { "p_connection_id": string }; Returns: Json
                            },
+"read_resend_webhook_secrets":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "read_yampi_connection":
 { Args: { "p_connection": string }; Returns: Json
+                           },
+"record_email_domain_status":
+{ Args: { "p_org": string,"p_status": string }; Returns: undefined
+                           },
+"record_email_event":
+{ Args: { "p_at": string,"p_provider_id": string,"p_type": string }; Returns: undefined
                            },
 "record_instagram_username":
 { Args: { "p_channel_id": string,"p_username": string }; Returns: undefined
@@ -1852,6 +1916,9 @@ isOneToOne: false
                            },
 "save_email_journey_step":
 { Args: { "p_input": Json,"p_org": string,"p_step": string }; Returns: undefined
+                           },
+"save_email_settings":
+{ Args: { "p_input": Json,"p_org": string }; Returns: undefined
                            },
 "save_entry_link":
 { Args: { "p_id": string,"p_input": Json,"p_org": string }; Returns: string
@@ -1932,6 +1999,9 @@ isOneToOne: false
                            },
 "sweep_outreach_deliveries":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"unsubscribe_email":
+{ Args: { "p_token": string }; Returns: boolean
                            },
 "verify_instagram_media":
 { Args: { "p_channel_id": string,"p_connection_id": string,"p_generation": number,"p_media_id": string }; Returns: undefined
