@@ -1,0 +1,28 @@
+{
+  "event": "cart.reminder",
+  "time": "2026-11-03 10:15:00",
+  "merchant": { "id": 1234, "alias": "loja-exemplo" },
+  "resource": {
+    "id": 98765,
+    "token": "TOKENCARRINHO123",
+    "simulate_url": "https://seguro.loja-exemplo.com.br/r/ABC123",
+    "totalizers": { "total": 189.8 },
+    "customer": {
+      "data": {
+        "email": "  Maria.Silva@Example.COM ",
+        "name": "Maria da Silva",
+        "first_name": "Maria",
+        "phone": { "full_number": "5511999990000" }
+      }
+    },
+    "items": {
+      "data": [
+        {
+          "quantity": 2,
+          "price": 94.9,
+          "sku": { "data": { "title": "Camiseta Exemplo", "sku": "CAM-001", "price_sale": 94.9 } }
+        }
+      ]
+    }
+  }
+}

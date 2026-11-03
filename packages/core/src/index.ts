@@ -20,3 +20,4 @@ export * from "./growth/index.ts";
 export * from "./analytics/index.ts";
 export * from "./ops/index.ts";
 export * from "./mcp/automation-spec.ts";
+export * from "./store/yampi.ts";

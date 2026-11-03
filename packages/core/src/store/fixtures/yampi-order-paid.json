@@ -1,0 +1,27 @@
+{
+  "event": "order.created",
+  "time": "2026-11-03 11:00:00",
+  "merchant": { "id": 1234, "alias": "loja-exemplo" },
+  "resource": {
+    "id": 55501,
+    "number": 10234,
+    "status": { "data": { "alias": "paid" } },
+    "payments": [{ "alias": "pix" }],
+    "value_total": 189.8,
+    "cart_token": "TOKENCARRINHO123",
+    "track_code": "BR123456789XX",
+    "track_url": "https://rastreio.example.com/BR123456789XX",
+    "customer": {
+      "data": {
+        "email": "maria.silva@example.com",
+        "name": "Maria da Silva",
+        "phone": { "full_number": "5511999990000" }
+      }
+    },
+    "items": {
+      "data": [
+        { "quantity": 2, "price": 94.9, "sku": { "data": { "title": "Camiseta Exemplo" } } }
+      ]
+    }
+  }
+}
