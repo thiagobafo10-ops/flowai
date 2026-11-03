@@ -150,3 +150,22 @@ test("resposta pública: switch ligado sem variação não salva como desligado"
     if (!parsed.success) expect(parsed.error.issues.map((i) => i.message)).toContain("Informe ao menos uma variação.");
   }
 });
+
+test("origem: ausente vira posts e posts não grava a chave", () => {
+  const values = triggerToValues({ channelId, mediaId: null, keywords: ["a"], mode: "contains" });
+  expect(values.source).toBe("posts");
+  expect(triggerToConfig("instagram_comment", values)).not.toHaveProperty("source");
+});
+
+test("origem lives grava source e descarta post e respostas públicas", () => {
+  const values = { ...triggerToValues({ channelId, mediaId: "123", keywords: ["a"], mode: "contains", publicReplies: ["oi"] }), source: "lives" as const };
+  const config = triggerToConfig("instagram_comment", values);
+  expect(config).toMatchObject({ source: "lives", mediaId: null, publicReplies: [] });
+  expect(triggerConfigSchemas.instagram_comment.safeParse(config).success).toBe(true);
+});
+
+test("origem both grava source, descarta o post e mantém respostas públicas", () => {
+  const values = { ...triggerToValues({ channelId, mediaId: "123", keywords: ["a"], mode: "contains", publicReplies: ["oi"] }), source: "both" as const };
+  expect(triggerToConfig("instagram_comment", values)).toMatchObject({ source: "both", mediaId: null, publicReplies: ["oi"] });
+  expect(triggerToValues({ channelId, source: "both" }).source).toBe("both");
+});

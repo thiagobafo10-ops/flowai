@@ -96,10 +96,18 @@ export const triggerConfigSchemas: Record<TriggerType, z.ZodType> = {
       mode: keywordModeSchema,
       oncePerUser: z.boolean().optional(),
       publicReplies: publicRepliesSchema.optional(),
+      source: z.enum(["posts", "lives", "both"]).optional(),
     })
     .superRefine((data, ctx) => {
       if (!data.anyKeyword && data.mode !== "any" && data.keywords.length === 0) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["keywords"], message: "Informe ao menos uma palavra-chave." });
+      }
+      // A live não tem id antes de começar; em "both" um post fixo nunca casaria com a live.
+      if ((data.source === "lives" || data.source === "both") && data.mediaId !== null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mediaId"], message: "Comentários de live valem para qualquer live; não escolha um post." });
+      }
+      if (data.source === "lives" && (data.publicReplies?.length ?? 0) > 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicReplies"], message: "A Meta não permite resposta pública em comentário de live." });
       }
     }),
   instagram_story: z.object({ channelId: uuid, oncePerUser: z.boolean().optional() }),

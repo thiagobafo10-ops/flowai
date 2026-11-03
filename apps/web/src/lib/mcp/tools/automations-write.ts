@@ -64,8 +64,10 @@ const followUpInput = z.object({
 const specInputShape = {
   nome: z.string().describe("Nome da automação (1 a 100 caracteres)."),
   gatilho: z
-    .enum(["comentario", "dm", "story"])
-    .describe("comentario: palavra em comentário de post; dm: palavra em mensagem direta; story: resposta a story."),
+    .enum(["comentario", "live", "dm", "story"])
+    .describe(
+      "comentario: palavra em comentário de post; live: comentário durante uma live (DM uma vez por live, só enquanto a live está no ar; sem post nem resposta pública); dm: palavra em mensagem direta; story: resposta a story.",
+    ),
   palavras: z.array(z.string()).optional().describe("Palavras que disparam (até 20). Vazio = qualquer texto."),
   post: z.string().optional().describe('Id do post ou "qualquer". Só no gatilho comentario.'),
   respostaPublica: z
@@ -278,7 +280,8 @@ function configChannel(config: Record<string, unknown> | null): string {
 function triggerSignature(trigger: Trigger): string | null {
   if (trigger.type === "instagram_comment") {
     const media = typeof trigger.config.mediaId === "string" && trigger.config.mediaId ? trigger.config.mediaId : "*";
-    return `comment:${configChannel(trigger.config)}:${wordsSignature(trigger.config)}:${media}`;
+    const source = typeof trigger.config.source === "string" ? trigger.config.source : "posts";
+    return `comment:${configChannel(trigger.config)}:${wordsSignature(trigger.config)}:${media}:${source}`;
   }
   if (trigger.type === "keyword_detected") return `dm:${wordsSignature(trigger.config)}`;
   if (trigger.type === "instagram_story") return `story:${configChannel(trigger.config)}`;
@@ -346,7 +349,7 @@ function rowItem(row: AutomationRow, status: string): AutomationItem {
     id: row.id,
     nome: row.name,
     status: statusLabel(status),
-    gatilho: triggerLabel(row.trigger_type),
+    gatilho: triggerLabel(row.trigger_type, row.trigger_config),
     palavras: triggerWords(row.trigger_config),
     post: triggerPost(row.trigger_type, row.trigger_config),
     criadaPeloClaude: row.mcp_spec !== null,

@@ -242,3 +242,28 @@ describe("mergeSpec and summarizeSpec", () => {
     expect(summary.split("\n").length).toBeLessThanOrEqual(6);
   });
 });
+
+describe("gatilho live", () => {
+  const msgs = (over: Record<string, unknown>) => {
+    const r = parse(over);
+    return r.success ? [] : r.error.issues.map((i) => i.message);
+  };
+  it("maps to a comment trigger on lives without post or public replies", () => {
+    const spec = parsed({ gatilho: "live", palavras: [] });
+    expect(specToTrigger(spec, ctx)).toEqual({
+      type: "instagram_comment",
+      config: { channelId: CHANNEL, mediaId: null, anyKeyword: true, keywords: [], mode: "any", oncePerUser: true, source: "lives" },
+    });
+  });
+  it("rejects public replies and a post", () => {
+    expect(msgs({ gatilho: "live", respostaPublica: ["oi"] })).toContain("A Meta não permite resposta pública em comentário de live.");
+    expect(msgs({ gatilho: "live", post: "123" })).toContain("Comentários de live valem para qualquer live; não escolha um post.");
+  });
+  it("uses the opening button with a follow-up", () => {
+    const graph = specToGraph(parsed({ gatilho: "live", followUp: { depois: "2h", texto: "Lembrete" } }), ctx);
+    expect(graph.nodes.find((n) => n.id === "m1")?.config).toMatchObject({ buttons: [{ kind: "path" }] });
+  });
+  it("summarizes as a live comment", () => {
+    expect(summarizeSpec(parsed({ gatilho: "live" }))).toContain("comentário em live");
+  });
+});

@@ -102,6 +102,27 @@ describe("triggers", () => {
       triggerConfigSchemas.instagram_comment.safeParse({ channelId: uuid, mediaId: null, keywords: [], mode: "contains" }).success,
     ).toBe(false);
   });
+  describe("instagram_comment source", () => {
+    const base = { channelId: uuid, mediaId: null, anyKeyword: true, keywords: [], mode: "any" };
+    const messages = (r: { success: boolean; error?: { issues: { message: string }[] } }) => r.error?.issues.map((i) => i.message) ?? [];
+    it("accepts lives without a post or public replies", () => {
+      expect(triggerConfigSchemas.instagram_comment.safeParse({ ...base, source: "lives" }).success).toBe(true);
+    });
+    it("rejects a post on lives", () => {
+      const r = triggerConfigSchemas.instagram_comment.safeParse({ ...base, source: "lives", mediaId: "123" });
+      expect(messages(r)).toContain("Comentários de live valem para qualquer live; não escolha um post.");
+      const both = triggerConfigSchemas.instagram_comment.safeParse({ ...base, source: "both", mediaId: "123" });
+      expect(messages(both)).toContain("Comentários de live valem para qualquer live; não escolha um post.");
+    });
+    it("rejects public replies on lives", () => {
+      const r = triggerConfigSchemas.instagram_comment.safeParse({ ...base, source: "lives", publicReplies: ["oi"] });
+      expect(messages(r)).toContain("A Meta não permite resposta pública em comentário de live.");
+    });
+    it("keeps configs without source valid", () => {
+      expect(triggerConfigSchemas.instagram_comment.safeParse(base).success).toBe(true);
+      expect(triggerConfigSchemas.instagram_comment.safeParse({ ...base, source: "outro" }).success).toBe(false);
+    });
+  });
   describe("instagram_comment publicReplies", () => {
     const NBSP = String.fromCharCode(0xa0);
     const IDEOGRAPHIC_SPACE = String.fromCharCode(0x3000);

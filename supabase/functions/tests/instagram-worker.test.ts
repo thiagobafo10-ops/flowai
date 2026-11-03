@@ -55,6 +55,20 @@ Deno.test("comment on a boosted ad post (media_product_type AD) receives the pri
     : fetcher(input, init);
   assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1);
 });
+Deno.test("comment on a live (media_product_type LIVE) receives the private reply", async () => {
+  const f = fixture(); const fetcher = f.deps.fetch;
+  f.deps.fetch = async (input, init) => String(input).includes("/123?")
+    ? Response.json({ id: "123", timestamp: "2026-10-11T12:00:00+0000", from: { id: "900" }, media: { id: "456", media_product_type: "LIVE" } })
+    : fetcher(input, init);
+  assert(await processInstagramWork(f.work, f.deps) === "done"); assert(f.sends() === 1);
+});
+Deno.test("comment on a story-like product type stays ineligible", async () => {
+  const f = fixture(); const fetcher = f.deps.fetch;
+  f.deps.fetch = async (input, init) => String(input).includes("/123?")
+    ? Response.json({ id: "123", timestamp: "2026-10-11T12:00:00+0000", from: { id: "900" }, media: { id: "456", media_product_type: "STORY" } })
+    : fetcher(input, init);
+  assert(await processInstagramWork(f.work, f.deps) === "ignored"); assert(f.sends() === 0);
+});
 Deno.test("ad comment verifies ownership against the original media id", async () => {
   const f = fixture(); const prepare = f.deps.prepare; const ownership: string[] = [];
   f.deps.prepare = async (id) => { const p = await prepare(id); return p ? { ...p, mediaId: "ad1", originalMediaId: "456" } : null; };

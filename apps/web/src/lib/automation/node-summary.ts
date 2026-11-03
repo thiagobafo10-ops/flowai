@@ -38,7 +38,9 @@ export function triggerSummary(type: TriggerType, config: unknown, refs: EditorR
       break;
     case "instagram_comment":
       lines.push(nameOf(refs.channels, c.channelId, "Escolha o canal"), keywords(c));
-      if (c.oncePerUser !== false) lines.push("Uma vez por pessoa");
+      if (c.source === "lives") lines.push("Na live");
+      if (c.source === "both") lines.push("Em post ou live");
+      if (c.oncePerUser !== false) lines.push(c.source === "lives" || c.source === "both" ? "Uma vez por pessoa (por live)" : "Uma vez por pessoa");
       if (Array.isArray(c.publicReplies) && c.publicReplies.length > 0) lines.push("+ resposta pública");
       break;
     case "instagram_story":

@@ -123,6 +123,7 @@ export function delayToConfig(v: DelayValues): unknown {
 }
 
 // ── Gatilho ────────────────────────────────────────────────────────────
+export type CommentSource = "posts" | "lives" | "both";
 export type TriggerValues = {
   firstMessageOnly: boolean;
   oncePerUser: boolean;
@@ -133,6 +134,7 @@ export type TriggerValues = {
   mode: string;
   channelId: string;
   mediaId: string;
+  source: CommentSource;
   tagId: string;
   stageId: string;
   linkIds: string[];
@@ -156,6 +158,7 @@ export function triggerToValues(config: unknown, type?: TriggerType): TriggerVal
     mode: isAny ? "any" : str(c.mode, "contains"),
     channelId: str(c.channelId),
     mediaId: str(c.mediaId),
+    source: c.source === "lives" || c.source === "both" ? c.source : "posts",
     tagId: str(c.tagId),
     stageId: str(c.stageId),
     linkIds: Array.isArray(c.linkIds) ? c.linkIds.filter((id): id is string => typeof id === "string") : [],
@@ -173,18 +176,22 @@ export function triggerToConfig(type: TriggerType, v: TriggerValues): unknown {
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
         ...(v.oncePerUser === true ? { oncePerUser: true } : {}),
       };
-    case "instagram_comment":
+    case "instagram_comment": {
+      const live = v.source === "lives" || v.source === "both";
       return {
         channelId: v.channelId,
-        mediaId: v.mediaId?.trim() || null,
+        // Live não tem id antes de começar: com lives, a automação vale para qualquer post/live.
+        mediaId: live ? null : v.mediaId?.trim() || null,
         oncePerUser: v.oncePerUser !== false,
         ...(v.anyKeyword ? { anyKeyword: true } : {}),
         keywords: v.anyKeyword ? [] : cleanKeywords(v.keywords),
         mode: v.anyKeyword ? "any" : v.mode === "any" ? "contains" : v.mode,
         // Desligado salva lista vazia; ligado mantém o texto como digitado (o schema apara e valida).
         // Ligado sem nenhuma variação vira [""] para falhar com "Informe ao menos uma variação." em vez de desligar.
-        publicReplies: v.publicReplyEnabled ? (v.publicReplies?.length ? [...v.publicReplies] : [""]) : [],
+        publicReplies: v.source !== "lives" && v.publicReplyEnabled ? (v.publicReplies?.length ? [...v.publicReplies] : [""]) : [],
+        ...(live ? { source: v.source } : {}),
       };
+    }
     case "instagram_story":
       return { channelId: v.channelId, ...(v.oncePerUser === true ? { oncePerUser: true } : {}) };
     case "contact_created":

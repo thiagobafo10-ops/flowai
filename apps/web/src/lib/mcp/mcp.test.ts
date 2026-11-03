@@ -357,6 +357,26 @@ describe("/mcp", () => {
     expect(state.rpcs).toHaveLength(0);
   });
 
+  it("creates_a_live_automation", async () => {
+    state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
+    state.rpcResults.activate_automation = { data: 1, error: null };
+    const mcp = await connect();
+    const { respostaPublica: _omit, ...spec } = SPEC;
+    const result = await mcp.callTool({ name: "criar_automacao", arguments: { ...spec, gatilho: "live" } });
+    expect(result.isError).toBeFalsy();
+    const save = state.rpcs.find(([name]) => name === "save_mcp_automation");
+    expect(save?.[1].p_trigger_type).toBe("instagram_comment");
+    expect(save?.[1].p_trigger_config).toMatchObject({ channelId: "ch-1", mediaId: null, source: "lives" });
+    expect(save?.[1].p_trigger_config).not.toHaveProperty("publicReplies");
+
+    state.automations = [
+      { id: AUTOMATION_ID, name: "Live", status: "active", trigger_type: "instagram_comment", trigger_config: { channelId: "ch-1", mediaId: null, keywords: [], anyKeyword: true, mode: "any", source: "lives" }, mcp_spec: { nome: "Live" }, mcp_spec_stale: false, updated_at: "2026-10-26" },
+    ];
+    state.rpcResults.automation_run_counts = { data: [], error: null };
+    const list = await mcp.callTool({ name: "listar_automacoes", arguments: {} });
+    expect((list.structuredContent as { automacoes: Row[] }).automacoes[0]).toMatchObject({ gatilho: "live" });
+  });
+
   it("creates_and_activates", async () => {
     state.rpcResults.save_mcp_automation = { data: AUTOMATION_ID, error: null };
     state.rpcResults.activate_automation = { data: 1, error: null };
