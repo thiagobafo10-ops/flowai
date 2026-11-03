@@ -18,6 +18,19 @@ describe("parseYampiEvent", () => {
     expect(e.cart.items[0]).toEqual({ name: "Camiseta Exemplo", variant: null, quantity: 2, price: 94.9, imageUrl: null });
   });
 
+  it("converts created_at to UTC ISO and normalizes phone", () => {
+    const raw = clone(cart);
+    raw.resource.created_at = { date: "2026-11-03 14:05:00.000000", timezone_type: 3, timezone: "America/Sao_Paulo" };
+    const e = parseYampiEvent(raw);
+    if (e.kind !== "cart") throw new Error("unexpected");
+    expect(e.cart.abandonedAt).toBe("2026-11-03T17:05:00.000Z");
+    expect(e.customer.phone).toBe("+5511999990000");
+    delete raw.resource.created_at;
+    const e2 = parseYampiEvent(raw);
+    if (e2.kind !== "cart") throw new Error("unexpected");
+    expect(e2.cart.abandonedAt).toBeNull();
+  });
+
   it("parses order.paid", () => {
     const e = parseYampiEvent({ ...clone(order), event: "order.paid" });
     expect(e.kind).toBe("order");

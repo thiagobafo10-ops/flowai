@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { normalizeBrazilMobile, yampiDateToIso } from "./recovery.ts";
 
 export type StoreItem = { name: string; variant: string | null; quantity: number; price: number; imageUrl: string | null };
 export type StoreCustomer = { email: string | null; name: string | null; phone: string | null };
 export type YampiEvent =
   | { kind: "cart"; event: "cart.reminder"; merchantAlias: string; customer: StoreCustomer;
-      cart: { externalId: string; token: string | null; total: number; recoveryUrl: string | null; items: StoreItem[] } }
+      cart: { externalId: string; token: string | null; total: number; recoveryUrl: string | null; abandonedAt: string | null; items: StoreItem[] } }
   | { kind: "order"; event: "order.created" | "order.paid" | "order.status.updated"; merchantAlias: string; customer: StoreCustomer;
       order: { externalId: string; number: string; statusAlias: string | null; paymentAlias: string | null; total: number;
                cartToken: string | null; paid: boolean; items: StoreItem[]; trackCode: string | null; trackUrl: string | null } }
@@ -19,6 +20,7 @@ const resourceSchema = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
   token: str,
   simulate_url: str,
+  created_at: z.object({ date: z.string(), timezone: z.string() }).passthrough().nullish().catch(null),
   number: str,
   cart_token: str,
   track_code: str,
@@ -63,7 +65,7 @@ export function parseYampiEvent(raw: unknown): YampiEvent {
   const customer: StoreCustomer = {
     email: EMAIL.test(email) ? email : null,
     name: c?.name?.trim().slice(0, 200) || null,
-    phone: c?.phone?.full_number ?? null,
+    phone: normalizeBrazilMobile(c?.phone?.full_number ?? null),
   };
   const items: StoreItem[] = (r.items?.data ?? []).map((i) => ({
     name: (i.sku?.data?.title ?? "").slice(0, 200),
@@ -76,7 +78,8 @@ export function parseYampiEvent(raw: unknown): YampiEvent {
 
   if (isCart) {
     return { kind: "cart", event: "cart.reminder", merchantAlias, customer,
-      cart: { externalId: r.id, token: r.token, total: r.totalizers?.total ?? 0, recoveryUrl: r.simulate_url, items } };
+      cart: { externalId: r.id, token: r.token, total: r.totalizers?.total ?? 0, recoveryUrl: r.simulate_url,
+        abandonedAt: r.created_at ? yampiDateToIso(r.created_at) : null, items } };
   }
   return { kind: "order", event: event as (typeof ORDER_EVENTS)[number], merchantAlias, customer,
     order: { externalId: r.id, number: r.number ?? r.id, statusAlias: r.status?.data?.alias ?? null,
