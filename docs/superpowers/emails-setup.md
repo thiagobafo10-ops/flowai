@@ -74,6 +74,8 @@ Atenção: a Yampi exige resposta 2xx em até 5 segundos e desativa o webhook ap
 
 ## 5. Jornada de carrinho
 
+Na publicação controlada de 03/11/2026, a jornada ficou desativada e o cron `flowai-email-worker` foi pausado. Somente depois de configurar e conferir as integrações, reative esse cron no Supabase antes do teste controlado de carrinho. Ligar apenas o botão da jornada não reativa um cron pausado.
+
 1. Na mesma tela, abra **Carrinho abandonado**. Os e-mails saem em **60 min**, **24 h** e **48 h** após o abandono.
 2. Revise assunto, título e texto do botão de cada e-mail.
 3. O e-mail 3 usa `{cupom}`. Preencha o cupom (ex.: `CUPOM20`, criado na Yampi). Sem cupom preenchido ele **não é enviado** e o histórico mostra "Cupom não preenchido".
