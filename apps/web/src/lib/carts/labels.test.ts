@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTION_LABELS, COMMERCIAL_LABELS, STAGE_LABELS } from "./labels";
+import { ACTION_LABELS, COMMERCIAL_LABELS, EMAIL_STATE_LABELS, STAGE_LABELS } from "./labels";
 import { cancelReasonLabel } from "@/lib/emails/schemas";
 
 // Valores literais dos checks do banco (20261105000001_cart_recovery.sql).
@@ -20,6 +20,9 @@ describe("rótulos", () => {
     );
     expect(ACTION_LABELS.opened_whatsapp).toBe("WhatsApp aberto (não conta como envio)");
     expect(ACTION_LABELS.marked_sent).toBe("Envio confirmado pelo operador");
+  });
+  it("cobrem os estados de envio de e-mail", () => {
+    expect(Object.keys(EMAIL_STATE_LABELS).sort()).toEqual(["cancelled", "failed", "scheduled", "sending", "sent"]);
   });
   it("e-mail interrompido pelo operador tem rótulo", () => {
     expect(cancelReasonLabel("paused_by_operator")).toBe("Interrompido pelo operador");

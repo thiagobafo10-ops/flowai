@@ -23,7 +23,9 @@ describe("parseCartFilters", () => {
   });
   it("limita page e pageSize a 1..100", () => {
     expect(parseCartFilters({ pagina: "0", limite: "0" })).toMatchObject({ page: 1, pageSize: 1 });
-    expect(parseCartFilters({ pagina: "999", limite: "999" })).toMatchObject({ page: 100, pageSize: 100 });
+    expect(parseCartFilters({ limite: "999" })).toMatchObject({ pageSize: 100 });
+    expect(parseCartFilters({ pagina: "101" }).page).toBe(101);
+    expect(parseCartFilters({ pagina: "100001" }).page).toBe(100000);
     expect(parseCartFilters({ pagina: "abc", limite: "x" })).toMatchObject({ page: 1, pageSize: 25 });
   });
   it("ignora valores fora da lista", () => {

@@ -26,9 +26,9 @@ const SP = "-03:00";
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 const pick = <T extends string>(values: readonly T[], v: string | undefined) =>
   (values as readonly string[]).includes(v ?? "") ? (v as T) : null;
-const clamp = (v: string | undefined, fallback: number) => {
+const clamp = (v: string | undefined, fallback: number, max: number) => {
   const n = Number.parseInt(v ?? "", 10);
-  return Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : fallback;
+  return Number.isFinite(n) ? Math.min(max, Math.max(1, n)) : fallback;
 };
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)));
 const day = (s: string) => Date.parse(`${s}T00:00:00Z`);
@@ -52,8 +52,8 @@ export function parseCartFilters(sp: SearchParams): CartFilters {
     commercialStatus: pick(Object.keys(COMMERCIAL_LABELS) as (keyof typeof COMMERCIAL_LABELS)[], one(sp.comercial)),
     recoveryStage: pick(Object.keys(STAGE_LABELS) as (keyof typeof STAGE_LABELS)[], one(sp.estagio)),
     eligible: elegivel === "sim" ? true : elegivel === "nao" ? false : null,
-    page: clamp(one(sp.pagina), 1),
-    pageSize: clamp(one(sp.limite), CARTS_PAGE_SIZE),
+    page: clamp(one(sp.pagina), 1, 100000),
+    pageSize: clamp(one(sp.limite), CARTS_PAGE_SIZE, 100),
     error,
   };
 }
