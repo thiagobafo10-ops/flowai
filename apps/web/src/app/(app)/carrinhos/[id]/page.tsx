@@ -18,7 +18,7 @@ async function CartContent({ params }: Props) {
   return (
     <div className="space-y-4">
       <Link href="/carrinhos" className="text-sm text-muted-foreground underline underline-offset-2">Carrinhos</Link>
-      <CartDetailView cart={cart} timeZone={timeZone} />
+      <CartDetailView cart={cart} timeZone={timeZone} canAct={org.role !== "viewer"} />
     </div>
   );
 }

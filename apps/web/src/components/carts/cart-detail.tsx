@@ -5,6 +5,8 @@ import { formatDateTime } from "@/lib/crm/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { money } from "./format";
 import { CartHistory } from "./cart-history";
+import { CartActions } from "./cart-actions";
+import { WhatsappPanel } from "./whatsapp-panel";
 
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return (
@@ -15,7 +17,7 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
-export function CartDetailView({ cart, timeZone }: { cart: CartDetail; timeZone: string }) {
+export function CartDetailView({ cart, timeZone, canAct }: { cart: CartDetail; timeZone: string; canAct: boolean }) {
   const c = cart.contact;
   const blocks = [
     cart.blockReason,
@@ -80,6 +82,14 @@ export function CartDetailView({ cart, timeZone }: { cart: CartDetail; timeZone:
           </div>
         </CardContent>
       </Card>
+      {canAct && (
+        <Card>
+          <CardContent className="space-y-6 pt-4">
+            <WhatsappPanel cartId={cart.id} blockReason={cart.blockReason} />
+            <CartActions cart={cart} />
+          </CardContent>
+        </Card>
+      )}
       <CartHistory cart={cart} timeZone={timeZone} />
     </div>
   );

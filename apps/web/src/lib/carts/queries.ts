@@ -1,3 +1,4 @@
+import { DEFAULT_WHATSAPP_TEMPLATE } from "@flowai/core";
 import { createServerClient } from "@/lib/supabase/server";
 import { toRpcFilters, type CartFilters } from "./schemas";
 
@@ -37,4 +38,14 @@ export async function getCart(orgId: string, id: string): Promise<CartDetail | n
   if (error?.code === "42501") return null;
   if (error) throw new Error("Falha ao carregar carrinho", { cause: error });
   return data as unknown as CartDetail;
+}
+
+export async function getRecoverySettings(orgId: string): Promise<{ template: string; hosts: string[]; hasStore: boolean }> {
+  const db = await createServerClient();
+  const [s, c] = await Promise.all([
+    db.from("cart_recovery_settings").select("whatsapp_template").eq("organization_id", orgId).maybeSingle(),
+    db.from("store_connections").select("checkout_hosts").eq("organization_id", orgId).maybeSingle(),
+  ]);
+  if (s.error || c.error) throw new Error("Falha ao carregar configurações de carrinhos", { cause: s.error ?? c.error });
+  return { template: s.data?.whatsapp_template ?? DEFAULT_WHATSAPP_TEMPLATE, hosts: c.data?.checkout_hosts ?? [], hasStore: !!c.data };
 }
