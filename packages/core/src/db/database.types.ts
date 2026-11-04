@@ -1815,6 +1815,9 @@ isOneToOne: false
 "finish_instagram_work":
 { Args: { "p_error_code": string,"p_queue_id": number,"p_state": string }; Returns: undefined
                            },
+"get_store_cart":
+{ Args: { "p_cart": string,"p_org": string }; Returns: Json
+                           },
 "handoff_ai_job":
 { Args: { "p_job": string,"p_reason": string,"p_token": string }; Returns: Json
                            },
@@ -1851,6 +1854,9 @@ isOneToOne: false
 { Args: { "p_channel": string,"p_cursor_at": string,"p_cursor_id": string,"p_limit": number,"p_org": string,"p_q": string,"p_tab": string }; Returns: {
               "assigned_to": string,"assignee_name": string,"channel_id": string,"channel_type": Database["public"]['Enums']["channel_type"],"contact_email": string,"contact_id": string,"contact_name": string,"contact_phone": string,"handled_by": Database["public"]['Enums']["handler_type"],"id": string,"last_inbound_at": string,"last_message_at": string,"last_read_at": string,"preview": string,"preview_from_team": boolean,"status": Database["public"]['Enums']["conversation_status"]
             }[]
+                           },
+"list_store_carts":
+{ Args: { "p_filters": Json,"p_org": string,"p_page": number,"p_page_size": number }; Returns: Json
                            },
 "log_auth_event":
 { Args: { "p_action": string,"p_ip"?: unknown }; Returns: undefined
@@ -1889,6 +1895,9 @@ isOneToOne: false
                            },
 "prepare_automation_run":
 { Args: { "p_run": string,"p_token": string }; Returns: Json
+                           },
+"prepare_cart_whatsapp":
+{ Args: { "p_cart": string,"p_org": string,"p_request_key": string }; Returns: Json
                            },
 "prepare_index_document":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
@@ -1934,6 +1943,12 @@ isOneToOne: false
                            },
 "read_yampi_connection":
 { Args: { "p_connection": string }; Returns: Json
+                           },
+"record_cart_action":
+{ Args: { "p_action": string,"p_cart": string,"p_note": string,"p_org": string,"p_repeat": boolean,"p_request_key": string }; Returns: Json
+                           },
+"record_contact_permission":
+{ Args: { "p_contact": string,"p_evidence_at": string,"p_org": string,"p_source": string,"p_status": string }; Returns: string
                            },
 "record_email_domain_status":
 { Args: { "p_org": string,"p_status": string }; Returns: undefined
@@ -1985,6 +2000,9 @@ isOneToOne: false
 "save_campaign":
 { Args: { "p_audience": Json,"p_id": string,"p_message": Json,"p_name": string,"p_org": string }; Returns: string
                            },
+"save_cart_recovery_settings":
+{ Args: { "p_checkout_hosts": (string)[],"p_org": string,"p_template": string }; Returns: undefined
+                           },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string
                            },
@@ -2028,6 +2046,9 @@ isOneToOne: false
 { Args: { "p_assignee": string,"p_limit": number,"p_offset": number,"p_order": string,"p_org": string,"p_q": string,"p_source": Database["public"]['Enums']["contact_source"],"p_status": Database["public"]['Enums']["contact_status"],"p_tag": string }; Returns: {
               "assigned_to": string,"created_at": string,"email": string,"id": string,"last_interaction_at": string,"lead_score": number,"name": string,"phone": string,"source": Database["public"]['Enums']["contact_source"],"status": Database["public"]['Enums']["contact_status"],"tag_ids": (string)[],"total_count": number
             }[]
+                           },
+"set_contact_blocked":
+{ Args: { "p_blocked": boolean,"p_contact": string,"p_org": string,"p_reason": string }; Returns: undefined
                            },
 "set_email_journey_enabled":
 { Args: { "p_enabled": boolean,"p_kind": string,"p_org": string }; Returns: string
