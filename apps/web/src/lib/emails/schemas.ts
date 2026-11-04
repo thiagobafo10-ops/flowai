@@ -49,5 +49,6 @@ const CANCEL_REASONS: Record<string, string> = {
   no_recovery_url: "Sem link do carrinho",
   no_settings: "Envio não configurado",
   no_coupon: "Cupom não preenchido",
+  paused_by_operator: "Interrompido pelo operador",
 };
 export const cancelReasonLabel = (code: string) => (Object.hasOwn(CANCEL_REASONS, code) ? CANCEL_REASONS[code] : "Outro motivo");
