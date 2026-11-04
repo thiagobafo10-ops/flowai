@@ -26,13 +26,13 @@ test("prepareWhatsapp blocked returns the reason and no url", async () => {
   expect(state.rpcs).toEqual([["prepare_cart_whatsapp", { p_org: "org", p_cart: CART, p_request_key: KEY, p_template: 2 }]]);
 });
 
-test("prepareWhatsapp eligible returns phone, message and a wa.me url", async () => {
+test("prepareWhatsapp eligible returns phone, message and a WhatsApp url", async () => {
   state.result = { data: { phone: "+5511987654321", message: "Oi, Ana!", actionId: "a" }, error: null };
   const r = await prepareWhatsapp(CART, KEY, 2);
   if (!r.ok || "blocked" in r.data) throw new Error("expected eligible");
   expect(r.data.phone).toBe("+5511987654321");
   expect(r.data.message).toBe("Oi, Ana!");
-  expect(r.data.url.startsWith("https://wa.me/5511987654321?text=")).toBe(true);
+  expect(r.data.url.startsWith("https://api.whatsapp.com/send?phone=5511987654321&text=")).toBe(true);
 });
 
 test("confirmSent passes p_repeat and the request key", async () => {

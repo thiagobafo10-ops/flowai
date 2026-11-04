@@ -54,7 +54,7 @@ test("Carrinhos: envio manual pelo WhatsApp, histórico e repetição", async ({
   const message = page.getByLabel("Mensagem", { exact: true });
   await message.fill(`Oi Maria, seu carrinho segue aberto: https://${HOST}/r/c-envio`);
   const wa = page.getByRole("link", { name: "Abrir WhatsApp" });
-  await expect(wa).toHaveAttribute("href", /^https:\/\/wa\.me\//); // nunca clicar
+  await expect(wa).toHaveAttribute("href", /^https:\/\/api\.whatsapp\.com\/send\?phone=/); // nunca clicar
   await page.getByRole("button", { name: "Confirmar que enviei" }).click();
   await expect(page.getByText("Envio registrado.").first()).toBeVisible();
   await expect(page.getByText("WhatsApp aberto (não conta como envio)")).toBeVisible();

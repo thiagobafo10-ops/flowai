@@ -33,7 +33,8 @@ export function renderWhatsappMessage(template: string, v: WhatsappVars): string
 }
 
 export function whatsappUrl(phoneE164: string, text: string): string {
-  return `https://wa.me/${phoneE164.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
+  // não usar wa.me: o redirecionamento troca emojis fora do BMP (ex.: 🤍) por "�"
+  return `https://api.whatsapp.com/send?phone=${phoneE164.replace(/\D/g, "")}&text=${encodeURIComponent(text)}`;
 }
 
 export const DEFAULT_WHATSAPP_TEMPLATE =

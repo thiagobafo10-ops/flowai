@@ -35,7 +35,9 @@ describe("renderWhatsappMessage", () => {
 });
 
 it("whatsappUrl encodes text", () => {
-  expect(whatsappUrl("+5511987654321", "Oi & tchau")).toBe("https://wa.me/5511987654321?text=Oi%20%26%20tchau");
+  expect(whatsappUrl("+5511987654321", "Oi & tchau")).toBe("https://api.whatsapp.com/send?phone=5511987654321&text=Oi%20%26%20tchau");
+  // wa.me troca emojis fora do BMP por "�" ao redirecionar; o endereço direto preserva
+  expect(whatsappUrl("+5511987654321", "🤍🛍️")).toBe("https://api.whatsapp.com/send?phone=5511987654321&text=%F0%9F%A4%8D%F0%9F%9B%8D%EF%B8%8F");
 });
 
 it("default template", () => {
