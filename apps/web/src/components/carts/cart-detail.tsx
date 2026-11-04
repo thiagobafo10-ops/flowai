@@ -33,6 +33,7 @@ export function CartDetailView({ cart, timeZone, canAct }: { cart: CartDetail; t
         <CardContent className="text-sm">
           <dl className="space-y-1">
             <Row k="Valor" v={money(cart.total)} />
+            <Row k="Frete" v={cart.shipping === 0 ? "Grátis" : money(cart.shipping)} />
             <Row k="Abandono" v={cart.abandonedAt ? formatDateTime(cart.abandonedAt, timeZone) : "Data original não informada"} />
             <Row k="Recebido em" v={formatDateTime(cart.receivedAt, timeZone)} />
             <Row k="Estado comercial" v={label(COMMERCIAL_LABELS, cart.commercialStatus)} />

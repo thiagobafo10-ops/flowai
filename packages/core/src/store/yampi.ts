@@ -5,7 +5,7 @@ export type StoreItem = { name: string; variant: string | null; quantity: number
 export type StoreCustomer = { email: string | null; name: string | null; phone: string | null };
 export type YampiEvent =
   | { kind: "cart"; event: "cart.reminder"; merchantAlias: string; customer: StoreCustomer;
-      cart: { externalId: string; token: string | null; total: number; recoveryUrl: string | null; abandonedAt: string | null; items: StoreItem[] } }
+      cart: { externalId: string; token: string | null; total: number; shipping: number | null; recoveryUrl: string | null; abandonedAt: string | null; items: StoreItem[] } }
   | { kind: "order"; event: "order.created" | "order.paid" | "order.status.updated"; merchantAlias: string; customer: StoreCustomer;
       order: { externalId: string; number: string; statusAlias: string | null; paymentAlias: string | null; total: number;
                cartToken: string | null; paid: boolean; items: StoreItem[]; trackCode: string | null; trackUrl: string | null } }
@@ -26,7 +26,7 @@ const resourceSchema = z.object({
   track_code: str,
   track_url: str,
   value_total: num.optional(),
-  totalizers: z.object({ total: num }).passthrough().nullish(),
+  totalizers: z.object({ total: num, shipment: z.coerce.number().nullish().catch(null) }).passthrough().nullish(),
   status: z.object({ data: z.object({ alias: str }).passthrough().nullish() }).passthrough().nullish(),
   payments: z.array(z.object({ alias: str }).passthrough()).nullish(),
   customer: z.object({
@@ -78,7 +78,7 @@ export function parseYampiEvent(raw: unknown): YampiEvent {
 
   if (isCart) {
     return { kind: "cart", event: "cart.reminder", merchantAlias, customer,
-      cart: { externalId: r.id, token: r.token, total: r.totalizers?.total ?? 0, recoveryUrl: r.simulate_url,
+      cart: { externalId: r.id, token: r.token, total: r.totalizers?.total ?? 0, shipping: r.totalizers?.shipment ?? null, recoveryUrl: r.simulate_url,
         abandonedAt: r.created_at ? yampiDateToIso(r.created_at) : null, items } };
   }
   return { kind: "order", event: event as (typeof ORDER_EVENTS)[number], merchantAlias, customer,

@@ -8,7 +8,7 @@ export type CartRow = {
   paused: boolean; unreconciledPayment: boolean; blockReason: string | null; lastContactAt: string | null;
 };
 export type CartDetail = {
-  id: string; externalId: string | null; total: number | null;
+  id: string; externalId: string | null; total: number | null; shipping: number | null;
   items: { name?: string; quantity?: number; price?: number; sku?: string }[] | null;
   abandonedAt: string | null; receivedAt: string; convertedAt: string | null;
   commercialStatus: string; recoveryStage: string; pausedAt: string | null; pauseReason: string | null;

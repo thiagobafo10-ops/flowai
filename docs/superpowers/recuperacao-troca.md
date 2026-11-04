@@ -27,7 +27,7 @@ Os passos do Supabase são executados pelo **proprietário**, não pelo Claude. 
 npx supabase functions deploy yampi-webhook
 ```
 
-2. Aplique as migrações `20261105000001` a `20261105000005` (a `…03` corrige os telefones dos contatos já existentes; a `…04` cria a opção de autorização pelo checkout; a `…05` cria o segundo modelo de WhatsApp).
+2. Aplique as migrações `20261105000001` a `20261105000006` (a `…03` corrige os telefones dos contatos já existentes; a `…04` cria a opção de autorização pelo checkout; a `…05` cria o segundo modelo de WhatsApp; a `…06` guarda o frete — publique o `yampi-webhook` antes dela).
 
 ```bash
 npx supabase db push

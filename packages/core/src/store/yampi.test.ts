@@ -6,6 +6,14 @@ import { parseYampiEvent, verifyYampiSignature } from "./yampi.ts";
 const clone = <T,>(v: T): any => JSON.parse(JSON.stringify(v));
 
 describe("parseYampiEvent", () => {
+  it("cart shipping is null when Yampi has not calculated it", () => {
+    const raw = clone(cart);
+    delete raw.resource.totalizers.shipment;
+    const e = parseYampiEvent(raw);
+    if (e.kind !== "cart") throw new Error("expected cart");
+    expect(e.cart.shipping).toBeNull();
+  });
+
   it("parses cart.reminder", () => {
     const e = parseYampiEvent(cart);
     expect(e.kind).toBe("cart");
@@ -14,6 +22,7 @@ describe("parseYampiEvent", () => {
     expect(e.cart.externalId).toBe("98765");
     expect(e.cart.recoveryUrl).toBe("https://seguro.loja-exemplo.com.br/r/ABC123");
     expect(e.cart.total).toBe(189.8);
+    expect(e.cart.shipping).toBe(12.5);
     expect(e.customer.email).toBe("maria.silva@example.com");
     expect(e.cart.items[0]).toEqual({ name: "Camiseta Exemplo", variant: null, quantity: 2, price: 94.9, imageUrl: null });
   });

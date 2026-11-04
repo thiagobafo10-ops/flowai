@@ -6,7 +6,7 @@
     "id": 98765,
     "token": "TOKENCARRINHO123",
     "simulate_url": "https://seguro.loja-exemplo.com.br/r/ABC123",
-    "totalizers": { "total": 189.8 },
+    "totalizers": { "total": 189.8, "shipment": 12.5 },
     "customer": {
       "data": {
         "email": "  Maria.Silva@Example.COM ",
