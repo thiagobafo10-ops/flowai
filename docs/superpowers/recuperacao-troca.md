@@ -9,7 +9,7 @@ Troca da recuperação manual do Recovery Hub (Next + Prisma + Postgres, na past
 3. Exporte os bloqueios e as autorizações de contato conhecidos do Recovery Hub e registre-os no FlowAI, um a um, na tela do carrinho (botões **Autorização de contato** e **Bloquear cliente**). Use a origem e a data reais da evidência de cada cliente. Sem evidência real, não registre autorização. Guarde as contagens exportadas para a conferência do passo 5.4.
 4. Defina a **data de corte**: a partir dela, carrinhos novos são atendidos só no FlowAI. Anote a data e a hora na lista de verificação abaixo e também no próprio Recovery Hub (uma observação visível para quem ainda atende por lá).
 
-- [ ] Data de corte: ____/____/______ às ____:____ (anotada também no Recovery Hub)
+- [x] Data de corte: 04/11/2026 às 11:45 (horário de Brasília). Anotar também no Recovery Hub.
 
 ## 2. Configurar o FlowAI
 
