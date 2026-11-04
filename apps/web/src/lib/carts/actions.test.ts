@@ -86,18 +86,18 @@ test("setBlocked requires a reason to block", async () => {
 test("saveRecoverySettings normalizes hosts", async () => {
   state.role = "admin";
   const template = "Oi, {primeiro_nome}! {link}";
-  expect((await saveRecoverySettings(template, "HTTPS://Seguro.Loja.com/\n\nloja.com.br")).ok).toBe(true);
-  expect(state.rpcs[0]).toEqual(["save_cart_recovery_settings", { p_org: "org", p_template: template, p_checkout_hosts: ["seguro.loja.com", "loja.com.br"] }]);
+  expect((await saveRecoverySettings(template, "HTTPS://Seguro.Loja.com/\n\nloja.com.br", true)).ok).toBe(true);
+  expect(state.rpcs[0]).toEqual(["save_cart_recovery_settings", { p_org: "org", p_template: template, p_checkout_hosts: ["seguro.loja.com", "loja.com.br"], p_checkout_whatsapp_consent: true }]);
 });
 
 test("saveRecoverySettings rejects an invalid host", async () => {
   state.role = "admin";
-  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "não é host")).ok).toBe(false);
+  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "não é host", false)).ok).toBe(false);
   expect(state.rpcs).toHaveLength(0);
 });
 
 test("saveRecoverySettings is admin only", async () => {
-  expect(await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "")).toEqual(FORBIDDEN);
+  expect(await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "", false)).toEqual(FORBIDDEN);
   expect(state.rpcs).toHaveLength(0);
 });
 

@@ -14,7 +14,7 @@ Troca da recuperação manual do Recovery Hub (Next + Prisma + Postgres, na past
 ## 2. Configurar o FlowAI
 
 1. Em **Configurações > Carrinhos**, cadastre os **hosts de checkout** permitidos (só o domínio, por exemplo o da loja e o do checkout da Yampi). Links de retomada de outro host ficam bloqueados.
-2. No mesmo lugar, revise o **modelo da mensagem de WhatsApp** (variáveis `{primeiro_nome}`, `{loja}`, `{valor}`, `{itens}`, `{link}`).
+2. No mesmo lugar, revise o **modelo da mensagem de WhatsApp** e decida se o **celular informado no checkout vale como autorização de WhatsApp** (opção da loja; revogação e bloqueio continuam vencendo) (variáveis `{primeiro_nome}`, `{loja}`, `{valor}`, `{itens}`, `{link}`).
 3. Confirme que a conexão com a loja existe e que os testes locais passam (`npm test`, `npm run test:edge`, `npx supabase test db` e o e2e `carts.spec.ts`).
 
 ## 3. Publicação
@@ -27,7 +27,7 @@ Os passos do Supabase são executados pelo **proprietário**, não pelo Claude. 
 npx supabase functions deploy yampi-webhook
 ```
 
-2. Aplique as migrações `20261105000001`, `20261105000002` e `20261105000003` (a última também corrige os telefones dos contatos já existentes).
+2. Aplique as migrações `20261105000001` a `20261105000004` (a `…03` corrige os telefones dos contatos já existentes; a `…04` cria a opção de autorização pelo checkout).
 
 ```bash
 npx supabase db push

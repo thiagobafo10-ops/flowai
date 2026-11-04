@@ -387,14 +387,14 @@ isOneToOne: false
                   ]
                 },"cart_recovery_settings": {
                   Row: {
-                    "organization_id": string,"updated_at": string,"updated_by": string | null,"whatsapp_template": string
+                    "checkout_whatsapp_consent": boolean,"organization_id": string,"updated_at": string,"updated_by": string | null,"whatsapp_template": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "organization_id": string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template": string
+                    "checkout_whatsapp_consent"?: boolean,"organization_id": string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template": string
                   }
                   Update: {
-                    "organization_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template"?: string
+                    "checkout_whatsapp_consent"?: boolean,"organization_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template"?: string
                   }
                   Relationships: [
                     {
@@ -2001,7 +2001,7 @@ isOneToOne: false
 { Args: { "p_audience": Json,"p_id": string,"p_message": Json,"p_name": string,"p_org": string }; Returns: string
                            },
 "save_cart_recovery_settings":
-{ Args: { "p_checkout_hosts": (string)[],"p_org": string,"p_template": string }; Returns: undefined
+{ Args: { "p_checkout_hosts": (string)[],"p_checkout_whatsapp_consent"?: boolean,"p_org": string,"p_template": string }; Returns: undefined
                            },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string

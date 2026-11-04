@@ -11,11 +11,12 @@ const textarea = "w-full rounded-lg border border-input bg-transparent p-2 text-
 const SAMPLE = { firstName: "Ana", link: "https://seguro.sualoja.com.br/carrinho/exemplo", total: 189.9,
   items: [{ name: "Vestido Linho", quantity: 1 }, { name: "Cinto Couro", quantity: 2 }] };
 
-export function RecoverySettings({ template: initialTemplate, hosts: initialHosts, hasStore, storeName }:
-  { template: string; hosts: string[]; hasStore: boolean; storeName: string }) {
+export function RecoverySettings({ template: initialTemplate, hosts: initialHosts, hasStore, storeName, checkoutConsent: initialConsent }:
+  { template: string; hosts: string[]; hasStore: boolean; storeName: string; checkoutConsent: boolean }) {
   const router = useRouter();
   const [template, setTemplate] = useState(initialTemplate);
   const [hosts, setHosts] = useState(initialHosts.join("\n"));
+  const [checkoutConsent, setCheckoutConsent] = useState(initialConsent);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   return (
@@ -24,7 +25,7 @@ export function RecoverySettings({ template: initialTemplate, hosts: initialHost
       setError(null);
       startTransition(async () => {
         try {
-          const r = await saveRecoverySettings(template, hosts);
+          const r = await saveRecoverySettings(template, hosts, checkoutConsent);
           if (!r.ok) { setError(r.error); return; }
         } catch { setError("Falha de conexão. Tente novamente."); return; }
         toast.success("Configurações salvas.");
@@ -41,6 +42,14 @@ export function RecoverySettings({ template: initialTemplate, hosts: initialHost
         <div className="space-y-1">
           <p className="text-sm font-medium">Prévia (dados de exemplo)</p>
           <p className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">{renderWhatsappMessage(template, { ...SAMPLE, storeName })}</p>
+        </div>
+        <div>
+          <label htmlFor="checkout-consent" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+            <input id="checkout-consent" type="checkbox" role="switch" className="size-4" checked={checkoutConsent}
+              onChange={(e) => setCheckoutConsent(e.target.checked)} disabled={pending} />
+            <span>Celular informado no checkout vale como autorização de WhatsApp</span>
+          </label>
+          <p className="text-xs text-muted-foreground mt-1 ml-6">Quem pediu para não receber ou foi bloqueado continua bloqueado.</p>
         </div>
       </section>
       <section aria-labelledby="checkout-hosts" className="space-y-3 rounded-lg border p-4">
