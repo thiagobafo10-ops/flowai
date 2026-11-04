@@ -12,6 +12,7 @@ test("sidebar mostra os 9 módulos na ordem e marca o ativo", async ({ page }) =
     "Dashboard",
     "Inbox",
     "Contatos",
+    "Carrinhos",
     "Pipeline",
     "Automações",
     "IA",

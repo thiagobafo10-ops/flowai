@@ -6,6 +6,7 @@ import {
   KanbanSquare,
   LayoutDashboard,
   Settings,
+  ShoppingCart,
   Users,
   Workflow,
   type LucideIcon,
@@ -32,6 +33,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Contatos",
     icon: Users,
     description: "Seus clientes e leads com histórico, tags e responsável.",
+  },
+  {
+    href: "/carrinhos",
+    label: "Carrinhos",
+    icon: ShoppingCart,
+    description: "Carrinhos abandonados e atendimento pelo WhatsApp.",
   },
   {
     href: "/pipeline",
