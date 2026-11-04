@@ -40,12 +40,13 @@ export async function getCart(orgId: string, id: string): Promise<CartDetail | n
   return data as unknown as CartDetail;
 }
 
-export async function getRecoverySettings(orgId: string): Promise<{ template: string; hosts: string[]; hasStore: boolean; checkoutConsent: boolean }> {
+export async function getRecoverySettings(orgId: string): Promise<{ template: string; template2: string; hosts: string[]; hasStore: boolean; checkoutConsent: boolean }> {
   const db = await createServerClient();
   const [s, c] = await Promise.all([
-    db.from("cart_recovery_settings").select("whatsapp_template, checkout_whatsapp_consent").eq("organization_id", orgId).maybeSingle(),
+    db.from("cart_recovery_settings").select("whatsapp_template, whatsapp_template_2, checkout_whatsapp_consent").eq("organization_id", orgId).maybeSingle(),
     db.from("store_connections").select("checkout_hosts").eq("organization_id", orgId).maybeSingle(),
   ]);
   if (s.error || c.error) throw new Error("Falha ao carregar configurações de carrinhos", { cause: s.error ?? c.error });
-  return { template: s.data?.whatsapp_template ?? DEFAULT_WHATSAPP_TEMPLATE, hosts: c.data?.checkout_hosts ?? [], hasStore: !!c.data, checkoutConsent: s.data?.checkout_whatsapp_consent ?? false };
+  const template = s.data?.whatsapp_template ?? DEFAULT_WHATSAPP_TEMPLATE;
+  return { template, template2: s.data?.whatsapp_template_2 ?? template, hosts: c.data?.checkout_hosts ?? [], hasStore: !!c.data, checkoutConsent: s.data?.checkout_whatsapp_consent ?? false };
 }

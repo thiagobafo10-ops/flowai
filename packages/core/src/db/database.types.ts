@@ -387,14 +387,14 @@ isOneToOne: false
                   ]
                 },"cart_recovery_settings": {
                   Row: {
-                    "checkout_whatsapp_consent": boolean,"organization_id": string,"updated_at": string,"updated_by": string | null,"whatsapp_template": string
+                    "checkout_whatsapp_consent": boolean,"organization_id": string,"updated_at": string,"updated_by": string | null,"whatsapp_template": string,"whatsapp_template_2": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "checkout_whatsapp_consent"?: boolean,"organization_id": string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template": string
+                    "checkout_whatsapp_consent"?: boolean,"organization_id": string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template": string,"whatsapp_template_2"?: string | null
                   }
                   Update: {
-                    "checkout_whatsapp_consent"?: boolean,"organization_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template"?: string
+                    "checkout_whatsapp_consent"?: boolean,"organization_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"whatsapp_template"?: string,"whatsapp_template_2"?: string | null
                   }
                   Relationships: [
                     {
@@ -1897,7 +1897,7 @@ isOneToOne: false
 { Args: { "p_run": string,"p_token": string }; Returns: Json
                            },
 "prepare_cart_whatsapp":
-{ Args: { "p_cart": string,"p_org": string,"p_request_key": string }; Returns: Json
+{ Args: { "p_cart": string,"p_org": string,"p_request_key": string,"p_template"?: number }; Returns: Json
                            },
 "prepare_index_document":
 { Args: { "p_job": string,"p_token": string }; Returns: Json
@@ -2001,7 +2001,7 @@ isOneToOne: false
 { Args: { "p_audience": Json,"p_id": string,"p_message": Json,"p_name": string,"p_org": string }; Returns: string
                            },
 "save_cart_recovery_settings":
-{ Args: { "p_checkout_hosts": (string)[],"p_checkout_whatsapp_consent"?: boolean,"p_org": string,"p_template": string }; Returns: undefined
+{ Args: { "p_checkout_hosts": (string)[],"p_checkout_whatsapp_consent"?: boolean,"p_org": string,"p_template": string,"p_template_2"?: string }; Returns: undefined
                            },
 "save_contact":
 { Args: { "p_contact_id": string,"p_custom_fields": Json,"p_data": Json,"p_org": string,"p_tag_ids": (string)[] }; Returns: string

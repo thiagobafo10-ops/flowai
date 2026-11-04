@@ -37,11 +37,11 @@ function dbError(error: NonNullable<DbError>, passBlockReason = false): string {
   return FAILED;
 }
 
-export async function prepareWhatsapp(cartId: string, requestKey: string):
+export async function prepareWhatsapp(cartId: string, requestKey: string, template: 1 | 2):
   Promise<ActionResult<{ blocked: string } | { phone: string; message: string; url: string }>> {
   const c = await operator("agent"); if (!c) return { ok: false, error: FORBIDDEN };
-  if (!isId(cartId) || !isId(requestKey)) return { ok: false, error: RELOAD };
-  const { data, error } = await c.db.rpc("prepare_cart_whatsapp", { p_org: c.orgId, p_cart: cartId, p_request_key: requestKey });
+  if (!isId(cartId) || !isId(requestKey) || (template !== 1 && template !== 2)) return { ok: false, error: RELOAD };
+  const { data, error } = await c.db.rpc("prepare_cart_whatsapp", { p_org: c.orgId, p_cart: cartId, p_request_key: requestKey, p_template: template });
   if (error) return { ok: false, error: dbError(error) };
   const d = data as { blocked?: string; phone?: string; message?: string };
   if (d.blocked) return { ok: true, data: { blocked: d.blocked } };
@@ -103,14 +103,16 @@ function normalizeHost(raw: string): string {
   return noScheme.split("/")[0].split("?")[0].split("#")[0].replace(/\.+$/, "");
 }
 
-export async function saveRecoverySettings(template: string, hosts: string, checkoutConsent: boolean): Promise<ActionResult> {
+export async function saveRecoverySettings(template: string, hosts: string, checkoutConsent: boolean, template2: string): Promise<ActionResult> {
   const c = await operator("admin"); if (!c) return { ok: false, error: FORBIDDEN };
   const tpl = (template ?? "").trim();
   if (tpl.length < 10 || tpl.length > 2000) return { ok: false, error: "O modelo deve ter de 10 a 2000 caracteres." };
+  const tpl2 = (template2 ?? "").trim();
+  if (tpl2 && (tpl2.length < 10 || tpl2.length > 2000)) return { ok: false, error: "O modelo 2 deve ter de 10 a 2000 caracteres." };
   const list = [...new Set((hosts ?? "").split(/\r?\n/).map(normalizeHost).filter(Boolean))];
   const bad = list.find((h) => !HOST.test(h));
   if (bad) return { ok: false, error: `Host inválido: ${bad}` };
-  const { error } = await c.db.rpc("save_cart_recovery_settings", { p_org: c.orgId, p_template: tpl, p_checkout_hosts: list, p_checkout_whatsapp_consent: checkoutConsent === true });
+  const { error } = await c.db.rpc("save_cart_recovery_settings", { p_org: c.orgId, p_template: tpl, p_checkout_hosts: list, p_checkout_whatsapp_consent: checkoutConsent === true, p_template_2: (tpl2 || null) as string });
   if (error?.message === "store connection required") return { ok: false, error: "Conecte a loja Yampi antes de cadastrar hosts." };
   return error ? { ok: false, error: dbError(error) } : { ok: true, data: undefined };
 }

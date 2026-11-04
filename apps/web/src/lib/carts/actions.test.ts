@@ -21,14 +21,14 @@ beforeEach(() => { state.role = "agent"; state.rpcs = []; state.result = { data:
 
 test("prepareWhatsapp blocked returns the reason and no url", async () => {
   state.result = { data: { blocked: "Atendimento pausado" }, error: null };
-  const r = await prepareWhatsapp(CART, KEY);
+  const r = await prepareWhatsapp(CART, KEY, 2);
   expect(r).toEqual({ ok: true, data: { blocked: "Atendimento pausado" } });
-  expect(state.rpcs).toEqual([["prepare_cart_whatsapp", { p_org: "org", p_cart: CART, p_request_key: KEY }]]);
+  expect(state.rpcs).toEqual([["prepare_cart_whatsapp", { p_org: "org", p_cart: CART, p_request_key: KEY, p_template: 2 }]]);
 });
 
 test("prepareWhatsapp eligible returns phone, message and a wa.me url", async () => {
   state.result = { data: { phone: "+5511987654321", message: "Oi, Ana!", actionId: "a" }, error: null };
-  const r = await prepareWhatsapp(CART, KEY);
+  const r = await prepareWhatsapp(CART, KEY, 2);
   if (!r.ok || "blocked" in r.data) throw new Error("expected eligible");
   expect(r.data.phone).toBe("+5511987654321");
   expect(r.data.message).toBe("Oi, Ana!");
@@ -86,27 +86,40 @@ test("setBlocked requires a reason to block", async () => {
 test("saveRecoverySettings normalizes hosts", async () => {
   state.role = "admin";
   const template = "Oi, {primeiro_nome}! {link}";
-  expect((await saveRecoverySettings(template, "HTTPS://Seguro.Loja.com/\n\nloja.com.br", true)).ok).toBe(true);
-  expect(state.rpcs[0]).toEqual(["save_cart_recovery_settings", { p_org: "org", p_template: template, p_checkout_hosts: ["seguro.loja.com", "loja.com.br"], p_checkout_whatsapp_consent: true }]);
+  expect((await saveRecoverySettings(template, "HTTPS://Seguro.Loja.com/\n\nloja.com.br", true, " Olá {link} CUPOM20 ")).ok).toBe(true);
+  expect(state.rpcs[0]).toEqual(["save_cart_recovery_settings", { p_org: "org", p_template: template, p_checkout_hosts: ["seguro.loja.com", "loja.com.br"], p_checkout_whatsapp_consent: true, p_template_2: "Olá {link} CUPOM20" }]);
 });
 
 test("saveRecoverySettings rejects an invalid host", async () => {
   state.role = "admin";
-  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "não é host", false)).ok).toBe(false);
+  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "não é host", false, "")).ok).toBe(false);
   expect(state.rpcs).toHaveLength(0);
 });
 
 test("saveRecoverySettings is admin only", async () => {
-  expect(await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "", false)).toEqual(FORBIDDEN);
+  expect(await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "", false, "")).toEqual(FORBIDDEN);
   expect(state.rpcs).toHaveLength(0);
 });
 
 test("viewer cannot act and the database is not called", async () => {
   state.role = "viewer";
-  expect(await prepareWhatsapp(CART, KEY)).toEqual(FORBIDDEN);
+  expect(await prepareWhatsapp(CART, KEY, 1)).toEqual(FORBIDDEN);
   expect(await confirmSent(CART, KEY, false)).toEqual(FORBIDDEN);
   expect(await recordAction(CART, "closed", KEY)).toEqual(FORBIDDEN);
   expect(await savePermission(CONTACT, "granted", "Pediu", "2026-11-01T12:00:00.000Z")).toEqual(FORBIDDEN);
   expect(await setBlocked(CONTACT, false, "")).toEqual(FORBIDDEN);
   expect(state.rpcs).toHaveLength(0);
+});
+
+test("prepareWhatsapp rejects an unknown template", async () => {
+  expect((await prepareWhatsapp(CART, KEY, 3 as 1)).ok).toBe(false);
+  expect(state.rpcs).toHaveLength(0);
+});
+
+test("saveRecoverySettings rejects a short template 2 and sends null when empty", async () => {
+  state.role = "admin";
+  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "", false, "curto")).ok).toBe(false);
+  expect(state.rpcs).toHaveLength(0);
+  expect((await saveRecoverySettings("Oi, {primeiro_nome}! {link}", "", false, "  ")).ok).toBe(true);
+  expect(state.rpcs[0][1]).toMatchObject({ p_template_2: null });
 });

@@ -11,10 +11,11 @@ const textarea = "w-full rounded-lg border border-input bg-transparent p-2 text-
 const SAMPLE = { firstName: "Ana", link: "https://seguro.sualoja.com.br/carrinho/exemplo", total: 189.9,
   items: [{ name: "Vestido Linho", quantity: 1 }, { name: "Cinto Couro", quantity: 2 }] };
 
-export function RecoverySettings({ template: initialTemplate, hosts: initialHosts, hasStore, storeName, checkoutConsent: initialConsent }:
-  { template: string; hosts: string[]; hasStore: boolean; storeName: string; checkoutConsent: boolean }) {
+export function RecoverySettings({ template: initialTemplate, template2: initialTemplate2, hosts: initialHosts, hasStore, storeName, checkoutConsent: initialConsent }:
+  { template: string; template2: string; hosts: string[]; hasStore: boolean; storeName: string; checkoutConsent: boolean }) {
   const router = useRouter();
   const [template, setTemplate] = useState(initialTemplate);
+  const [template2, setTemplate2] = useState(initialTemplate2);
   const [hosts, setHosts] = useState(initialHosts.join("\n"));
   const [checkoutConsent, setCheckoutConsent] = useState(initialConsent);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export function RecoverySettings({ template: initialTemplate, hosts: initialHost
       setError(null);
       startTransition(async () => {
         try {
-          const r = await saveRecoverySettings(template, hosts, checkoutConsent);
+          const r = await saveRecoverySettings(template, hosts, checkoutConsent, template2);
           if (!r.ok) { setError(r.error); return; }
         } catch { setError("Falha de conexão. Tente novamente."); return; }
         toast.success("Configurações salvas.");
@@ -33,16 +34,16 @@ export function RecoverySettings({ template: initialTemplate, hosts: initialHost
       });
     }}>
       <section aria-labelledby="wa-template" className="space-y-3 rounded-lg border p-4">
-        <h2 id="wa-template" className="text-lg font-medium">Mensagem do WhatsApp</h2>
-        <div className="space-y-1">
-          <Label htmlFor="template">Modelo</Label>
-          <textarea id="template" rows={6} maxLength={2000} className={textarea} value={template} onChange={(e) => setTemplate(e.target.value)} disabled={pending} />
-          <p className="text-xs text-muted-foreground">Variáveis: {"{primeiro_nome}"}, {"{loja}"}, {"{valor}"}, {"{itens}"}, {"{link}"}.</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Prévia (dados de exemplo)</p>
-          <p className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">{renderWhatsappMessage(template, { ...SAMPLE, storeName })}</p>
-        </div>
+        <h2 id="wa-template" className="text-lg font-medium">Mensagens do WhatsApp</h2>
+        <p className="text-xs text-muted-foreground">No carrinho, você escolhe qual modelo enviar. Variáveis: {"{primeiro_nome}"}, {"{loja}"}, {"{valor}"}, {"{itens}"}, {"{link}"}.</p>
+        {([["template", "Modelo 1", template, setTemplate], ["template-2", "Modelo 2", template2, setTemplate2]] as const).map(([id, name, value, set]) => (
+          <div key={id} className="space-y-1">
+            <Label htmlFor={id}>{name}</Label>
+            <textarea id={id} rows={6} maxLength={2000} className={textarea} value={value} onChange={(e) => set(e.target.value)} disabled={pending} />
+            <p className="text-sm font-medium">Prévia (dados de exemplo)</p>
+            <p className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">{renderWhatsappMessage(value, { ...SAMPLE, storeName })}</p>
+          </div>
+        ))}
         <div>
           <label htmlFor="checkout-consent" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input id="checkout-consent" type="checkbox" role="switch" className="size-4" checked={checkoutConsent}

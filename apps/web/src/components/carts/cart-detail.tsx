@@ -85,7 +85,7 @@ export function CartDetailView({ cart, timeZone, canAct }: { cart: CartDetail; t
       {canAct && (
         <Card>
           <CardContent className="space-y-6 pt-4">
-            <WhatsappPanel cartId={cart.id} blockReason={cart.blockReason} />
+            <WhatsappPanel cartId={cart.id} blockReason={cart.blockReason} suggested={cart.actions.some((a) => a.action === "marked_sent") ? 2 : 1} />
             <CartActions cart={cart} />
           </CardContent>
         </Card>

@@ -9,11 +9,12 @@ import { useRun } from "./use-run";
 
 const textarea = "w-full rounded-lg border border-input bg-transparent p-2 text-sm disabled:opacity-50";
 
-export function WhatsappPanel({ cartId, blockReason }: { cartId: string; blockReason: string | null }) {
+export function WhatsappPanel({ cartId, blockReason, suggested }: { cartId: string; blockReason: string | null; suggested: 1 | 2 }) {
   const prepare = useRun();
   const confirm = useRun();
   const [draft, setDraft] = useState<{ phone: string; text: string } | null>(null);
   const [askRepeat, setAskRepeat] = useState(false);
+  const [template, setTemplate] = useState<1 | 2>(suggested);
   const reason = blockReason;
 
   function sent(repeat: boolean) {
@@ -29,8 +30,20 @@ export function WhatsappPanel({ cartId, blockReason }: { cartId: string; blockRe
     <section aria-labelledby="wa-title" className="space-y-3">
       <h3 id="wa-title" className="font-medium">WhatsApp</h3>
       {reason && <p className="text-sm text-muted-foreground">Contato indisponível: {reason}</p>}
+      {!reason && (
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium">Modelo da mensagem</legend>
+          {([1, 2] as const).map((n) => (
+            <label key={n} className="flex items-center gap-2 text-sm">
+              <input type="radio" name="wa-template" className="size-4" checked={template === n} disabled={prepare.pending}
+                onChange={() => { setTemplate(n); setDraft(null); setAskRepeat(false); }} />
+              Modelo {n}{n === suggested ? " (sugerido)" : ""}
+            </label>
+          ))}
+        </fieldset>
+      )}
       {!draft || reason ? (
-        <Button disabled={!!reason || prepare.pending} onClick={() => prepare.run("prepare", (key) => prepareWhatsapp(cartId, key), (d) => {
+        <Button disabled={!!reason || prepare.pending} onClick={() => prepare.run("prepare", (key) => prepareWhatsapp(cartId, key, template), (d) => {
           if ("blocked" in d) prepare.setError(`Contato indisponível: ${d.blocked}`);
           else setDraft({ phone: d.phone, text: d.message });
         })}>
