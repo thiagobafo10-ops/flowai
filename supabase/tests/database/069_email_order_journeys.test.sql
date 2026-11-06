@@ -65,9 +65,9 @@ select throws_ok(format($$insert into public.email_journey_steps(organization_id
 
 -- 2. Pedido pendente com boleto: lembrete em 2h e envio no vencimento às 09:00 locais.
 select ((now() at time zone 'America/Sao_Paulo')::date + 3) as due_date \gset
-select (((:due_date::date) + time '09:00') at time zone 'America/Sao_Paulo') as due_at \gset
+select (((:'due_date'::date) + time '09:00') at time zone 'America/Sao_Paulo') as due_at \gset
 select pg_temp.ord(:'conn','order.created','p1','bia@ex.com',false,:'due_date',null,'h1') as r1 \gset
-select is(:'r1','processed','pending order processed');
+select is(:'r1'::text,'processed'::text,'pending order processed');
 select id as o1 from public.store_orders where connection_id=:'conn' and external_id='p1' \gset
 select is((select number from public.store_orders where id=:'o1'),'Np1','order number stored');
 select is((select count(*)::int from public.email_sends e join public.email_journey_steps s on s.id=e.step_id
@@ -86,7 +86,7 @@ select is((select count(*)::int from public.email_sends where order_id=:'o1'),2,
 
 -- 4. Pagamento: cancela o pendente e agenda confirmação + recompra; rastreio espera o código.
 select pg_temp.ord(:'conn','order.paid','p1','bia@ex.com',true,null,null,'h2') as r2 \gset
-select is(:'r2','processed','paid order processed');
+select is(:'r2'::text,'processed'::text,'paid order processed');
 select is((select array_agg(distinct state||'/'||cancel_reason) from public.email_sends e join public.email_journey_steps s on s.id=e.step_id
   where e.order_id=:'o1' and s.journey_id=:'pending'),array['cancelled/paid'],'payment cancels pending sends');
 select is((select array_agg(s.position order by s.position) from public.email_sends e join public.email_journey_steps s on s.id=e.step_id
@@ -99,7 +99,7 @@ select ok((select abs(extract(epoch from (e.send_at-now()-interval '15 days')))<
 
 -- 5. Evento posterior com rastreio agenda só o passo de rastreio (sem confirmação retroativa).
 select pg_temp.ord(:'conn','order.status.updated','p1','bia@ex.com',false,null,'BR123','h3') as r3 \gset
-select is(:'r3','processed','tracking status processed');
+select is(:'r3'::text,'processed'::text,'tracking status processed');
 select is((select count(*)::int from public.email_sends e join public.email_journey_steps s on s.id=e.step_id
   where e.order_id=:'o1' and s.journey_id=:'post' and e.state='scheduled'),3,'tracking adds the third post-purchase send');
 select ok((select e.send_at<=now() from public.email_sends e join public.email_journey_steps s on s.id=e.step_id
