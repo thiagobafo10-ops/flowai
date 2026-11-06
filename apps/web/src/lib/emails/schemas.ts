@@ -1,9 +1,13 @@
 import { z } from "zod";
 
+export const JOURNEY_KINDS = ["cart", "pending_payment", "post_purchase"] as const;
+export type JourneyKind = (typeof JOURNEY_KINDS)[number];
+export type EmailStepTiming = "delay" | "due_date" | "on_tracking";
+
 // Limites iguais aos checks de email_journey_steps / email_settings / store_connections.
-const DELAY = "A espera deve ser de 1 minuto a 30 dias.";
+const DELAY = "A espera deve ser de 0 a 30 dias.";
 export const stepSchema = z.object({
-  delayMinutes: z.number().int(DELAY).min(1, DELAY).max(43200, DELAY),
+  delayMinutes: z.number().int(DELAY).min(0, DELAY).max(43200, DELAY),
   enabled: z.boolean(),
   subject: z.string().trim().min(1, "Informe o assunto.").max(150, "O assunto deve ter no máximo 150 caracteres."),
   heading: z.string().trim().max(150, "O título deve ter no máximo 150 caracteres."),
@@ -34,10 +38,17 @@ export type DelayUnit = "min" | "h" | "d";
 const UNIT_MINUTES: Record<DelayUnit, number> = { min: 1, h: 60, d: 1440 };
 export const toMinutes = (value: number, unit: DelayUnit) => value * UNIT_MINUTES[unit];
 export function fromMinutes(minutes: number): { value: number; unit: DelayUnit } {
+  if (minutes === 0) return { value: 0, unit: "min" };
   if (minutes % 1440 === 0) return { value: minutes / 1440, unit: "d" };
   if (minutes % 60 === 0) return { value: minutes / 60, unit: "h" };
   return { value: minutes, unit: "min" };
 }
+
+export const JOURNEY_LABELS: Record<JourneyKind, string> = {
+  cart: "Carrinho abandonado",
+  pending_payment: "Pix ou boleto pendente",
+  post_purchase: "Pós-venda",
+};
 
 const CANCEL_REASONS: Record<string, string> = {
   paid: "Pagou antes",
@@ -47,6 +58,7 @@ const CANCEL_REASONS: Record<string, string> = {
   step_disabled: "Passo desligado",
   no_email: "Sem e-mail",
   no_recovery_url: "Sem link do carrinho",
+  no_link: "Sem link do pedido",
   no_settings: "Envio não configurado",
   no_coupon: "Cupom não preenchido",
   paused_by_operator: "Interrompido pelo operador",

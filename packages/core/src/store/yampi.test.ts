@@ -47,6 +47,31 @@ describe("parseYampiEvent", () => {
     expect(e.order).toMatchObject({ externalId: "55501", number: "10234", paid: true, paymentAlias: "pix", cartToken: "TOKENCARRINHO123", statusAlias: "paid", total: 189.8 });
   });
 
+  it("parses a pending bill with payment link, public page and due date", () => {
+    const raw = clone(order);
+    raw.event = "order.created";
+    raw.resource.status.data.alias = "waiting_payment";
+    raw.resource.payments = [{ alias: "billet" }];
+    raw.resource.public_url = "https://loja.test/pedido/55501";
+    raw.resource.transactions = { data: [{ billet_url: "https://banco.test/boleto/1", billet_date: "2026-11-10", status: "waiting_payment" }] };
+    raw.resource.created_at = { date: "2026-11-03 11:00:00.000000", timezone: "America/Sao_Paulo" };
+    const e = parseYampiEvent(raw);
+    if (e.kind !== "order") throw new Error("expected order");
+    expect(e.order.paid).toBe(false);
+    expect(e.order.publicUrl).toBe("https://loja.test/pedido/55501");
+    expect(e.order.paymentUrl).toBe("https://banco.test/boleto/1");
+    expect(e.order.dueAt).toBe("2026-11-10T03:00:00.000Z");
+    expect(e.order.paymentAlias).toBe("billet");
+  });
+
+  it("treats an order whose status is already paid as paid", () => {
+    const raw = clone(order);
+    raw.event = "order.status.updated";
+    const e = parseYampiEvent(raw);
+    if (e.kind !== "order") throw new Error("expected order");
+    expect(e.order.paid).toBe(true);
+  });
+
   it("ignores unknown events", () => {
     expect(parseYampiEvent({ event: "product.updated", resource: {} })).toEqual({ kind: "ignored", event: "product.updated" });
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CART_STEPS, fillVariables, renderEmail, type EmailContent, type EmailContext } from "./template.ts";
+import { DEFAULT_CART_STEPS, DEFAULT_PENDING_PAYMENT_STEPS, DEFAULT_POST_PURCHASE_STEPS, fillVariables, renderEmail, type EmailContent, type EmailContext } from "./template.ts";
 
 const item = (n: number) => ({ name: `Produto ${n}`, variant: null, quantity: 1, price: 10, imageUrl: null });
 const ctx: EmailContext = {
@@ -12,6 +12,10 @@ describe("email template", () => {
   it("fills variables", () => {
     expect(fillVariables("Oi, {primeiro_nome}! Cupom {cupom} na {loja}. Total {valor}", { ...ctx, coupon: "CUPOM20" }))
       .toBe("Oi, Ana! Cupom CUPOM20 na Holy Spirit. Total R$ 89,90");
+  });
+  it("fills order number and tracking code", () => {
+    expect(fillVariables("Pedido {numero_pedido}: {rastreio}", { ...ctx, coupon: null, orderNumber: "10234", trackingCode: "BR123" }))
+      .toBe("Pedido 10234: BR123");
   });
   it("missing variable is empty", () => {
     const c = { ...ctx, firstName: null, coupon: null };
@@ -54,5 +58,13 @@ describe("email template", () => {
   it("default cart steps", () => {
     expect(DEFAULT_CART_STEPS.map((s) => s.delayMinutes)).toEqual([60, 1440, 2880]);
     expect(DEFAULT_CART_STEPS[2]!.coupon).toBe("");
+  });
+  it("default pending payment steps", () => {
+    expect(DEFAULT_PENDING_PAYMENT_STEPS.map((s) => [s.timing, s.delayMinutes]))
+      .toEqual([["delay", 120], ["due_date", 0]]);
+  });
+  it("default post-purchase steps", () => {
+    expect(DEFAULT_POST_PURCHASE_STEPS.map((s) => [s.timing, s.delayMinutes]))
+      .toEqual([["delay", 0], ["on_tracking", 0], ["delay", 21600]]);
   });
 });

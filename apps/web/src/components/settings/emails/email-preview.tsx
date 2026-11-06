@@ -3,7 +3,8 @@ import { useMemo } from "react";
 import { renderEmail, type EmailContent } from "@flowai/core";
 
 const SAMPLE = {
-  firstName: "Maria", name: "Maria Silva", total: 179.8, buttonUrl: "https://example.com/carrinho", unsubscribeUrl: "https://example.com/sair",
+  firstName: "Maria", name: "Maria Silva", total: 179.8, buttonUrl: "https://example.com/pedido", unsubscribeUrl: "https://example.com/sair",
+  orderNumber: "1234", trackingCode: "BR123456789BR",
   items: [
     { name: "Produto de exemplo", variant: "Tamanho M", quantity: 1, price: 129.9, imageUrl: null },
     { name: "Outro produto", variant: null, quantity: 1, price: 49.9, imageUrl: null },

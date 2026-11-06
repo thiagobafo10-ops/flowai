@@ -6,13 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionResult } from "@/lib/action-result";
-import { saveSettings, saveStoreConnection, setCartJourneyEnabled, verifyDomain } from "@/lib/emails/actions";
-import type { EmailsView } from "@/lib/emails/queries";
+import { saveSettings, saveStoreConnection, setJourneyEnabled, verifyDomain } from "@/lib/emails/actions";
+import { JOURNEY_KINDS, JOURNEY_LABELS } from "@/lib/emails/schemas";
+import type { EmailsView, EmailJourney, JourneyKind } from "@/lib/emails/queries";
 import { JourneyResults } from "./journey-results";
 import { JourneyStepForm } from "./journey-step-form";
 import { SendHistory } from "./send-history";
 
 const DOMAIN: Record<string, string> = { verified: "Verificado", pending: "Pendente", failed: "Falhou", not_found: "Não encontrado no Resend" };
+const JOURNEY_HINTS: Record<JourneyKind, string> = {
+  cart: "Enviado quando alguém informa o e-mail no checkout e não finaliza a compra.",
+  pending_payment: "Enviado quando o Pix ou o boleto ainda não foi pago. O lembrete do vencimento sai às 09:00 no fuso da loja.",
+  post_purchase: "Confirmação do pagamento, aviso de rastreio quando o código chega e convite para voltar depois. A confirmação e o rastreio são transacionais e continuam mesmo para quem descadastrou do marketing.",
+};
 
 function useRun() {
   const router = useRouter();
@@ -115,25 +121,31 @@ function SenderForm({ settings, resendUrl }: { settings: EmailsView["settings"];
   );
 }
 
-function CartJourney({ journey, storeName }: { journey: EmailsView["journey"]; storeName: string }) {
+function Journey({ journey, storeName }: { journey: EmailJourney; storeName: string }) {
   const { pending, error, run } = useRun();
-  const enabled = journey?.enabled ?? false;
+  const enabled = journey.enabled;
+  const hint = JOURNEY_HINTS[journey.kind];
   return (
     <>
+      <p className="text-sm text-muted-foreground">{hint}</p>
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-muted-foreground">{enabled ? "Ligada" : "Desligada"}</span>
-        <Button variant={enabled ? "outline" : "default"} disabled={pending} onClick={() => run(() => setCartJourneyEnabled(!enabled), enabled ? "Jornada desligada." : "Jornada ligada.")}>
+        <Button variant={enabled ? "outline" : "default"} disabled={pending} onClick={() => run(() => setJourneyEnabled(journey.kind, !enabled), enabled ? "Jornada desligada." : "Jornada ligada.")}>
           {enabled ? "Desligar" : "Ligar"}
         </Button>
       </div>
       <Alert error={error} />
-      {journey?.steps.map((step) => <JourneyStepForm key={step.id} step={step} storeName={storeName} />)}
+      {journey.steps.length === 0 && (
+        <p className="text-sm text-muted-foreground">Ligue a jornada para criar os e-mails padrão. Depois é só revisar os textos.</p>
+      )}
+      {journey.steps.map((step) => <JourneyStepForm key={step.id} step={step} storeName={storeName} kind={journey.kind} />)}
     </>
   );
 }
 
 export function EmailsSettings({ view }: { view: EmailsView }) {
   const storeName = view.settings?.fromName || "Sua loja";
+  const journey = (kind: JourneyKind) => view.journeys.find((j) => j.kind === kind)!;
   return (
     <div className="space-y-6">
       <Section id="emails-config" title="Configuração">
@@ -141,9 +153,11 @@ export function EmailsSettings({ view }: { view: EmailsView }) {
         <hr />
         <StoreForm store={view.store} yampiUrl={view.webhooks.yampi} />
       </Section>
-      <Section id="emails-cart" title="Carrinho abandonado">
-        <CartJourney journey={view.journey} storeName={storeName} />
-      </Section>
+      {JOURNEY_KINDS.map((kind) => (
+        <Section key={kind} id={`emails-${kind}`} title={JOURNEY_LABELS[kind]}>
+          <Journey journey={journey(kind)} storeName={storeName} />
+        </Section>
+      ))}
       <Section id="emails-results" title="Resultados (últimos 30 dias)">
         <JourneyResults results={view.results} />
       </Section>

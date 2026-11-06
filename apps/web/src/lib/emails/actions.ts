@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createServerClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org/active-org";
 import type { ActionResult } from "@/lib/action-result";
-import { settingsSchema, stepSchema, storeConnectionSchema } from "./schemas";
+import { JOURNEY_KINDS, settingsSchema, stepSchema, storeConnectionSchema, type JourneyKind } from "./schemas";
 
 const FORBIDDEN = "Você não tem permissão para esta ação.";
 const SAVE_FAILED = "Não foi possível salvar. Tente novamente.";
@@ -52,9 +52,10 @@ export async function saveStoreConnection(input: unknown): Promise<ActionResult>
   return done(error);
 }
 
-export async function setCartJourneyEnabled(enabled: boolean): Promise<ActionResult> {
+export async function setJourneyEnabled(kind: JourneyKind, enabled: boolean): Promise<ActionResult> {
   const c = await admin(); if (!c) return { ok: false, error: FORBIDDEN };
-  const { error } = await c.db.rpc("set_email_journey_enabled", { p_org: c.orgId, p_kind: "cart", p_enabled: enabled === true });
+  if (!JOURNEY_KINDS.includes(kind)) return { ok: false, error: "Jornada não encontrada." };
+  const { error } = await c.db.rpc("set_email_journey_enabled", { p_org: c.orgId, p_kind: kind, p_enabled: enabled === true });
   return done(error);
 }
 

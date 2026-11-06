@@ -7,13 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveStep, sendTestEmail } from "@/lib/emails/actions";
 import { fromMinutes, toMinutes, type DelayUnit } from "@/lib/emails/schemas";
-import type { EmailStep } from "@/lib/emails/queries";
+import type { EmailStep, JourneyKind } from "@/lib/emails/queries";
 import { EmailPreview } from "./email-preview";
 
 const textarea = "w-full rounded-lg border border-input bg-transparent p-2 text-sm disabled:opacity-50 aria-invalid:border-destructive";
 const select = "h-8 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50 dark:bg-input/30 [&>option]:bg-popover";
 
-export function JourneyStepForm({ step, storeName }: { step: EmailStep; storeName: string }) {
+const DELAY_HELP: Record<JourneyKind, string> = {
+  cart: "Contado a partir do abandono do carrinho.",
+  pending_payment: "Contado a partir da criação do pedido.",
+  post_purchase: "Contado a partir da confirmação do pagamento.",
+};
+
+function TimingHelp({ timing }: { timing: EmailStep["timing"] }) {
+  if (timing === "due_date") {
+    return <p className="text-xs text-muted-foreground">Enviado no dia do vencimento do Pix/boleto, às 09:00 no fuso da loja. Sem vencimento, o passo não é enviado.</p>;
+  }
+  if (timing === "on_tracking") {
+    return <p className="text-xs text-muted-foreground">Enviado quando o código de rastreio do pedido chega.</p>;
+  }
+  return null;
+}
+
+export function JourneyStepForm({ step, storeName, kind }: { step: EmailStep; storeName: string; kind: JourneyKind }) {
   const router = useRouter();
   const initialDelay = fromMinutes(step.delayMinutes);
   const [delay, setDelay] = useState(String(initialDelay.value));
@@ -26,13 +42,14 @@ export function JourneyStepForm({ step, storeName }: { step: EmailStep; storeNam
   const [coupon, setCoupon] = useState(step.coupon);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const id = `step-${step.position}`;
+  const id = `step-${step.id}`;
   const couponMissing = [subject, heading, body].some((t) => t.includes("{cupom}")) && !coupon.trim();
 
   function save() {
     setError(null);
     startTransition(async () => {
-      const result = await saveStep(step.id, { delayMinutes: toMinutes(Number(delay), unit), enabled, subject, heading, body, buttonLabel, coupon });
+      const delayMinutes = step.timing === "delay" ? toMinutes(Number(delay), unit) : step.delayMinutes;
+      const result = await saveStep(step.id, { delayMinutes, enabled, subject, heading, body, buttonLabel, coupon });
       if (!result.ok) { setError(result.error); return; }
       toast.success(`E-mail ${step.position} salvo.`);
       router.refresh();
@@ -56,18 +73,20 @@ export function JourneyStepForm({ step, storeName }: { step: EmailStep; storeNam
             Ligado
           </label>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor={`${id}-delay`}>Enviar depois de</Label>
-          <div className="flex gap-2">
-            <Input id={`${id}-delay`} type="number" min={1} value={delay} onChange={(e) => setDelay(e.target.value)} className="w-24" disabled={pending} required />
-            <select aria-label="Unidade da espera" className={select} value={unit} onChange={(e) => setUnit(e.target.value as DelayUnit)} disabled={pending}>
-              <option value="min">minutos</option>
-              <option value="h">horas</option>
-              <option value="d">dias</option>
-            </select>
+        {step.timing === "delay" ? (
+          <div className="space-y-1">
+            <Label htmlFor={`${id}-delay`}>Enviar depois de</Label>
+            <div className="flex gap-2">
+              <Input id={`${id}-delay`} type="number" min={0} value={delay} onChange={(e) => setDelay(e.target.value)} className="w-24" disabled={pending} required />
+              <select aria-label="Unidade da espera" className={select} value={unit} onChange={(e) => setUnit(e.target.value as DelayUnit)} disabled={pending}>
+                <option value="min">minutos</option>
+                <option value="h">horas</option>
+                <option value="d">dias</option>
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">{DELAY_HELP[kind]}</p>
           </div>
-          <p className="text-xs text-muted-foreground">Contado a partir do abandono do carrinho.</p>
-        </div>
+        ) : <TimingHelp timing={step.timing} />}
         <div className="space-y-1"><Label htmlFor={`${id}-subject`}>Assunto</Label><Input id={`${id}-subject`} value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={150} disabled={pending} required /></div>
         <div className="space-y-1"><Label htmlFor={`${id}-heading`}>Título</Label><Input id={`${id}-heading`} value={heading} onChange={(e) => setHeading(e.target.value)} maxLength={150} disabled={pending} /></div>
         <div className="space-y-1"><Label htmlFor={`${id}-body`}>Texto</Label><textarea id={`${id}-body`} rows={5} className={textarea} value={body} onChange={(e) => setBody(e.target.value)} maxLength={3000} disabled={pending} required /></div>
@@ -75,7 +94,7 @@ export function JourneyStepForm({ step, storeName }: { step: EmailStep; storeNam
           <div className="space-y-1"><Label htmlFor={`${id}-button`}>Texto do botão</Label><Input id={`${id}-button`} value={buttonLabel} onChange={(e) => setButtonLabel(e.target.value)} maxLength={40} disabled={pending} required /></div>
           <div className="space-y-1"><Label htmlFor={`${id}-coupon`}>Cupom</Label><Input id={`${id}-coupon`} value={coupon} onChange={(e) => setCoupon(e.target.value)} maxLength={40} disabled={pending} /></div>
         </div>
-        <p className="text-xs text-muted-foreground">Variáveis: {"{primeiro_nome}"}, {"{nome}"}, {"{loja}"}, {"{cupom}"}, {"{valor}"}.</p>
+        <p className="text-xs text-muted-foreground">Variáveis: {"{primeiro_nome}"}, {"{nome}"}, {"{loja}"}, {"{cupom}"}, {"{valor}"}, {"{numero_pedido}"}, {"{rastreio}"}.</p>
         {couponMissing && <p role="status" className="text-sm text-amber-600 dark:text-amber-400">Este e-mail usa {"{cupom}"}, mas o cupom está vazio — ele não será enviado.</p>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex flex-wrap gap-2">

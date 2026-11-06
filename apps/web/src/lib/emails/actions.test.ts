@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase/server", () => ({
     functions: { invoke: async (...args: unknown[]) => { state.invokes.push(args); return { data: { sent: true }, error: null }; } },
   }),
 }));
-import { saveSettings, saveStep, sendTestEmail } from "./actions";
+import { saveSettings, saveStep, sendTestEmail, setJourneyEnabled } from "./actions";
 
 const STEP = "10000000-0000-4000-8000-000000000001";
 const step = { delayMinutes: 60, enabled: true, subject: "Oi", heading: "", body: "Texto", buttonLabel: "Comprar", coupon: "" };
@@ -56,4 +56,12 @@ test("saveSettings requires both secrets on the first save", async () => {
 test("sendTestEmail calls email-admin with the user's token", async () => {
   expect((await sendTestEmail(STEP)).ok).toBe(true);
   expect(state.invokes[0]).toEqual(["email-admin", { body: { organizationId: "org", action: "test", stepId: STEP }, headers: { Authorization: "Bearer tok" } }]);
+});
+
+test("setJourneyEnabled toggles the requested journey by kind", async () => {
+  expect((await setJourneyEnabled("pending_payment", true)).ok).toBe(true);
+  expect(state.rpcs).toEqual([["set_email_journey_enabled", { p_org: "org", p_kind: "pending_payment", p_enabled: true }]]);
+  state.rpcs = [];
+  expect((await setJourneyEnabled("bogus" as never, true)).ok).toBe(false);
+  expect(state.rpcs).toHaveLength(0);
 });

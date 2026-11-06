@@ -625,14 +625,14 @@ isOneToOne: false
                   ]
                 },"email_journey_steps": {
                   Row: {
-                    "body": string,"button_label": string,"category": string,"coupon": string,"delay_minutes": number,"enabled": boolean,"heading": string,"id": string,"journey_id": string,"organization_id": string,"position": number,"subject": string
+                    "body": string,"button_label": string,"category": string,"coupon": string,"delay_minutes": number,"enabled": boolean,"heading": string,"id": string,"journey_id": string,"organization_id": string,"position": number,"subject": string,"timing": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "body": string,"button_label": string,"category": string,"coupon"?: string,"delay_minutes": number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id": string,"organization_id": string,"position": number,"subject": string
+                    "body": string,"button_label": string,"category": string,"coupon"?: string,"delay_minutes": number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id": string,"organization_id": string,"position": number,"subject": string,"timing"?: string
                   }
                   Update: {
-                    "body"?: string,"button_label"?: string,"category"?: string,"coupon"?: string,"delay_minutes"?: number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id"?: string,"organization_id"?: string,"position"?: number,"subject"?: string
+                    "body"?: string,"button_label"?: string,"category"?: string,"coupon"?: string,"delay_minutes"?: number,"enabled"?: boolean,"heading"?: string,"id"?: string,"journey_id"?: string,"organization_id"?: string,"position"?: number,"subject"?: string,"timing"?: string
                   }
                   Relationships: [
                     {
@@ -1537,14 +1537,14 @@ isOneToOne: false
                   ]
                 },"store_orders": {
                   Row: {
-                    "cart_token": string | null,"connection_id": string,"contact_id": string,"created_at": string,"external_id": string,"id": string,"items": NonNullable<Json>,"number": string,"organization_id": string,"paid_at": string | null,"payment_alias": string | null,"status_alias": string | null,"total": number,"track_code": string | null,"track_url": string | null,"updated_at": string
+                    "cart_token": string | null,"connection_id": string,"contact_id": string,"created_at": string,"due_at": string | null,"external_id": string,"id": string,"items": NonNullable<Json>,"number": string,"organization_id": string,"paid_at": string | null,"payment_alias": string | null,"payment_url": string | null,"public_url": string | null,"status_alias": string | null,"total": number,"track_code": string | null,"track_url": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "cart_token"?: string | null,"connection_id": string,"contact_id": string,"created_at"?: string,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"number": string,"organization_id": string,"paid_at"?: string | null,"payment_alias"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
+                    "cart_token"?: string | null,"connection_id": string,"contact_id": string,"created_at"?: string,"due_at"?: string | null,"external_id": string,"id"?: string,"items"?: NonNullable<Json>,"number": string,"organization_id": string,"paid_at"?: string | null,"payment_alias"?: string | null,"payment_url"?: string | null,"public_url"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "cart_token"?: string | null,"connection_id"?: string,"contact_id"?: string,"created_at"?: string,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"number"?: string,"organization_id"?: string,"paid_at"?: string | null,"payment_alias"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
+                    "cart_token"?: string | null,"connection_id"?: string,"contact_id"?: string,"created_at"?: string,"due_at"?: string | null,"external_id"?: string,"id"?: string,"items"?: NonNullable<Json>,"number"?: string,"organization_id"?: string,"paid_at"?: string | null,"payment_alias"?: string | null,"payment_url"?: string | null,"public_url"?: string | null,"status_alias"?: string | null,"total"?: number,"track_code"?: string | null,"track_url"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {

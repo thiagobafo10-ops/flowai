@@ -1,8 +1,8 @@
-import { cancelReasonLabel } from "@/lib/emails/schemas";
+import { cancelReasonLabel, JOURNEY_LABELS } from "@/lib/emails/schemas";
 import type { StepResult } from "@/lib/emails/queries";
 
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
-const HEADERS = ["E-mail", "Agendados", "Enviados", "Entregues", "Abertos", "Cliques", "Cancelados", "Pedidos recuperados", "Valor recuperado"];
+const HEADERS = ["Jornada", "E-mail", "Agendados", "Enviados", "Entregues", "Abertos", "Cliques", "Cancelados", "Pedidos recuperados", "Valor recuperado"];
 
 export function JourneyResults({ results }: { results: StepResult[] }) {
   if (!results.length) return <p className="text-sm text-muted-foreground">Sem resultados nos últimos 30 dias.</p>;
@@ -18,6 +18,7 @@ export function JourneyResults({ results }: { results: StepResult[] }) {
             const cancelled = Object.entries(r.cancelled);
             return (
               <tr key={r.stepId} className="border-t">
+                <td className="py-2 pr-4 whitespace-nowrap">{JOURNEY_LABELS[r.kind]}</td>
                 <td className="py-2 pr-4">{r.position}</td>
                 <td className="py-2 pr-4">{r.scheduled}</td>
                 <td className="py-2 pr-4">{r.sent}</td>

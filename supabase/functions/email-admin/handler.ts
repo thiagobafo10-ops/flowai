@@ -62,7 +62,7 @@ export async function handleEmailAdmin(request: Request, deps: EmailAdminDeps): 
     const firstName = user.name?.trim().split(/\s+/)[0] || null;
     const rendered = renderEmail(step, {
       storeName: settings.fromName, firstName, name: user.name, total: 179.8, items: SAMPLE_ITEMS,
-      buttonUrl: "https://example.com/carrinho", unsubscribeUrl: null,
+      buttonUrl: "https://example.com/pedido", orderNumber: "1234", trackingCode: "BR123456789BR", unsubscribeUrl: null,
     });
     const sent = await sendResendEmail(deps.fetch, settings.resendKey, {
       from: `${settings.fromName} <${settings.fromEmail}>`, to: user.email, replyTo: settings.replyTo, ...rendered,

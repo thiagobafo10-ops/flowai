@@ -1,6 +1,6 @@
 # E-mails da loja: guia de configuração
 
-Recuperação de carrinho abandonado da Holy Spirit, enviada pelo FlowAI via Resend. Siga na ordem.
+Jornadas de e-mail da loja (carrinho abandonado, Pix/boleto pendente e pós-venda), enviadas pelo FlowAI via Resend. Siga na ordem.
 
 ## 1. Resend (envio e domínio)
 
@@ -42,7 +42,7 @@ npx supabase functions deploy email-admin
 npx supabase functions deploy resend-webhook
 ```
 
-3. Aplique as migrações `20261104000001` a `20261104000004`. As duas últimas restringem eventos à organização autorizada e fazem a fila avançar por envios cancelados. Publique as versões correspondentes de `resend-webhook` e `email-worker` antes de ativar a jornada:
+3. Aplique as migrações pendentes. A `20261106000001` adiciona as jornadas de Pix/boleto pendente e pós-venda, o tipo de agendamento dos passos e os campos de vencimento/link dos pedidos. Publique primeiro as novas versões de `yampi-webhook`, `email-worker`, `email-admin` e `resend-webhook`, depois aplique o banco e só então publique o app: o worker novo é quem preenche número do pedido e rastreio nos e-mails.
 
 ```bash
 npx supabase db push
@@ -72,30 +72,56 @@ git push
 
 Atenção: a Yampi exige resposta 2xx em até 5 segundos e desativa o webhook após 30 falhas seguidas. Se parar de chegar evento, confira se ele continua ativo.
 
-## 5. Jornada de carrinho
+## 5. Jornadas
 
-Na publicação controlada de 03/11/2026, a jornada ficou desativada e o cron `flowai-email-worker` foi pausado. Somente depois de configurar e conferir as integrações, reative esse cron no Supabase antes do teste controlado de carrinho. Ligar apenas o botão da jornada não reativa um cron pausado.
+Na publicação controlada de 03/11/2026, o cron `flowai-email-worker` foi pausado. Somente depois de configurar e conferir as integrações, reative esse cron no Supabase antes do teste controlado. Ligar apenas o botão da jornada não reativa um cron pausado.
 
-1. Na mesma tela, abra **Carrinho abandonado**. Os e-mails saem em **60 min**, **24 h** e **48 h** após o abandono.
+As três jornadas nascem **desligadas** na primeira vez. Ao ligar, o FlowAI cria os e-mails padrão; desligar não apaga os textos já editados.
+
+### Carrinho abandonado
+
+1. Os e-mails saem em **60 min**, **24 h** e **48 h** após o abandono.
 2. Revise assunto, título e texto do botão de cada e-mail.
 3. O e-mail 3 usa `{cupom}`. Preencha o cupom (ex.: `CUPOM20`, criado na Yampi). Sem cupom preenchido ele **não é enviado** e o histórico mostra "Cupom não preenchido".
 4. Toque em **Enviar teste para mim** em cada e-mail e confira no seu celular.
 5. Ligue a jornada.
 
-Descadastro: todo e-mail tem link no rodapé e o botão de descadastro do Gmail. Quem sai não recebe mais. E-mails transacionais (pedido, pagamento) ainda não existem nesta etapa.
+### Pix ou boleto pendente
+
+1. O primeiro lembrete sai **2 h** depois do `order.created` ainda não pago.
+2. Se o pedido tiver boleto com vencimento, o segundo e-mail sai **no dia do vencimento, às 09:00 no fuso da loja**. Sem vencimento, esse passo não é enviado.
+3. O botão usa o link de pagamento do pedido (ou a página pública do pedido). Pedido sem nenhum link é cancelado no histórico como "Sem link do pedido".
+4. Quando o pagamento é confirmado, os lembretes pendentes são cancelados na hora.
+
+### Pós-venda
+
+1. **Pedido confirmado** sai assim que o pagamento é confirmado (transacional).
+2. **Pedido enviado** sai quando o código de rastreio chega no evento da Yampi (transacional).
+3. **Avaliação/recompra** sai 15 dias após o pagamento (marketing).
+4. Confirmação e rastreio são transacionais: continuam mesmo para quem se descadastrou dos e-mails de marketing.
+
+Há dois e-mails transacionais por pedido e um de marketing; o histórico mostra a jornada e o passo de cada envio.
+
+Descadastro: todo e-mail de marketing tem link no rodapé e o botão de descadastro do Gmail. Quem sai não recebe mais marketing; os transacionais de pedido continuam.
 
 ## 6. Teste real
 
 1. Na loja, coloque um produto no carrinho, informe **seu e-mail** no checkout e abandone.
 2. No FlowAI, confira o evento no **Histórico**.
-3. Após 60 min chega o 1º e-mail. Confirme o assunto e o texto.
+3. Após 60 min chega o 1º e-mail de carrinho. Confirme o assunto e o texto.
 4. Toque no botão do e-mail. **Confirme que o carrinho reabre** (link `simulate_url` da Yampi; é uma incógnita até testar).
-5. Finalize o pagamento. Os e-mails seguintes devem aparecer no histórico como "Pagou antes" (não enviados).
-6. Em um e-mail, use o link de descadastro no rodapé e confira no FlowAI que o contato ficou descadastrado.
+5. Agora faça um pedido com **Pix ou boleto** usando o mesmo e-mail e não pague. Após 2 h chega o lembrete de pagamento, com o número do pedido no texto.
+6. Se o boleto tiver vencimento, confirme o e-mail das 09:00 do dia do vencimento (ou ajuste o passo para testar antes).
+7. Pague o pedido. Os lembretes de carrinho/pendente devem aparecer no histórico como cancelados ("Pagou antes"/"Comprou") e a confirmação de compra chega logo em seguida.
+8. Quando a Yampi enviar o código de rastreio, chega o e-mail de rastreio com o código no texto e no botão.
+9. Em um e-mail de marketing, use o link de descadastro no rodapé e confira no FlowAI que o contato ficou descadastrado. Confirme que os transacionais de um novo pedido continuam chegando.
 
 O que o teste precisa confirmar:
 
 - O link `simulate_url` reabre o carrinho.
+- O link de pagamento do Pix/boleto e a página do pedido existem no evento da Yampi e abrem o checkout certo.
+- O código de rastreio chega em `order.status.updated` (evento que a Yampi dispara quando o pedido muda de status).
+- O boleto traz o vencimento (`billet_date`) e o link (`billet_url`).
 - A assinatura da Yampi é aceita. Se **todos** os eventos da Yampi forem rejeitados com 401, avise: a validação sobre o corpo bruto precisa de ajuste.
 - Nesta etapa os e-mails não mostram foto do produto.
 
@@ -103,4 +129,6 @@ O que o teste precisa confirmar:
 
 A etapa de carrinho foi conferida sem chamadas reais à Yampi ou ao Resend. Passaram os testes da aplicação, do serviço e do banco, a verificação de tipos, o build de produção e a conferência da página pública de descadastro no navegador. A revisão final corrigiu o isolamento dos webhooks por organização e a reserva de um e-mail por vez, para revalidar compra, descadastro e bloqueios antes de cada tentativa. Envios cancelados não bloqueiam os próximos válidos.
 
-Publicação, DNS, permissões das credenciais, assinatura real da Yampi, entrega na caixa de entrada e reabertura do carrinho ainda precisam do roteiro acima; os testes locais não comprovam essas integrações reais.
+As etapas 2 e 3 (Pix/boleto pendente e pós-venda) foram validadas localmente com testes do parser da Yampi, do modelo de e-mail, do worker e do banco: passos padrão das três jornadas, agendamento pelo vencimento no fuso da organização, cancelamento ao pagar, confirmação imediata, rastreio só quando o código chega, recompra em 15 dias e contexto do pedido na reserva. Nenhum teste chama Yampi ou Resend de verdade.
+
+Publicação, DNS, permissões das credenciais, assinatura real da Yampi, entrega na caixa de entrada, reabertura do carrinho, links reais de Pix/boleto e o código de rastreio ainda precisam do roteiro acima; os testes locais não comprovam essas integrações reais.

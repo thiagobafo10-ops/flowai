@@ -7,7 +7,7 @@ import { sendResendEmail } from "../_shared/resend.ts";
 export type ClaimedSend = {
   sendId: string; toEmail: string; category: "marketing" | "transactional";
   content: EmailContent;
-  ctx: { storeName: string; firstName: string | null; name: string | null; total: number | null; items: StoreItem[] | null; buttonUrl: string; unsubscribeToken: string | null };
+  ctx: { storeName: string; firstName: string | null; name: string | null; total: number | null; items: StoreItem[] | null; buttonUrl: string; orderNumber?: string | null; trackingCode?: string | null; unsubscribeToken: string | null };
   from: string; replyTo: string | null; resendKey: string;
 };
 export type EmailWorkerDeps = {

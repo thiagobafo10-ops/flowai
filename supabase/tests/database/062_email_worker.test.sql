@@ -70,7 +70,8 @@ select is((:'claim1'::jsonb)->0->>'replyTo','sac@ex.com','claim returns reply-to
 select is((:'claim1'::jsonb)->0->>'resendKey','re_123','claim returns the resend key');
 select is((:'claim1'::jsonb)->0->>'category','marketing','claim returns the category');
 select is(((:'claim1'::jsonb)->0->'ctx')-'unsubscribeToken'::text,jsonb_build_object('storeName','Loja Santa','firstName','Ana','name','Ana Maria Souza',
-  'total',150,'items',jsonb_build_array(jsonb_build_object('name','Terço','quantity',1,'price',150)),'buttonUrl','https://loja.test/r/c1'),'claim ctx');
+  'total',150,'items',jsonb_build_array(jsonb_build_object('name','Terço','quantity',1,'price',150)),'buttonUrl','https://loja.test/r/c1',
+  'orderNumber',null,'trackingCode',null),'claim ctx');
 select ok(length((:'claim1'::jsonb)->0->'ctx'->>'unsubscribeToken')=48,'marketing send carries an unsubscribe token');
 select is((:'claim1'::jsonb)->0->'content'->>'coupon',null,'blank coupon is null');
 select is((:'claim1'::jsonb)->0->'content'->>'buttonLabel','Finalizar minha compra','content has the button label');

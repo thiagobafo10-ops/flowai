@@ -4,7 +4,9 @@ export type EmailContent = { subject: string; heading: string; body: string; but
 export type EmailContext = {
   storeName: string; firstName: string | null; name: string | null; total: number | null;
   items: StoreItem[]; buttonUrl: string; unsubscribeUrl: string | null;
+  orderNumber?: string | null; trackingCode?: string | null;
 };
+export type EmailStepTiming = "delay" | "due_date" | "on_tracking";
 
 const INK = "#0E0E0E", BG = "#F4F2EE", ACCENT = "#E8458B";
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = "Arial, Helvetica, sans-serif";
@@ -18,6 +20,7 @@ export function fillVariables(text: string, ctx: EmailContext & { coupon: string
   const vars: Record<string, string> = {
     primeiro_nome: ctx.firstName ?? "", nome: ctx.name ?? "", loja: ctx.storeName,
     cupom: ctx.coupon ?? "", valor: ctx.total == null ? "" : brl(ctx.total),
+    numero_pedido: ctx.orderNumber ?? "", rastreio: ctx.trackingCode ?? "",
   };
   let out = text;
   let capitalize = false;
@@ -77,14 +80,37 @@ ${itemsHtml(ctx.items)}${couponBox}
   return { subject, html, text };
 }
 
-export const DEFAULT_CART_STEPS: readonly (EmailContent & { delayMinutes: number })[] = [
-  { delayMinutes: 60, subject: "{primeiro_nome}, seu carrinho está guardado", heading: "{primeiro_nome}, deixamos seu carrinho guardado",
+export type EmailDefaultStep = EmailContent & { delayMinutes: number; timing: EmailStepTiming };
+
+export const DEFAULT_CART_STEPS: readonly EmailDefaultStep[] = [
+  { timing: "delay", delayMinutes: 60, subject: "{primeiro_nome}, seu carrinho está guardado", heading: "{primeiro_nome}, deixamos seu carrinho guardado",
     body: "Você escolheu peças com carinho na {loja}. Elas continuam esperando por você, é só voltar e finalizar quando puder.",
     buttonLabel: "Finalizar minha compra", coupon: null },
-  { delayMinutes: 1440, subject: "{primeiro_nome}, suas peças ainda estão aqui", heading: "{primeiro_nome}, ainda dá tempo",
+  { timing: "delay", delayMinutes: 1440, subject: "{primeiro_nome}, suas peças ainda estão aqui", heading: "{primeiro_nome}, ainda dá tempo",
     body: "Passando para lembrar que seu carrinho segue reservado na {loja}. Se ficou alguma dúvida, é só responder este e-mail.",
     buttonLabel: "Finalizar minha compra", coupon: null },
-  { delayMinutes: 2880, subject: "{primeiro_nome}, um presente para finalizar sua compra", heading: "{primeiro_nome}, um presente para você",
+  { timing: "delay", delayMinutes: 2880, subject: "{primeiro_nome}, um presente para finalizar sua compra", heading: "{primeiro_nome}, um presente para você",
     body: "Para ajudar você a concluir seu pedido, use o cupom {cupom} no checkout da {loja}. Que suas peças cheguem com bênção.",
     buttonLabel: "Finalizar minha compra", coupon: "" },
+];
+
+export const DEFAULT_PENDING_PAYMENT_STEPS: readonly EmailDefaultStep[] = [
+  { timing: "delay", delayMinutes: 120, subject: "{primeiro_nome}, falta confirmar seu pagamento", heading: "{primeiro_nome}, seu pedido está esperando",
+    body: "Recebemos seu pedido {numero_pedido} na {loja}, mas o pagamento ainda não foi confirmado. Se o Pix ou o boleto venceu, é só gerar de novo pelo link abaixo.",
+    buttonLabel: "Pagar meu pedido", coupon: null },
+  { timing: "due_date", delayMinutes: 0, subject: "{primeiro_nome}, seu pagamento vence hoje", heading: "Último dia para pagar",
+    body: "O prazo do seu pedido {numero_pedido} termina hoje. Pague pelo link abaixo para garantir suas peças na {loja}.",
+    buttonLabel: "Pagar meu pedido", coupon: null },
+];
+
+export const DEFAULT_POST_PURCHASE_STEPS: readonly EmailDefaultStep[] = [
+  { timing: "delay", delayMinutes: 0, subject: "Pedido {numero_pedido} confirmado", heading: "Obrigado, {primeiro_nome}!",
+    body: "Seu pagamento foi confirmado e já estamos preparando seu pedido na {loja}. Você recebe o código de rastreio por aqui assim que ele estiver disponível.",
+    buttonLabel: "Ver meu pedido", coupon: null },
+  { timing: "on_tracking", delayMinutes: 0, subject: "Seu pedido {numero_pedido} foi enviado", heading: "Seu pedido está a caminho",
+    body: "Boa notícia! Seu pedido já saiu da {loja}. O código de rastreio é {rastreio}. Acompanhe pelo link abaixo.",
+    buttonLabel: "Rastrear pedido", coupon: null },
+  { timing: "delay", delayMinutes: 21600, subject: "{primeiro_nome}, como foi sua compra?", heading: "Queremos saber o que você achou",
+    body: "Já faz alguns dias que seu pedido chegou. Conte para a gente como foi a experiência e volte para conhecer as novidades da {loja}.",
+    buttonLabel: "Ver novidades", coupon: null },
 ];

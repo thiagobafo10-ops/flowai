@@ -9,7 +9,7 @@ function claimed(category: "marketing" | "transactional" = "transactional"): Cla
   return {
     sendId: SEND, toEmail: "cliente@example.com", category,
     content: { subject: "Oi {primeiro_nome}", heading: "Esqueceu algo?", body: "Volte", buttonLabel: "Finalizar", coupon: null },
-    ctx: { storeName: "Loja", firstName: "Ana", name: "Ana Souza", total: 99.9, items: [], buttonUrl: "https://loja.example/c/1", unsubscribeToken: category === "marketing" ? "tok123" : null },
+    ctx: { storeName: "Loja", firstName: "Ana", name: "Ana Souza", total: 99.9, items: [], buttonUrl: "https://loja.example/c/1", orderNumber: "1234", trackingCode: "BR123", unsubscribeToken: category === "marketing" ? "tok123" : null },
     from: "Loja <loja@example.com>", replyTo: "sac@example.com", resendKey: KEY,
   };
 }
@@ -118,6 +118,18 @@ Deno.test("marketing carries both List-Unsubscribe headers and the unsubscribe l
   assert(body.headers["List-Unsubscribe"] === "<https://app.flowai.example/e/sair/tok123/one-click>", body.headers["List-Unsubscribe"]);
   assert(body.headers["List-Unsubscribe-Post"] === "List-Unsubscribe=One-Click");
   assert(body.html.includes('https://app.flowai.example/e/sair/tok123"') && body.text.includes("https://app.flowai.example/e/sair/tok123"));
+});
+
+Deno.test("renders order number and tracking code from the claimed context", async () => {
+  const postPurchase = {
+    ...claimed(),
+    content: { subject: "Pedido {numero_pedido}", heading: "Rastreio {rastreio}", body: "Acompanhe seu pedido {numero_pedido}.", buttonLabel: "Rastrear", coupon: null },
+  };
+  const f = fixture(() => Response.json({ id: "r3" }), [postPurchase]);
+  await handleEmailWorker(f.request(), f.deps);
+  const body = JSON.parse(String(f.calls[0]!.init.body));
+  assert(body.subject === "Pedido 1234", body.subject);
+  assert(body.html.includes("Rastreio BR123") && body.html.includes("Acompanhe seu pedido 1234"), body.html);
 });
 
 Deno.test("never logs the Resend key or the recipient", async () => {
